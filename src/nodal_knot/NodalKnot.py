@@ -29,7 +29,7 @@ class NodalKnot:
         self.kx_min = -np.pi; self.kx_max = np.pi
         self.ky_min = -np.pi; self.ky_max = np.pi
         self.kz_min = 0; self.kz_max = np.pi
-        self.pts_per_dim = 200
+        self.pts_per_dim = 400
         self.val = None
         self.kx_grid = None
         self.ky_grid = None
@@ -45,7 +45,7 @@ class NodalKnot:
             kx_min=-np.pi, kx_max=np.pi, 
             ky_min=-np.pi, ky_max=np.pi, 
             kz_min=0, kz_max=np.pi,
-            pts_per_dim=200,
+            pts_per_dim=400,
         ):
         """
         Generate values of f(z, w) for a grid of (kx, ky, kz) points.
@@ -59,7 +59,7 @@ class NodalKnot:
         kz_min, kz_max : float
             Range for kz. Default is [0, pi].
         pts_per_dim : int, optional
-            Number of points to sample per dimension. Default is 200.        
+            Number of points to sample per dimension. Default is 400.        
 
         Returns:
         -------
@@ -89,7 +89,7 @@ class NodalKnot:
 
     def binarize_region(self,
             thickness=0.,
-            epsilon=0.01,
+            epsilon=None,
             **kwargs
         ):
         """
@@ -101,7 +101,8 @@ class NodalKnot:
         thickness : float
             The thickness constant. Default is 0.
         epsilon : float, optional
-            Threshold for identifying zero regions. Default is 0.01.
+            If > 0, will return the surface of the thickened knot; otherwise,
+            return as a solid (fill up the interior). Default is None.
         kwargs :
             Additional keyword arguments for `generate_region`.
 
@@ -115,14 +116,20 @@ class NodalKnot:
              self.generate_region(**kwargs)
 
         norm = np.abs(self.val)
-        binarized_val = np.where(np.abs(norm - thickness) < epsilon, 1, 0)
+        if epsilon is not None and epsilon > 0:
+            # return the thickened knot's surface
+            binarized_val = np.where(np.abs(norm - thickness) < epsilon, 1, 0)
+        else:
+            # return the thickened knot as a solid (filled-up surface)
+            if thickness < 10/self.pts_per_dim: thickness = 10/self.pts_per_dim
+            binarized_val = np.where(norm <= thickness, 1, 0)
         self.binarized_val = binarized_val
 
         return binarized_val
 
-    def find_zero_points(self,
+    def knot_surface_points(self,
             thickness=0.,
-            epsilon=0.01,
+            epsilon=None,
             idx=None,
             **kwargs
         ):
@@ -135,7 +142,8 @@ class NodalKnot:
         thickness : float
             The thickness constant. Default is 0.
         epsilon : float, optional
-            Threshold for identifying zero regions. Default is 0.01.
+            If > 0, will return the surface of the thickened knot; otherwise,
+            return as a solid (fill up the interior). Default is None.
         idx : np.ndarray, optional
             Indices of the zero points. Default is None, determined by the
             thresholding condition. If idx is provided, the zero points are
@@ -154,7 +162,13 @@ class NodalKnot:
              self.generate_region(**kwargs)
         if idx is None:
             norm = np.abs(self.val)
-            idx = np.where(np.abs(norm - thickness) < epsilon)
+            if epsilon is not None and epsilon > 0:
+                # return the thickened knot's surface
+                idx = np.where(np.abs(norm - thickness) < epsilon)
+            else:
+                # return the thickened knot as a solid (filled-up surface)
+                if thickness < 10/self.pts_per_dim: thickness = 10/self.pts_per_dim
+                idx = np.where(norm <= thickness)
         else:
             if idx.shape != self.val.shape:
                 raise ValueError("Input `val` must have the same shape as the generated region.")
@@ -170,7 +184,7 @@ class NodalKnot:
     
     def knot_skeleton(self,
             thickness=0.,
-            epsilon=0.01,
+            epsilon=None,
             **kwargs
         ):
         """
@@ -181,7 +195,8 @@ class NodalKnot:
         thickness : float
             The thickness constant. Default is 0.
         epsilon : float, optional
-            Threshold for identifying zero regions. Default is 0.01.
+            If > 0, will return the surface of the thickened knot; otherwise,
+            return as a solid (fill up the interior). Default is None.
         kwargs :
             Additional keyword arguments for `generate_region`.
 
@@ -191,14 +206,13 @@ class NodalKnot:
             The skeleton of the zero region as a 3D image.
         """
         self.binarize_region(thickness, epsilon, **kwargs)
-        closed = morph.closing(self.binarized_val)
-        skeleton = morph.skeletonize(closed, method='lee')
+        skeleton = morph.skeletonize(self.binarized_val, method='lee')
         self.skeleton = skeleton
         return skeleton
     
-    def knot_points(self,
+    def knot_skeleton_points(self,
             thickness=0.,
-            epsilon=0.01,
+            epsilon=None,
             **kwargs
         ):
         """
@@ -209,9 +223,8 @@ class NodalKnot:
         thickness : float
             The thickness constant. Default is 0.
         epsilon : float, optional
-            Threshold for identifying zero regions. Default is 0.01.
-        kwargs :
-            Additional keyword arguments for `generate_region`.
+            If > 0, will return the surface of the thickened knot; otherwise,
+            return as a solid (fill up the interior). Default is None.
 
         Returns:
         -------
@@ -220,7 +233,7 @@ class NodalKnot:
             region.
         """
         self.knot_skeleton(thickness, epsilon, **kwargs)
-        points = self.find_zero_points(idx=self.skeleton)
+        points = self.knot_surface_points(idx=self.skeleton)
         self.skeleton_points = points
         return points
         

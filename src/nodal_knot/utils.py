@@ -24,7 +24,7 @@ def plot_3D_and_2D_projections(points):
     fig = make_subplots(
         rows=2, cols=2,
         subplot_titles=[
-            "3D Curve (k<sub>x</sub>, k<sub>y</sub>, k<sub>z</sub>)",
+            "3D Knot's Region (k<sub>x</sub>, k<sub>y</sub>, k<sub>z</sub>)",
             "Projection: k<sub>x</sub> vs k<sub>y</sub>",
             "Projection: k<sub>x</sub> vs k<sub>z</sub>",
             "Projection: k<sub>y</sub> vs k<sub>z</sub>"
@@ -44,7 +44,7 @@ def plot_3D_and_2D_projections(points):
             y=ky_vals, 
             z=kz_vals,
             mode='markers',
-            marker=dict(size=2, color='blue'),
+            marker=dict(size=2, color='blue', opacity=.5),
             name='3D Points'
         ),
         row=1, col=1
@@ -108,7 +108,7 @@ def plot_3D_and_2D_projections(points):
     fig.update_layout(
         height=800, 
         width=1000,
-        title="Nodal Knot in 3D and 2D Projections"
+        title="Thickened Nodal Knot"
     )
     
     return fig
