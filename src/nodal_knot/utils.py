@@ -1,5 +1,35 @@
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import networkx as nx
+from typing import Union
+
+
+def remove_leaf_nodes(G: Union[nx.Graph, nx.MultiGraph]) -> Union[nx.Graph, nx.MultiGraph]:
+    """
+    Remove all leaf nodes (nodes with degree 1) and their incident edges from the graph.
+    
+    This function creates a copy of the input graph and then iteratively removes any node
+    that has degree 1. Removing a node automatically removes its incident edge(s).
+    The process repeats until no leaf nodes remain.
+    
+    Parameters:
+        G : nx.Graph or nx.MultiGraph
+            The input graph.
+            
+    Returns:
+        H : nx.Graph or nx.MultiGraph
+            A new graph with all leaf nodes (and their incident edges) removed.
+    """
+    H = G.copy()
+    while True:
+        # Identify all leaf nodes (nodes with degree exactly 1)
+        leaf_nodes = [node for node, degree in H.degree() if degree == 1]
+        if not leaf_nodes:
+            break  # Exit when there are no leaf nodes left.
+        for node in leaf_nodes:
+            H.remove_node(node)
+    return H
+
 
 def plot_3D_and_2D_projections(points):
     """
@@ -109,6 +139,98 @@ def plot_3D_and_2D_projections(points):
         height=800, 
         width=1000,
         title="Thickened Nodal Knot"
+    )
+    
+    return fig
+
+
+def plot_3D_graph(G: Union[nx.Graph, nx.MultiGraph]) -> go.Figure:
+    """
+    Create a 3D Plotly visualization of a knotted graph.
+    
+    This function extracts edge and node data from the graph and creates an interactive 
+    3D plot where:
+      - Edges are displayed as blue lines.
+      - Nodes (with degree ≠ 2) are displayed as red markers.
+    
+    Parameters:
+    -----------
+    G : nx.Graph
+        The input graph with edge attribute 'pts' containing a NumPy array of shape (N, 3)
+        representing the coordinates along each edge, and node attribute 'o' representing the
+        node's 3D position.
+        
+    Returns:
+    --------
+    fig : go.Figure
+        The Plotly figure object for the interactive 3D visualization.
+    """
+    # Create a list to hold Plotly traces for edges.
+    edge_traces = []
+    edge_color = 'blue'  # single color for all edges
+    for u, v, data in G.edges(data=True):
+        pts = data.get('pts')
+        if pts is not None:
+            if pts.ndim == 2 and pts.shape[1] == 3:
+                # Extract x, y, z coordinates for the edge.
+                x = pts[:, 0]
+                y = pts[:, 1]
+                z = pts[:, 2]
+                trace = go.Scatter3d(
+                    x=x,
+                    y=y,
+                    z=z,
+                    mode='lines',
+                    line=dict(color=edge_color, width=2),
+                    hoverinfo='none',  # disable hover text
+                    showlegend=False   # disable legend entry
+                )
+                edge_traces.append(trace)
+            else:
+                print(f"Edge {u}-{v} 'pts' data is not of shape (N, 3).")
+        else:
+            print(f"Edge {u}-{v} has no 'pts' attribute.")
+
+    # Create a trace for nodes as red points, but only for nodes whose degree is not 2.
+    node_positions = {}
+    for n in G.nodes():
+        if G.degree(n) != 2:
+            data = G.nodes[n]
+            if 'o' in data:
+                node_positions[n] = data['o']
+
+    if node_positions:
+        xs = [coord[0] for coord in node_positions.values()]
+        ys = [coord[1] for coord in node_positions.values()]
+        zs = [coord[2] for coord in node_positions.values()]
+        node_trace = go.Scatter3d(
+            x=xs,
+            y=ys,
+            z=zs,
+            mode='markers',
+            marker=dict(size=5, color='red'),
+            hoverinfo='none',  # disable hover text
+            showlegend=False   # disable legend entry
+        )
+    else:
+        node_trace = None
+
+    # Combine the traces into one Plotly figure.
+    data_traces = edge_traces + ([node_trace] if node_trace is not None else [])
+    fig = go.Figure(data=data_traces)
+
+    # Update the layout for better viewing and disable the overall legend.
+    fig.update_layout(
+        title="Interactive 3D Graph Visualization<br>(Nodes with degree ≠ 2)",
+        scene=dict(
+            xaxis_title='k<sub>x</sub>',
+            yaxis_title='k<sub>y</sub>',
+            zaxis_title='k<sub>z</sub>'
+        ),
+        margin=dict(l=0, r=0, b=0, t=40),
+        showlegend=False,  # disable legend in the layout
+        width=450,
+        height=450
     )
     
     return fig

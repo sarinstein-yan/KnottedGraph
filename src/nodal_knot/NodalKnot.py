@@ -1,8 +1,12 @@
 import numpy as np
 import skimage.morphology as morph
-from .utils import plot_3D_and_2D_projections
 import poly2graph as p2g
-import networkx as nx
+
+from .utils import (
+    plot_3D_and_2D_projections,
+    plot_3D_graph,
+    remove_leaf_nodes,
+)
 
 class NodalKnot:
     def __init__(self, 
@@ -215,11 +219,10 @@ class NodalKnot:
     def knot_skeleton_points(self,
             thickness=0.,
             epsilon=None,
-            volume_representation=False,
             **kwargs
         ):
         """
-        The list of points on the skeleton of the zero region, or a volume representation thereof.
+        The list of points on the skeleton of the zero region.
 
         Parameters:
         ----------
@@ -228,110 +231,60 @@ class NodalKnot:
         epsilon : float, optional
             If > 0, will return the surface of the thickened knot; otherwise,
             return as a solid (fill up the interior). Default is None.
-        volume_representation : bool
-            If True, returns a volume representation of the skeleton as a 3D numpy array.
-            Otherwise, returns the list of 3D coordinates.
         kwargs :
             Additional keyword arguments for `generate_region`.
 
         Returns:
         -------
         skeleton_points : np.ndarray
-            If volume_representation is False: The list of 3D coordinates on the skeleton of the zero region.
-            If volume_representation is True: A 3D numpy array (volume) with ones at the voxel positions
-            corresponding to the skeleton points.
+            The list of 3D coordinates on the skeleton of the zero region.
         """
         # First, generate the skeleton
         self.knot_skeleton(thickness, epsilon, **kwargs)
         # Extract the skeleton points based on the skeletonized volume
         points = self.knot_surface_points(idx=self.skeleton)
         self.skeleton_points = points
-
-        if volume_representation:
-            # Create an empty volume based on the number of points per dimension
-            pts_per_dim = self.pts_per_dim
-            volume = np.zeros((pts_per_dim, pts_per_dim, pts_per_dim), dtype=np.uint8)
-
-            # Get the grid range values from the instance
-            kx_min, kx_max = self.kx_min, self.kx_max
-            ky_min, ky_max = self.ky_min, self.ky_max
-            kz_min, kz_max = self.kz_min, self.kz_max
-
-            # Compute indices for each coordinate component
-            x_indices = np.rint((points[:, 0] - kx_min) / (kx_max - kx_min) * (pts_per_dim - 1)).astype(int)
-            y_indices = np.rint((points[:, 1] - ky_min) / (ky_max - ky_min) * (pts_per_dim - 1)).astype(int)
-            z_indices = np.rint((points[:, 2] - kz_min) / (kz_max - kz_min) * (pts_per_dim - 1)).astype(int)
-
-            # Optional: Check if any indices are out of bounds
-            if (x_indices.min() < 0 or x_indices.max() >= pts_per_dim or
-                y_indices.min() < 0 or y_indices.max() >= pts_per_dim or
-                z_indices.min() < 0 or z_indices.max() >= pts_per_dim):
-                raise ValueError("Some points fall outside the specified volume range.")
-
-            # Set the corresponding voxels to 1.
-            volume[x_indices, y_indices, z_indices] = 1
-
-            return volume
-
         return points
 
-            
-
-    @staticmethod
-    def remove_leaf(G: nx.Graph) -> nx.Graph:
-        """
-        Remove all leaf nodes (nodes with degree 1) and their incident edges from the graph.
-        
-        This function creates a copy of the input graph and then iteratively removes any node
-        that has degree 1. Removing a node automatically removes its incident edge(s).
-        The process repeats until no leaf nodes remain.
-        
-        Parameters:
-          G : nx.Graph or nx.MultiGraph
-              The input graph.
-              
-        Returns:
-          H : nx.Graph or nx.MultiGraph
-              A new graph with all leaf nodes (and their incident edges) removed.
-        """
-        H = G.copy()
-        while True:
-            # Identify all leaf nodes (nodes with degree exactly 1)
-            leaf_nodes = [node for node, degree in H.degree() if degree == 1]
-            if not leaf_nodes:
-                break  # Exit when there are no leaf nodes left.
-            for node in leaf_nodes:
-                H.remove_node(node)
-        return H
-
-    def convert_to_graph(self, volume_points, clean=True):
+    def skeleton_graph(self, 
+            skeleton_3d=None,
+            clean=True,
+            **knot_skeleton_kwargs
+        ):
         """
         Convert a volume representation of skeleton points to a graph, and optionally remove leaf nodes.
         
         Parameters:
         -----------
-        volume_points : np.ndarray
+        skeleton_3d : np.ndarray
             A 3D numpy array representing the volume. Voxels with value 1 are taken as skeleton points.
         clean : bool, optional
             If True, remove leaf nodes (nodes with degree 1) from the graph. Default is True.
+        knot_skeleton_kwargs :
+            Additional keyword arguments for `knot_skeleton`. Only used if `skeleton_3d` is None.
         
         Returns:
         --------
         G : nx.Graph
             The graph constructed from the volume (optionally cleaned).
         """
-        # Convert the volume to a graph using poly2graph
-        G = p2g.skeleton2graph(volume_points)
+        # Generate the skeleton 3d array if not provided
+        if skeleton_3d is None:
+            if self.skeleton is None or knot_skeleton_kwargs:
+                self.knot_skeleton(**knot_skeleton_kwargs)
+            skeleton_3d = self.skeleton
+        
+        # Convert the 3d skeleton image to a graph using poly2graph
+        G = p2g.skeleton2graph(skeleton_3d)
         
         # Remove leaf nodes if desired
-        if clean:
-            G = NodalKnot.remove_leaf(G)
+        if clean: G = remove_leaf_nodes(G)
         
         self.graph = G
         return G
     
-    
-    def plot_3D(self, points, file_name=None):
+    @staticmethod
+    def plot_3D(points, file_name=None):
         """
         Plot the zero regions in 3D space and their 2D projections.
 
@@ -349,6 +302,31 @@ class NodalKnot:
             The Plotly figure object for visualization.
         """
         fig = plot_3D_and_2D_projections(points)
+
+        if file_name:
+            fig.write_html(file_name)
+        
+        return fig
+
+    @staticmethod
+    def plot_graph(G, file_name=None):
+        """
+        Plot the 3D knotted graph in 3D space.
+
+        Parameters:
+        ----------
+        G : nx.Graph
+            The graph to plot.
+        file_name : str, optional
+            File name to save the plot. If None, no saving is done.
+            Default is None.
+
+        Returns:
+        -------
+        fig : plotly.graph_objects.Figure
+            The Plotly figure object for visualization.
+        """
+        fig = plot_3D_graph(G)
 
         if file_name:
             fig.write_html(file_name)
