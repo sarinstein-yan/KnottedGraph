@@ -1,6 +1,8 @@
 import numpy as np
 import skimage.morphology as morph
 import poly2graph as p2g
+import networkx as nx
+import minorminer
 
 from .utils import (
     plot_3D_and_2D_projections,
@@ -9,10 +11,14 @@ from .utils import (
 )
 
 class NodalKnot:
+    
     def __init__(self, 
-            k_to_zw_func, 
-            zw_to_c_func
-        ):
+                 k_to_zw_func, 
+                 zw_to_c_func,
+                 kx_min=-np.pi, kx_max=np.pi,
+                 ky_min=-np.pi, ky_max=np.pi,
+                 kz_min=0,      kz_max=np.pi,
+                 pts_per_dim=400):
         """
         Initialize the non-Hermitian `NodalKnot` with two functions:
             1. k_to_zw_func : callable
@@ -31,11 +37,16 @@ class NodalKnot:
         self.k_to_zw_func = k_to_zw_func
         self.zw_to_c_func = zw_to_c_func
 
+         
+
+        # Set grid parameters with defaults if not provided
+        self.kx_min = kx_min; self.kx_max = kx_max
+        self.ky_min = ky_min; self.ky_max = ky_max
+        self.kz_min = kz_min; self.kz_max = kz_max
+        self.pts_per_dim = pts_per_dim
+
+        
         # Initialize the attributes
-        self.kx_min = -np.pi; self.kx_max = np.pi
-        self.ky_min = -np.pi; self.ky_max = np.pi
-        self.kz_min = 0; self.kz_max = np.pi
-        self.pts_per_dim = 400
         self.val = None
         self.kx_grid = None
         self.ky_grid = None
@@ -47,12 +58,7 @@ class NodalKnot:
         self.graph = None
 
 
-    def generate_region(self, 
-            kx_min=-np.pi, kx_max=np.pi, 
-            ky_min=-np.pi, ky_max=np.pi, 
-            kz_min=0, kz_max=np.pi,
-            pts_per_dim=400,
-        ):
+    def generate_region(self):
         """
         Generate values of f(z, w) for a grid of (kx, ky, kz) points.
 
@@ -74,18 +80,18 @@ class NodalKnot:
         kx_grid, ky_grid, kz_grid : np.ndarray
             The 3D grids of kx, ky, kz values.
         """
-        kx_vals = np.linspace(kx_min, kx_max, pts_per_dim)
-        ky_vals = np.linspace(ky_min, ky_max, pts_per_dim)
-        kz_vals = np.linspace(kz_min, kz_max, pts_per_dim)
+        kx_vals = np.linspace(self.kx_min, self.kx_max, self.pts_per_dim)
+        ky_vals = np.linspace(self.ky_min, self.ky_max, self.pts_per_dim)
+        kz_vals = np.linspace(self.kz_min, self.kz_max, self.pts_per_dim)
         kx_grid, ky_grid, kz_grid = np.meshgrid(kx_vals, ky_vals, kz_vals, indexing='ij')
 
         z, w = self.k_to_zw_func(kx_grid, ky_grid, kz_grid)
         val = self.zw_to_c_func(z, w)
 
-        self.kx_min = kx_min; self.kx_max = kx_max
-        self.ky_min = ky_min; self.ky_max = ky_max
-        self.kz_min = kz_min; self.kz_max = kz_max
-        self.pts_per_dim = pts_per_dim
+        self.kx_min = self.kx_min; self.kx_max = self.kx_max
+        self.ky_min = self.ky_min; self.ky_max = self.ky_max
+        self.kz_min = self.kz_min; self.kz_max = self.kz_max
+        self.pts_per_dim = self.pts_per_dim
         self.val = val
         self.kx_grid = kx_grid
         self.ky_grid = ky_grid
@@ -332,3 +338,55 @@ class NodalKnot:
             fig.write_html(file_name)
         
         return fig
+        
+
+    @staticmethod
+    def print_graph_properties(G):
+        print("Number of nodes:", G.number_of_nodes())
+        print("Number of edges:", G.number_of_edges())
+        
+        # Print degree distribution
+        degree_hist = nx.degree_histogram(G)
+        print("Degree distribution (degree: frequency):")
+        for degree, count in enumerate(degree_hist):
+            if count > 0:
+                print(f"  {degree}: {count}")
+
+        # Check connectivity and compute additional metrics if connected
+        if nx.is_connected(G):
+            print("Graph is connected.")
+            print("Diameter:", nx.diameter(G))
+            print("Average shortest path length:", nx.average_shortest_path_length(G))
+        else:
+            num_components = nx.number_connected_components(G)
+            print("Graph is not connected.")
+            print("Number of connected components:", num_components)
+            # Optionally, print the size of each component
+            components = sorted(nx.connected_components(G), key=len, reverse=True)
+            for i, comp in enumerate(components, 1):
+                print(f"  Component {i} has {len(comp)} nodes.")
+
+
+    @staticmethod         
+    def check_minor(host_graph, minor_graph):
+        """
+        Check whether `minor_graph` is a minor of `host_graph` using minorminer.
+        
+        Parameters:
+            host_graph (networkx.Graph): The graph in which to search for the minor.
+            minor_graph (networkx.Graph): The graph to be checked as a minor.
+            
+        Returns:
+            dict or None: The embedding mapping if `minor_graph` is a minor of `host_graph`,
+                        otherwise None.
+        """
+        # Attempt to find an embedding of minor_graph in host_graph.
+        embedding = minorminer.find_embedding(minor_graph, host_graph)
+        
+        if embedding:
+            print("The given graph contains the minor graph.")
+            return embedding
+        else:
+            print("The given graph does not contain the minor graph.")
+            return None
+    
