@@ -3,8 +3,6 @@ from plotly.subplots import make_subplots
 import networkx as nx
 from typing import Union
 
-from plotly.express import colors
-tableau_colors = colors.qualitative.T10
 
 def remove_leaf_nodes(G: Union[nx.Graph, nx.MultiGraph]) -> Union[nx.Graph, nx.MultiGraph]:
     """
@@ -76,9 +74,7 @@ def plot_3D_and_2D_projections(points):
             y=ky_vals, 
             z=kz_vals,
             mode='markers',
-            marker=dict(size=2, 
-                        color=tableau_colors[0],
-                        opacity=.5),
+            marker=dict(size=2, color='blue', opacity=.5),
             name='3D Points'
         ),
         row=1, col=1
@@ -90,7 +86,7 @@ def plot_3D_and_2D_projections(points):
             x=kx_vals, 
             y=ky_vals,
             mode='markers',
-            marker=dict(size=4, color=tableau_colors[1]),
+            marker=dict(size=4, color='red'),
             name='k<sub>x</sub> vs k<sub>y</sub>'
         ),
         row=1, col=2
@@ -102,7 +98,7 @@ def plot_3D_and_2D_projections(points):
             x=kx_vals, 
             y=kz_vals,
             mode='markers',
-            marker=dict(size=4, color=tableau_colors[2]),
+            marker=dict(size=4, color='green'),
             name='k<sub>x</sub> vs k<sub>z</sub>'
         ),
         row=2, col=1
@@ -114,7 +110,7 @@ def plot_3D_and_2D_projections(points):
             x=ky_vals, 
             y=kz_vals,
             mode='markers',
-            marker=dict(size=4, color=tableau_colors[3]),
+            marker=dict(size=4, color='purple'),
             name='k<sub>y</sub> vs k<sub>z</sub>'
         ),
         row=2, col=2
@@ -171,6 +167,7 @@ def plot_3D_graph(G: Union[nx.Graph, nx.MultiGraph]) -> go.Figure:
     """
     # Create a list to hold Plotly traces for edges.
     edge_traces = []
+    edge_color = 'blue'  # single color for all edges
     for u, v, data in G.edges(data=True):
         pts = data.get('pts')
         if pts is not None:
@@ -184,7 +181,7 @@ def plot_3D_graph(G: Union[nx.Graph, nx.MultiGraph]) -> go.Figure:
                     y=y,
                     z=z,
                     mode='lines',
-                    line=dict(color=tableau_colors[0], width=2),
+                    line=dict(color=edge_color, width=2),
                     hoverinfo='none',  # disable hover text
                     showlegend=False   # disable legend entry
                 )
@@ -211,7 +208,7 @@ def plot_3D_graph(G: Union[nx.Graph, nx.MultiGraph]) -> go.Figure:
             y=ys,
             z=zs,
             mode='markers',
-            marker=dict(size=5, color=tableau_colors[1]),
+            marker=dict(size=5, color='red'),
             hoverinfo='none',  # disable hover text
             showlegend=False   # disable legend entry
         )
