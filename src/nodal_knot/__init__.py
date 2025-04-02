@@ -18,14 +18,14 @@ from .surface_modes import (
 
 from .util import (
     remove_leaf_nodes,
-    kron_batched,
-    eig_batched
+    get_all_pts, get_edge_pts, get_node_pts,
+    kron_batched, eig_batched,
 )
 
 from .vis import (
     plot_3D_and_2D_projections,
     plot_3D_graph,
-    plot_surface_modes
+    plot_surface_modes,
 )
 
 

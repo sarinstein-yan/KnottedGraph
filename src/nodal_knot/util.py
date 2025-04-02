@@ -29,6 +29,37 @@ def remove_leaf_nodes(G: Union[nx.Graph, nx.MultiGraph]) -> Union[nx.Graph, nx.M
             H.remove_node(node)
     return H
 
+def get_edge_pts(G):
+    pts_list = []
+    for u, v, pts in G.edges(data='pts'):
+        pts_list.append(pts)
+    if pts_list:
+        return np.vstack(pts_list)
+    else:
+        return np.array([])
+    
+def get_node_pts(G):
+    pts_list = []
+    for n, o in G.nodes(data='o'):
+        pts_list.append(o)
+    if pts_list:
+        return np.vstack(pts_list)
+    else:
+        return np.array([])
+    
+def get_all_pts(G):
+    edge_pts = get_edge_pts(G)
+    node_pts = get_node_pts(G)
+    if edge_pts.size > 0 and node_pts.size > 0:
+        return np.vstack((edge_pts, node_pts))
+    elif edge_pts.size > 0:
+        return edge_pts
+    elif node_pts.size > 0:
+        return node_pts
+    else:
+        return np.array([])
+
+
 # --- helper function: batched Kronecker product --- #
 def kron_batched(a, b):
     """
