@@ -7,8 +7,8 @@ name = "nodal_knot"
 dynamic = ["version"]
 description = "non-Hermitian nodal knot."
 authors = [
-    {name = "Hakan Akgün", email = "hakanakgun317@gmail.com"},
     {name = "Xianquan (Sarinstein) Yan", email = "xianquanyan@gmail.com"},
+    {name = "Hakan Akgün", email = "hakanakgun317@gmail.com"},
 ]
 maintainers  = [
     {name = "Xianquan (Sarinstein) Yan", email = "xianquanyan@gmail.com"},
@@ -20,18 +20,21 @@ keywords = [
 ]
 readme = {"file" = "README.md", "content-type" = "text/markdown"}
 license = {file = "LICENSE"}
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 classifiers = [
     "Development Status :: 1 - Planning",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3 :: Only",
 ]
-# dependencies = [
-#     "numpy",
-#     "networkx",
-#     "scikit-image",
-#     "poly2graph"
-# ]
+dependencies = [
+    "numpy",
+    "numba",
+    "sympy",
+    "scipy",
+    "networkx",
+    "scikit-image",
+    "minorminer",
+]
 
 [project.urls]
 Homepage = "https://github.com/sarinstein-yan/Nodal-Knot"
@@ -40,8 +43,8 @@ Repository = "https://github.com/sarinstein-yan/Nodal-Knot"
 [tool.hatch.version]
 path = "src/nodal_knot/__init__.py"
 
-# [tool.hatch.build.targets.sdist]
-# exclude = ["assets"]
+[tool.hatch.build.targets.sdist]
+exclude = ["assets"]
 
-# [tool.hatch.build.targets.wheel]
-# packages = ["src/nodal_knot"]
+[tool.hatch.build.targets.wheel]
+packages = ["src/nodal_knot"]

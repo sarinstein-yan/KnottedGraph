@@ -1,19 +1,19 @@
 import numpy as np
-import skimage.morphology as morph
-import poly2graph as p2g
 import networkx as nx
+from .skeleton2graph import skeleton2graph
+import skimage.morphology as morph
 import minorminer
 
-from .utils import (
+from .vis import (
     plot_3D_and_2D_projections,
     plot_3D_graph,
-    remove_leaf_nodes,
 )
+from .util import remove_leaf_nodes
 
 class NodalKnot:
     
     def __init__(self, 
-                 k_to_zw_func, 
+                 k_to_zw_func,
                  zw_to_c_func,
                  kx_min=-np.pi, kx_max=np.pi,
                  ky_min=-np.pi, ky_max=np.pi,
@@ -281,7 +281,7 @@ class NodalKnot:
             skeleton_3d = self.skeleton
         
         # Convert the 3d skeleton image to a graph using poly2graph
-        G = p2g.skeleton2graph(skeleton_3d)
+        G = skeleton2graph(skeleton_3d)
         
         # Remove leaf nodes if desired
         if clean: G = remove_leaf_nodes(G)

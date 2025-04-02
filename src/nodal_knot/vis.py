@@ -1,34 +1,10 @@
+import numpy as np
+import networkx as nx
+import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import networkx as nx
+
 from typing import Union
-
-
-def remove_leaf_nodes(G: Union[nx.Graph, nx.MultiGraph]) -> Union[nx.Graph, nx.MultiGraph]:
-    """
-    Remove all leaf nodes (nodes with degree 1) and their incident edges from the graph.
-    
-    This function creates a copy of the input graph and then iteratively removes any node
-    that has degree 1. Removing a node automatically removes its incident edge(s).
-    The process repeats until no leaf nodes remain.
-    
-    Parameters:
-        G : nx.Graph or nx.MultiGraph
-            The input graph.
-            
-    Returns:
-        H : nx.Graph or nx.MultiGraph
-            A new graph with all leaf nodes (and their incident edges) removed.
-    """
-    H = G.copy()
-    while True:
-        # Identify all leaf nodes (nodes with degree exactly 1)
-        leaf_nodes = [node for node, degree in H.degree() if degree == 1]
-        if not leaf_nodes:
-            break  # Exit when there are no leaf nodes left.
-        for node in leaf_nodes:
-            H.remove_node(node)
-    return H
 
 
 def plot_3D_and_2D_projections(points):
@@ -233,4 +209,100 @@ def plot_3D_graph(G: Union[nx.Graph, nx.MultiGraph]) -> go.Figure:
         height=450
     )
     
+    return fig
+
+
+
+def plot_surface_modes(eigvals_tuple, k_vals_tuple, Etol_tuple, nH_coeff):
+    """
+    Generates a single figure with three subplots (in a row) showing surface modes
+    for different open boundary conditions.
+
+    Parameters
+    ----------
+    eigvals_tuple : tuple of np.ndarray
+        A tuple containing the eigenvalue arrays: (eigvals_obc_x, eigvals_obc_y, eigvals_obc_z).
+        Each array is assumed to have shape (..., num_eigenvalues), where the last
+        two dimensions correspond to the k-grid.
+    k_vals_tuple : tuple of array-like
+        A tuple containing the momentum values (kx_vals, ky_vals, kz_vals).
+    Etol_tuple : tuple of float
+        A tuple of energy tolerances: (Etol_x, Etol_y, Etol_z).
+    nH_coeff : float or str
+        A coefficient (or label) to be displayed in the title of each plot.
+
+    Returns
+    -------
+    None
+        Displays the figure with three subplots.
+    """
+    # Unpack inputs
+    eigvals_obc_x, eigvals_obc_y, eigvals_obc_z = eigvals_tuple
+    kx_vals, ky_vals, kz_vals = k_vals_tuple
+    Etol_x, Etol_y, Etol_z = Etol_tuple
+
+    # Create figure with three subplots arranged horizontally
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+
+    # ------------------ Plot 1: OBC in x-direction ------------------ #
+    # Here we use the ky and kz values.
+    surface_modes_x = np.sum(np.abs(eigvals_obc_x) < Etol_x, axis=-1)
+    sm_ky, sm_kz, sm_num = [], [], []
+    for i, ky in enumerate(ky_vals):
+        for j, kz in enumerate(kz_vals):
+            sm = surface_modes_x[i, j]
+            if sm > 0:
+                sm_ky.append(ky)
+                sm_kz.append(kz)
+                sm_num.append(sm)
+    ax = axes[0]
+    sc = ax.scatter(sm_ky, sm_kz, s=5, 
+                    c='k')
+                    # c=sm_num, cmap='gray')
+    ax.set_xlabel('$k_y$')
+    ax.set_ylabel('$k_z$')
+    ax.set_title(f'OBC in $x$-direction\n|E| tolerance = {Etol_x};  non-Hermitian strength: {nH_coeff}')
+
+    # ------------------ Plot 2: OBC in y-direction ------------------ #
+    # Here we use the kx and kz values.
+    surface_modes_y = np.sum(np.abs(eigvals_obc_y) < Etol_y, axis=-1)
+    sm_kx, sm_kz, sm_num = [], [], []
+    for i, kz in enumerate(kz_vals):
+        for j, kx in enumerate(kx_vals):
+            sm = surface_modes_y[i, j]
+            if sm > 0:
+                sm_kx.append(kx)
+                sm_kz.append(kz)
+                sm_num.append(sm)
+    ax = axes[1]
+    sc = ax.scatter(sm_kx, sm_kz, s=5, 
+                    c='k')
+                    # c=sm_num, cmap='gray')
+    ax.set_xlabel('$k_x$')
+    ax.set_ylabel('$k_z$')
+    ax.set_title(f'OBC in $y$-direction\n|E| tolerance = {Etol_y};  non-Hermitian strength: {nH_coeff}')
+
+    # ------------------ Plot 3: OBC in z-direction ------------------ #
+    # Here we use the kx and ky values.
+    surface_modes_z = np.sum(np.abs(eigvals_obc_z) < Etol_z, axis=-1)
+    sm_kx, sm_ky, sm_num = [], [], []
+    for i, kx in enumerate(kx_vals):
+        for j, ky in enumerate(ky_vals):
+            sm = surface_modes_z[i, j]
+            if sm > 0:
+                sm_kx.append(kx)
+                sm_ky.append(ky)
+                sm_num.append(sm)
+    ax = axes[2]
+    sc = ax.scatter(sm_kx, sm_ky, s=5, 
+                    c='k')
+                    # c=sm_num, cmap='gray')
+    ax.set_xlabel('$k_x$')
+    ax.set_ylabel('$k_y$')
+    # Set axis limits if desired (adjust as needed)
+    ax.set_xlim(-2, 2)
+    ax.set_ylim(-2.5, 2.5)
+    ax.set_title(f'OBC in $z$-direction\n|E| tolerance = {Etol_z};  non-Hermitian strength: {nH_coeff}')
+
+    plt.tight_layout()
     return fig
