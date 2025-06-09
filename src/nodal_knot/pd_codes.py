@@ -1,3 +1,9 @@
+'''
+This document includes my attempts to automate the construction of PD codes.
+Currently, they are not very effective, and manually entering the angles to obtain PD codes seems to work better.
+However, I am including them here to give you an idea of my previous efforts. If we are unable to make progress on this in later stages, we can simply remove the code.
+'''
+
 import plotly.graph_objects as go  # Interactive plotting library
 import numpy as np               # Numerical operations
 from shapely.geometry import Point, LineString, GeometryCollection, MultiPoint
@@ -260,7 +266,7 @@ def PlanarDiagram_Codes(graph,
                          if np.allclose(arc['coords2d'][0], node_positions_2d[node], tol)
                          or np.allclose(arc['coords2d'][-1], node_positions_2d[node], tol)]
         V_parts.append(f"V[{','.join(map(str, sorted(incident_arcs)))}]")
-
+    all_meet=[]
     for pt in uniq_cross_points:
         meet = []
         for arc in arcs:
@@ -287,9 +293,10 @@ def PlanarDiagram_Codes(graph,
                 meet.append((arc['id'], z_before, angle))
         meet.sort(key=lambda x: x[1])
         sorted_ids = sorted(item[0] for item in meet)
+        all_meet.append(meet)
         X_parts.append(f"X[{','.join(map(str, sorted_ids))}]")
-
-    return V_parts, X_parts,meet
+        
+    return V_parts, X_parts,all_meet
 
 
 

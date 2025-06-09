@@ -210,7 +210,7 @@ def H_obc_arr_from_hop_dict(hoppings, N1, k2, k2_vals, k3, k3_vals):
             hop_arr = np.zeros((y_len, z_len, *val.shape), dtype=np.complex128)
             for idx in np.ndindex(val.shape):
                 f = sp.lambdify((k2, k3), val[idx], modules='numpy')
-                hop_arr[..., *idx] = f(k2_arr, k3_arr)
+                hop_arr[..., idx] = f(k2_arr, k3_arr)
 
         # NOTE: this is still the slowest part of this function.
         Hobc_temp = kron_batched(Tobc_arr, hop_arr)

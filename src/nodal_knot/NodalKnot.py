@@ -8,7 +8,7 @@ from .vis import (
     plot_3D_and_2D_projections,
     plot_3D_graph,
 )
-from .util import remove_leaf_nodes
+from .util import remove_leaf_nodes,collapse_deg2_exact_with_pts
 
 class NodalKnot:
     
@@ -169,18 +169,44 @@ class NodalKnot:
             A list of points in 3D (kx, ky, kz) space that satisfy the condition.
             
         """
+        if isinstance(thickness, (int, float)):
+            print("Calculating according to following condition:\n" \
+            "norm(f)-c where C=constant")
+        elif isinstance(thickness, list):
+            print("Calculating according to following condition:\n" \
+            "norm(f)^2+C+R*real(f)+I*Im(f) where C=constant, R=real_coef, I=imag_coef")
+            
         # check if self.val is available
         if self.val is None or kwargs:
              self.generate_region(**kwargs)
         if idx is None:
             norm = np.abs(self.val)
-            if epsilon is not None and epsilon > 0:
+
+            if isinstance(thickness, (int, float)):
+                if epsilon is not None and epsilon > 0:
                 # return the thickened knot's surface
-                idx = np.where(np.abs(norm - thickness) < epsilon)
+                    idx = np.where(np.abs(norm - thickness) < epsilon)
+                else:
+                    # return the thickened knot as a solid (filled-up surface)
+                    if thickness < 10/self.pts_per_dim: thickness = 10/self.pts_per_dim
+                    idx = np.where(norm <= thickness)
+            elif isinstance(thickness, list):
+                # list must be [constant, real_coef, imag_coef]
+                assert len(thickness) == 3, "thickness list must be [constant, real_coef, imag_coef]"
+                constant, real_coef, imag_coef = thickness
+                real_part = np.real(self.val)
+                imag_part = np.imag(self.val)
+                thickness = constant + real_coef * real_part + imag_coef * imag_part 
+                if epsilon is not None and epsilon > 0:
+                # return the thickened knot's surface
+                    idx = np.where(np.abs(norm**2+thickness) < epsilon)
+                else:
+                    # return the thickened knot as a solid (filled-up surface)
+                    if thickness < 10/self.pts_per_dim: thickness = 10/self.pts_per_dim
+                    idx = np.where(norm**2 <= thickness)
             else:
-                # return the thickened knot as a solid (filled-up surface)
-                if thickness < 10/self.pts_per_dim: thickness = 10/self.pts_per_dim
-                idx = np.where(norm <= thickness)
+                raise TypeError("Thickness must be either a number corresponding to i*c*pauli_y or a list of three numerics corresponding to [constant(i*c*pauli_y), real_coef, imag_coef} deformation ")
+             
         else:
             if idx.shape != self.val.shape:
                 raise ValueError("Input `val` must have the same shape as the generated region.")
@@ -285,7 +311,7 @@ class NodalKnot:
         
         # Remove leaf nodes if desired
         if clean: G = remove_leaf_nodes(G)
-        
+        G=collapse_deg2_exact_with_pts(G)
         self.graph = G
         return G
     

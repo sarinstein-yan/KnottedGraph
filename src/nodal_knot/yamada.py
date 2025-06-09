@@ -1,161 +1,147 @@
 import networkx as nx
 import sympy as sp
 import itertools
+import re
+from collections import defaultdict
+from functools import lru_cache
+import igraph as ig 
+def igraph_multigraph_key(G):
+    node_list = list(G.nodes())
+    idx       = {n:i for i,n in enumerate(node_list)}
+    edges     = [(idx[u], idx[v]) for u,v,_ in G.edges(keys=True)]
+    igG       = ig.Graph(n=len(node_list), edges=edges, directed=False)
 
-def is_trivalent(G):
-    """
-    Check if a graph is trivalent -- if all vertices have degree <= 3.
-    
-    Parameters:
-      G : networkx.MultiGraph / networkx.Graph
-         The undirected graph to check.
-    
-    Returns:
-      True if the graph is trivalent, False otherwise.
-    """
-    degs = nx.degree(G)
-    return all(degree <= 3 for node, degree in degs)
+    # everyone the same color → Nauty still collapses isomorphic connectivity
+    igG.vs['color'] = [0]*len(node_list)
 
-def computeNegami(G, x, y):
-    """
-    Compute the Negami polynomial for a graph G.
-    Negami polynomial is a bivariate Laurent polynomial:
-      h(G; x, y) = sum_{F ⊆ E(G)} (-x)^{|F|} * x^{μ(G-F)} * y^{β(G-F)},
-    where:
-      - μ(G-F) is the number of connected components of G with the edges in F removed,
-      - β(G-F) = |E(G-F)| - |V(G-F)| + μ(G-F).
-      
-    Parameters:
-      G : networkx.MultiGraph
-         The graph (assumed undirected) encoded as a NetworkX multigraph.
-      x, y : sympy.Symbol
-         The symbols for the polynomial.
-    
-    Returns:
-      A sympy.Expr representing h(G; x, y).
-    """
-    # List all edges with keys (each edge is (u, v, key))
+    perm = igG.canonical_permutation(color=igG.vs['color'])
+    canon = igG.permute_vertices(perm)
+    return tuple(sorted(canon.get_edgelist()))
+
+
+def parse_pd(pd_str):
+    vertices, crossings = [], []
+    for token in pd_str.strip().split(';'):
+        token = token.strip()
+        if not token:
+            continue
+        m = re.match(r'^(V|X)\[\s*([\d,]+)\s*\]$', token)
+        if not m:
+            raise ValueError(f"Bad token: {token!r}")
+        kind, nums = m.groups()
+        labels = list(map(int, nums.split(',')))
+        if kind == 'V':
+            vertices.append(labels)
+        else:
+            crossings.append(labels)
+    return vertices, crossings
+
+def build_state_graph(vertices, crossings, state):
+    G = nx.MultiGraph()
+    nV, nX = len(vertices), len(crossings)
+    G.add_nodes_from(range(nV),   kind='V')
+    G.add_nodes_from(range(nV, nV+nX), kind='X')
+    label_ends = defaultdict(list)
+    for vidx, v_lbls in enumerate(vertices):
+        for lbl in v_lbls:
+            label_ends[lbl].append(vidx)
+    for xidx, (u1,u2,o1,o2) in enumerate(crossings):
+        Xnode = nV + xidx
+        for lbl in (u1,u2,o1,o2):
+            label_ends[lbl].append(Xnode)
+    for lbl, ends in label_ends.items():
+        if len(ends) != 2:
+            raise ValueError(f"Label {lbl} appears {len(ends)} times; expected 2")
+        G.add_edge(*ends, label=lbl)
+    for xidx, res in enumerate(state):
+        Xnode = nV + xidx
+        u1,u2,o1,o2 = crossings[xidx]
+        nbr = {}
+        for lbl in (u1,u2,o1,o2):
+            a,b = label_ends[lbl]
+            nbr[lbl] = b if a==Xnode else a
+        if res == 0:
+            G.add_edge(nbr[u1], nbr[o1])
+            G.add_edge(nbr[u2], nbr[o2])
+            G.remove_node(Xnode)
+        elif res == 1:
+            G.add_edge(nbr[u1], nbr[o2])
+            G.add_edge(nbr[u2], nbr[o1])
+            G.remove_node(Xnode)
+        elif res == 2:
+            G.nodes[Xnode]['kind'] = 'V'
+        else:
+            raise ValueError(f"Invalid state {res}")
+    return G
+
+def graph_key(G):
+    # hashable summary: sorted list of (u,v,key)
+    eds = []
+    for u,v,k in G.edges(keys=True):
+        a,b = (u,v) if u<=v else (v,u)
+        eds.append((a,b,k))
+    return tuple(sorted(eds))
+
+# global store so our cached function can recover G
+_graph_store = {}
+
+x, y = sp.symbols('x y')
+@lru_cache(maxsize=None)
+def computeNegami_cached(key):
+    G = _graph_store[key]
+    h = sp.Integer(0)
     edges = list(G.edges(keys=True))
-    h_poly = sp.Integer(0)  # initialize polynomial to 0
-
-    # Iterate over all subsets F of edges.
-    for r in range(len(edges) + 1):
+    for r in range(len(edges)+1):
         for F in itertools.combinations(edges, r):
             H = G.copy()
-            for (u, v, key) in F:
-                H.remove_edge(u, v, key=key)
-            
-            # Compute the number of connected components
-            components = list(nx.connected_components(H))
-            mu = len(components)
-            
-            num_vertices = H.number_of_nodes()
-            num_edges = H.number_of_edges()
-            
-            # β(G-F) = |E(G-F)| - |V(G-F)| + μ(G-F)
-            beta = num_edges - num_vertices + mu
-            
-            term = ((-x)**r) * (x**mu) * (y**beta)
-            h_poly += term
+            for u,v,k in F:
+                H.remove_edge(u, v, key=k)
+            mu = nx.number_connected_components(H)
+            V  = H.number_of_nodes()
+            E  = H.number_of_edges()
+            beta = E - V + mu
+            h += ((-x)**r) * (x**mu) * (y**beta)
+    return sp.simplify(h)
 
-    return sp.simplify(h_poly)
+# ——— Main wrapper ———
+def optimized_yamada(pd_code: str):
+    # 1) parse once
+    vertices, crossings = parse_pd(pd_code)
+    # freeze them into tuples so we can use them in an lru_cache
+    vert_t  = tuple(tuple(v) for v in vertices)
+    cross_t = tuple(tuple(x) for x in crossings)
 
-def computeYamada(state_list, exponent_list, A):
-    """
-    Compute the Yamada polynomial for a spatial graph diagram using its resolved states.
-    
-    Given:
-      - state_list: a list of resolved graphs (each a NetworkX MultiGraph) from the state resolutions.
-      - exponent_list: a list of integers corresponding to p(s) - m(s) for each state.
-      - A: a sympy.Symbol representing the Yamada polynomial variable.
-    
-    For each resolved graph G in state_list, compute h(G; x, y) using computeNegami,
-    then form the term:
-         A^(p(s)-m(s)) * h(G; x, y)
-    and sum over all states. Finally, substitute:
-         x = -1,   y = -A - 2 - A^(-1)
-    to obtain the Yamada polynomial Y(D;A) defined by
-         Y(D;A) = ∑ₛ A^(p(s)-m(s)) · h(Dₛ; -1, -A-2-A^(-1)).
-    
-    Parameters:
-      state_list : list
-         List of resolved graphs (NetworkX MultiGraph / Graph objects).
-      exponent_list : list
-         List of integers (p(s) - m(s) values) corresponding to each state.
-      A : sympy.Symbol
-         The symbol for the Yamada polynomial variable.
-    
-    Returns:
-      A sympy.Expr representing the Yamada polynomial Y(D; A).
-    """
-    # Check that A is a sympy.Symbol
-    assert isinstance(A, sp.Symbol), "A must be a sympy.Symbol."
-    # Check that the state_list and exponent_list have the same length
-    assert len(state_list) == len(exponent_list), "state_list and exponent_list must have the same length."
-    # Define the auxiliary symbols x and y used in compute_h.
-    x, y = sp.symbols('x y')
-    
-    total_poly = sp.Integer(0)
-    # Sum over each state
-    for G, exp in zip(state_list, exponent_list):
-        h_val = computeNegami(G, x, y)
-        total_poly += (A**exp) * h_val
+    # 2) cached constructor: key is the full state‐tuple
+    @lru_cache(maxsize=None)
+    def _build(state):
+        # state is a tuple of 0/1/2
+        return build_state_graph(vert_t, cross_t, list(state))
 
-    # Substitute x = -1 and y = -A - 2 - A^(-1) as per the definition.
-    yamada_poly = total_poly.subs(x, -1).subs(y, -A - 2 - A**(-1))
-    # Simplify the expression
-    yamada_poly = sp.simplify(yamada_poly)
-    # Expand the expression
-    yamada_poly = sp.expand(yamada_poly)
-    return yamada_poly
+    # 3) enumerate states, but now use the cached builder
+    configs = list(itertools.product([0,1,2], repeat=len(cross_t)))
+    key_exps = []
+    for cfg in configs:
+        state = tuple(cfg)
+        G = _build(state)                # will only build each unique state once
+        k = igraph_multigraph_key(G)
 
-def BouquetGraph(n):
-    """
-    Construct the Bouquet_n graph.
-    
-    Parameters:
-      n : int
-        The number of petals in the Bouquet_n graph.
-    
-    Returns:
-      A NetworkX MultiGraph representing the Bouquet_n graph.
-    """
-    edge_list = [(0, 0) for _ in range(n)]
-    G = nx.from_edgelist(edge_list, nx.MultiGraph)
-    return G
+        if k not in _graph_store:
+            _graph_store[k] = G
+        exp = cfg.count(0) - cfg.count(1)
+        key_exps.append((k, exp))
 
-def ThetaGraph(n):
-    """
-    Construct the Theta_n graph.
-
-    Parameters:
-      n : int
-        The number of edges in the Theta_n graph.
-
-    Returns:
-      A NetworkX MultiGraph representing the Theta_n graph.
-    """
-    edge_list = [(0, 1) for _ in range(n)]
-    G = nx.from_edgelist(edge_list, nx.MultiGraph)
-    return G
-
-
-
-
-
-if __name__ == "__main__":
-    
-    # Define the variable for the Yamada polynomial
+    # 4) assemble and finish exactly as before…
     A = sp.symbols('A')
+    total = sp.Integer(0)
+    for key, group in itertools.groupby(sorted(key_exps, key=lambda t: t[0]), key=lambda t: t[0]):
+        P = computeNegami_cached(key)
+        for _, exp in group:
+            total += (A**exp) * P
 
-    # State 1&2: A Bouquet-2
-    G1 = BouquetGraph(2)
-    # State 3: A Theta-4
-    G2 = ThetaGraph(4)
+    Y = total.subs({x: -1, y: -A-2-A**(-1)})
+    Y = sp.simplify(sp.expand(Y))
+    m = min(t.as_coeff_exponent(A)[1] for t in Y.as_ordered_terms())
+    return sp.expand(Y * A**(-m))
 
-    state_list = [G1, G1, G2]
-    exponent_list = [1, -1, 0]
 
-    Yamada = computeYamada(state_list, exponent_list, A)
-    print("Yamada polynomial Y(D;A) =")
-    sp.pprint(Yamada)
+ 

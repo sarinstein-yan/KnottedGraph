@@ -1,9 +1,11 @@
 import numpy as np
 import networkx as nx
+import math
+import numpy as np 
+import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-
 from typing import Union
 
 
@@ -122,97 +124,75 @@ def plot_3D_and_2D_projections(points):
 
 def plot_3D_graph(G: Union[nx.Graph, nx.MultiGraph]) -> go.Figure:
     """
-    Create a 3D Plotly visualization of a knotted graph.
-    
-    This function extracts edge and node data from the graph and creates an interactive 
-    3D plot where:
-      - Edges are displayed as blue lines.
-      - Nodes (with degree ≠ 2) are displayed as red markers.
-    
-    Parameters:
-    -----------
-    G : nx.Graph
-        The input graph with edge attribute 'pts' containing a NumPy array of shape (N, 3)
-        representing the coordinates along each edge, and node attribute 'o' representing the
-        node's 3D position.
-        
-    Returns:
-    --------
-    fig : go.Figure
-        The Plotly figure object for the interactive 3D visualization.
+    Robust 3D Plotly visualizer for a knotted graph.
+
+    - Flattens mixed Python lists/arrays of edge 'pts' into a clean (N,3) array.
+    - Plots edges as blue lines and **all** nodes as red markers.
     """
-    # Create a list to hold Plotly traces for edges.
     edge_traces = []
-    edge_color = 'blue'  # single color for all edges
+    edge_color = 'blue'
+
+    # — edge traces (unchanged) —
     for u, v, data in G.edges(data=True):
-        pts = data.get('pts')
-        if pts is not None:
-            if pts.ndim == 2 and pts.shape[1] == 3:
-                # Extract x, y, z coordinates for the edge.
-                x = pts[:, 0]
-                y = pts[:, 1]
-                z = pts[:, 2]
-                trace = go.Scatter3d(
-                    x=x,
-                    y=y,
-                    z=z,
-                    mode='lines',
-                    line=dict(color=edge_color, width=2),
-                    hoverinfo='none',  # disable hover text
-                    showlegend=False   # disable legend entry
-                )
-                edge_traces.append(trace)
+        raw_pts = data.get('pts', [])
+        flat_pts = []
+        for p in raw_pts:
+            arr = np.asarray(p)
+            if arr.ndim == 1 and arr.shape == (3,):
+                flat_pts.append(arr)
+            elif arr.ndim == 2 and arr.shape[1] == 3:
+                flat_pts.extend(arr)
             else:
-                print(f"Edge {u}-{v} 'pts' data is not of shape (N, 3).")
-        else:
-            print(f"Edge {u}-{v} has no 'pts' attribute.")
+                continue
 
-    # Create a trace for nodes as red points, but only for nodes whose degree is not 2.
-    node_positions = {}
-    for n in G.nodes():
-        if G.degree(n) != 2:
-            data = G.nodes[n]
-            if 'o' in data:
-                node_positions[n] = data['o']
+        if len(flat_pts) < 2:
+            continue
 
-    if node_positions:
-        xs = [coord[0] for coord in node_positions.values()]
-        ys = [coord[1] for coord in node_positions.values()]
-        zs = [coord[2] for coord in node_positions.values()]
-        node_trace = go.Scatter3d(
-            x=xs,
-            y=ys,
-            z=zs,
-            mode='markers',
-            marker=dict(size=5, color='red'),
-            hoverinfo='none',  # disable hover text
-            showlegend=False   # disable legend entry
+        pts_arr = np.stack(flat_pts)
+        x, y, z = pts_arr[:,0], pts_arr[:,1], pts_arr[:,2]
+        edge_traces.append(
+            go.Scatter3d(
+                x=x, y=y, z=z,
+                mode='lines',
+                line=dict(color=edge_color, width=2),
+                hoverinfo='none',
+                showlegend=False
+            )
         )
-    else:
-        node_trace = None
 
-    # Combine the traces into one Plotly figure.
-    data_traces = edge_traces + ([node_trace] if node_trace is not None else [])
-    fig = go.Figure(data=data_traces)
+    # — node traces: now include every node with an 'o' attribute —
+    node_x, node_y, node_z = [], [], []
+    for n, data in G.nodes(data=True):
+        if 'o' in data:
+            o = data['o']
+            if len(o) == 3:
+                node_x.append(o[0])
+                node_y.append(o[1])
+                node_z.append(o[2])
 
-    # Update the layout for better viewing and disable the overall legend.
+    node_trace = go.Scatter3d(
+        x=node_x, y=node_y, z=node_z,
+        mode='markers',
+        marker=dict(size=5, color='red'),
+        hoverinfo='none',
+        showlegend=False
+    ) if node_x else None
+
+    # — combine and layout —
+    traces = edge_traces + ([node_trace] if node_trace else [])
+    fig = go.Figure(data=traces)
     fig.update_layout(
-        title="Interactive 3D Graph Visualization<br>(Nodes with degree ≠ 2)",
+        title="Interactive 3D Graph Visualization<br>(All Nodes)",
         scene=dict(
-            xaxis_title='k<sub>x</sub>',
-            yaxis_title='k<sub>y</sub>',
-            zaxis_title='k<sub>z</sub>'
+            xaxis_title='X', yaxis_title='Y', zaxis_title='Z',
+            aspectmode='data'
         ),
-        margin=dict(l=0, r=0, b=0, t=40),
-        showlegend=False,  # disable legend in the layout
-        width=450,
-        height=450
+        margin=dict(l=0, r=0, t=40, b=0),
+        showlegend=False,
+        width=600,
+        height=600
     )
-    
     return fig
-
-
-
 def plot_surface_modes(eigvals_tuple, k_vals_tuple, Etol_tuple, nH_coeff):
     """
     Generates a single figure with three subplots (in a row) showing surface modes
@@ -306,3 +286,71 @@ def plot_surface_modes(eigvals_tuple, k_vals_tuple, Etol_tuple, nH_coeff):
 
     plt.tight_layout()
     return fig
+
+
+ 
+
+def standard_petersen_layout(R_outer=1.2, R_inner=0.7):
+    coords = {}
+    for i in range(5):
+        angle = 2*math.pi*i/5
+        coords[i] = (R_outer*math.cos(angle), R_outer*math.sin(angle))
+    for i in range(5):
+        angle = 2*math.pi*(i+0.5)/5
+        coords[i+5] = (R_inner*math.cos(angle), R_inner*math.sin(angle))
+    return coords
+
+def draw_petersen_embedding(petersen_graph, embedding,
+                            layout_func=standard_petersen_layout,
+                            box_size=(0.5,0.3),
+                            scale_factor=1.0,
+                            outer_color='lightblue',
+                            inner_color='lightcoral',
+                            edge_color='k', edge_width=3,
+                            circle_edgecolor='black',
+                            circle_facecolor='white',
+                            circle_lw=2,
+                            text_kwargs=None):
+    if text_kwargs is None:
+        text_kwargs = dict(ha='center', va='center',
+                           fontsize=10, fontweight='bold', zorder=11)
+
+    positions = layout_func()
+    fig, ax = plt.subplots(figsize=(8,8))
+
+    # draw edges
+    for u, v in petersen_graph.edges():
+        pu = np.array(positions[u])*scale_factor
+        pv = np.array(positions[v])*scale_factor
+        ax.plot([pu[0], pv[0]], [pu[1], pv[1]],
+                color=edge_color, lw=edge_width, zorder=0)
+
+    bx, by = box_size
+    for minor, (xc, yc) in positions.items():
+        xc, yc = xc*scale_factor, yc*scale_factor
+        x0, y0 = xc-bx/2, yc-by/2
+        color = outer_color if minor < 5 else inner_color
+        ax.add_patch(patches.Rectangle((x0,y0), bx, by,
+                                       edgecolor='black',
+                                       facecolor=color,
+                                       lw=2, zorder=1))
+
+        hosts = embedding.get(minor, [])
+        n = len(hosts)
+        if not n:
+            continue
+
+        r = by/2.5
+        xs = [xc] if n==1 else np.linspace(x0+r, x0+bx-r, n)
+        ys = [yc]*n
+
+        for xi, yi, h in zip(xs, ys, hosts):
+            ax.add_patch(patches.Circle((xi, yi), radius=r,
+                                        edgecolor=circle_edgecolor,
+                                        facecolor=circle_facecolor,
+                                        lw=circle_lw, zorder=10))
+            ax.text(xi, yi, str(h), **text_kwargs)
+
+    ax.set_aspect('equal')
+    ax.axis('off')
+    return fig, ax

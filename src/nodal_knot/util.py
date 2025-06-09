@@ -2,6 +2,139 @@ import numpy as np
 import networkx as nx
 import tensorflow as tf
 from typing import Union
+import networkx as nx
+  
+def append_edge_pts(path, edge_pts):
+    """
+    Append the list edge_pts to path, but
+      1) reverse edge_pts if it currently runs *into* path[-1],
+      2) drop the first point if it duplicates path[-1].
+    """
+    if edge_pts is None or len(edge_pts) == 0:
+        return
+
+    # 1) orient the segment so it starts at path[-1]
+    if np.array_equal(edge_pts[-1], path[-1]):
+        pts = edge_pts[::-1]
+    else:
+        pts = edge_pts
+
+    # 2) drop the overlapping endpoint
+    if np.array_equal(pts[0], path[-1]):
+        path.extend(pts[1:])
+    else:
+        # this means something’s really off: 
+        # neither end of pts matches the current path end
+        raise RuntimeError(
+            "Edge segment doesn’t connect: "
+            f"path[-1]={path[-1]}, next_pts endpoints={pts[0],pts[-1]}"
+        )
+ 
+
+def collapse_deg2_exact_with_pts(G):
+    """
+    Collapse degree-2 chains in each connected component of G, retaining node‑ and edge‑pts along paths.
+
+    - For components with any deg>2 nodes: treat deg>2 nodes as junctions and collapse chains between them using the standard logic.
+    - For components without deg>2 nodes: collapse the entire component into a single self-loop on a chosen representative node, preserving the full path pts.
+    """
+    G = nx.MultiGraph(G)
+    H = nx.MultiGraph()
+
+    def _tag(u, v, key):
+        return (u, v, key) if u <= v else (v, u, key)
+
+    for comp in nx.connected_components(G):
+        # map degrees
+        degmap = {n: G.degree(n) for n in comp}
+        junctions = {n for n, d in degmap.items() if d > 2}
+
+        if junctions:
+            # standard collapse for components with junctions
+            for j in junctions:
+                H.add_node(j)
+                H.nodes[j]['o'] = G.nodes[j].get('o')
+
+            seen_edges = set()
+            for j in junctions:
+                for nbr, edict in G.adj[j].items():
+                    for key, ea in edict.items():
+                        tag = _tag(j, nbr, key)
+                        if tag in seen_edges:
+                            continue
+                        seen_edges.add(tag)
+
+                        # collect chain from j to next junction
+                        path_pts = [G.nodes[j].get('o')]
+                        append_edge_pts(path_pts, ea.get('pts', []))
+
+                        prev, cur = j, nbr
+                        while cur not in junctions and G.degree(cur) == 2:
+                            path_pts.append(G.nodes[cur].get('o'))
+                            # step to the other neighbor
+                            #nxt = [n for n in G.neighbors(cur) if n != prev][0]
+                            # look for the one neighbor that isn’t `prev`
+                            candidates = [n for n in G.neighbors(cur) if n != prev]
+                            if not candidates:
+                                # no further neighbor → stop collapsing this chain
+                                break
+                            nxt = candidates[0]
+
+                            for k2, ea2 in G[cur][nxt].items():
+                                t2 = _tag(cur, nxt, k2)
+                                if t2 not in seen_edges:
+                                    seen_edges.add(t2)
+                                    append_edge_pts(path_pts, ea2.get('pts', []))
+                                    break
+                            prev, cur = cur, nxt
+
+                        # append final node
+                        path_pts.append(G.nodes[cur].get('o'))
+                        if cur not in H.nodes:
+                            H.add_node(cur)
+                            H.nodes[cur]['o'] = G.nodes[cur].get('o')
+
+                        H.add_edge(j, cur, pts=np.array(path_pts))
+        else:
+            # no junctions: make one self-loop
+            # choose representative (prefer deg-2)
+            rep = next((n for n, d in degmap.items() if d == 2), None) or next(iter(comp))
+            H.add_node(rep)
+            H.nodes[rep]['o'] = G.nodes[rep].get('o')
+
+            # start path at rep
+            path_pts = [G.nodes[rep].get('o')]
+            seen_edges = set()
+            nbrs = list(G.neighbors(rep))
+            if nbrs:
+                prev, cur = rep, nbrs[0]
+                # record first edge
+                for key, ea in G[prev][cur].items():
+                    tag = _tag(prev, cur, key)
+                    if tag not in seen_edges:
+                        seen_edges.add(tag)
+                        append_edge_pts(path_pts, ea.get('pts', []))
+                        break
+                # walk until back to rep
+                while cur != rep:
+                    path_pts.append(G.nodes[cur].get('o'))
+                    nxts = [n for n in G.neighbors(cur) if n != prev]
+                    if not nxts:
+                        break
+                    nxt = nxts[0]
+                    for k2, ea2 in G[cur][nxt].items():
+                        t2 = _tag(cur, nxt, k2)
+                        if t2 not in seen_edges:
+                            seen_edges.add(t2)
+                            append_edge_pts(path_pts, ea2.get('pts', []))
+                            break
+                    prev, cur = cur, nxt
+                # close loop
+                path_pts.append(G.nodes[rep].get('o'))
+
+            H.add_edge(rep, rep, pts=np.array(path_pts))
+    H = nx.convert_node_labels_to_integers(H, first_label=1, ordering='sorted')
+    return H
 
 def remove_leaf_nodes(G: Union[nx.Graph, nx.MultiGraph]) -> Union[nx.Graph, nx.MultiGraph]:
     """
@@ -197,3 +330,8 @@ def eig_batched(array_of_matrices, device='/CPU:0', is_hermitian=False):
     # tf.keras.backend.clear_session()
 
     return eigvals_np, eigvecs_np
+
+
+
+
+
