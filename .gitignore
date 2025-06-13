@@ -175,3 +175,5 @@ cython_debug/
 
 # Jupyter Notebook
 *dev.ipynb
+
+dev/
