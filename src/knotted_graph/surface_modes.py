@@ -1,120 +1,15 @@
 import numpy as np
 import tensorflow as tf
 import sympy as sp
-from .util import kron_batched, eig_batched
+from poly2graph import (
+    kron_batch, 
+    eig_batch,
+    shift_matrix,
+    hk2hz, 
+    hz2hk, 
+    expand_hz_as_hop_dict,
+)
 
-
-def shift_matrix(N, shift=1, pbc=True):
-    """
-    Constructs the translation (shift) matrix for a 1D chain of length N.
-
-    For a given shift value, the function creates a matrix that translates (or "shifts") 
-    the basis elements. For periodic boundary conditions (pbc=True), the matrix is rolled; 
-    otherwise, a diagonal matrix with shifted ones is returned.
-
-    Parameters:
-        N (int): The number of sites in the 1D chain.
-        shift (int, optional): The number of sites to shift (default is 1).
-        pbc (bool, optional): Whether to enforce periodic boundary conditions (default is True).
-
-    Returns:
-        A NumPy array representing the shift matrix. For N <= 1, returns a 1x1 identity matrix.
-    """
-    if N is None or N <= 1:
-        return np.eye(1)
-    if pbc:
-        return np.roll(np.eye(N), shift, axis=-1)
-    else:
-        elem = np.ones(N - abs(shift))
-        return np.diag(elem, k=shift)
-
-# --- for general 1D-3D Bloch Hamiltonian --- #
-def hk2hz(h_k, kx, ky, kz, zx=None, zy=None, zz=None):
-    """
-    Converts a Bloch Hamiltonian from momentum-space (kx, ky, kz) to a representation 
-    in terms of complex variables (zx, zy, zz) via logarithmic substitution.
-
-    For each momentum variable, if the corresponding complex variable is provided and 
-    the momentum symbol appears in h_k, the substitution k = -i log(z) is performed.
-    Otherwise, no substitution is done for that symbol.
-
-    Parameters:
-        h_k: A sympy Matrix or expression representing the Bloch Hamiltonian.
-        kx, ky, kz: sympy symbols corresponding to the momentum components.
-        zx, zy, zz (optional): Complex variables for substitution (e.g. zx = exp(i*kx)).
-            If any is None, or the corresponding momentum symbol is not present in h_k,
-            that variable remains unchanged.
-
-    Returns:
-        A simplified sympy expression or Matrix for the Hamiltonian expressed in terms of zx, zy, zz.
-    """
-    # Collect all free symbols from h_k.
-    if isinstance(h_k, sp.Matrix):
-        free_syms = set().union(*[expr.free_symbols for expr in h_k])
-    else:
-        free_syms = h_k.free_symbols
-
-    # Only add the substitution if k is in free_syms and the corresponding z is provided.
-    subs_dict = {}
-    for k, z in [(kx, zx), (ky, zy), (kz, zz)]:
-        if k in free_syms and z is not None:
-            subs_dict[k] = sp.log(z) / sp.I
-
-    # Apply substitution.
-    if isinstance(h_k, sp.Matrix):
-        H_sub = h_k.applyfunc(lambda expr: expr.subs(subs_dict))
-    else:
-        H_sub = h_k.subs(subs_dict)
-
-    return sp.simplify(H_sub.rewrite(sp.exp))
-
-def expand_hz_as_hop_dict(h_z, zx=None, zy=None, zz=None):
-    """
-    Expands a Hamiltonian expressed in terms of complex variables (zx, zy, zz) into its polynomial form.
-
-    The function parses each matrix element of h_z and extracts the coefficients corresponding to
-    different powers of the provided complex variables. It returns a dictionary mapping the power tuple
-    (for the provided z variables, in order) to the corresponding coefficient matrix.
-
-    Parameters:
-        h_z: A sympy Matrix or expression representing the Hamiltonian in terms of zx, zy, zz.
-        zx, zy, zz (optional): sympy symbols corresponding to the complex variables (typically exp(i*kx), etc.).
-            If any is None, that variable is ignored in the expansion.
-
-    Returns:
-        A dictionary where:
-            - Keys are tuples of integers representing the exponents of the provided z variables.
-            - Values are sympy Matrices with the corresponding coefficients.
-    """
-    if not isinstance(h_z, sp.Matrix):
-        h_z = sp.Matrix(h_z)
-
-    d_rows, d_cols = h_z.shape
-    poly_dict = {}
-
-    # Build list of provided z variables in order.
-    z_vars = [z for z in (zx, zy, zz) if z is not None]
-
-    for i in range(d_rows):
-        for j in range(d_cols):
-            expr = sp.expand(h_z[i, j])
-            for term in expr.as_ordered_terms():
-                coeff, factors = term.as_coeff_mul()
-                prod = sp.Mul(*factors)
-                pdict = prod.as_powers_dict()
-                exponents = []
-                divisor = 1
-                for z in z_vars:
-                    exp = pdict.get(z, 0)
-                    exponents.append(int(exp))
-                    divisor *= z**exp
-                remainder = sp.simplify(prod / divisor)
-                term_coeff = coeff * remainder
-                key = tuple(exponents)
-                if key not in poly_dict:
-                    poly_dict[key] = sp.zeros(d_rows, d_cols)
-                poly_dict[key][i, j] += term_coeff
-    return poly_dict
 
 def hop_dict_by_direction(hamil_sympy, direction, k2, k3):
     """
@@ -171,7 +66,7 @@ def hop_dict_by_direction(hamil_sympy, direction, k2, k3):
 
     return h_dict, k2, k3
 
-def H_obc_arr_from_hop_dict(hoppings, N1, k2, k2_vals, k3, k3_vals):
+def H_batch_from_hop_dict(hoppings, N1, k2, k2_vals, k3, k3_vals):
     """
     Constructs an array of Hamiltonian matrices for a 1D chain using both open and periodic boundary conditions.
 
@@ -210,23 +105,19 @@ def H_obc_arr_from_hop_dict(hoppings, N1, k2, k2_vals, k3, k3_vals):
             hop_arr = np.zeros((y_len, z_len, *val.shape), dtype=np.complex128)
             for idx in np.ndindex(val.shape):
                 f = sp.lambdify((k2, k3), val[idx], modules='numpy')
-                hop_arr[..., idx] = f(k2_arr, k3_arr)
+                hop_arr[..., *idx] = f(k2_arr, k3_arr)
 
         # NOTE: this is still the slowest part of this function.
-        Hobc_temp = kron_batched(Tobc_arr, hop_arr)
-        Hpbc_temp = kron_batched(Tpbc_arr, hop_arr)
-
-        if Hobc_arr is None or Hpbc_arr is None:
-            Hobc_arr = Hobc_temp
-            Hpbc_arr = Hpbc_temp
-        else:
-            Hobc_arr += Hobc_temp
-            Hpbc_arr += Hpbc_temp
+        Hobc_temp = kron_batch(Tobc_arr, hop_arr)
+        Hpbc_temp = kron_batch(Tpbc_arr, hop_arr)
+        
+        Hobc_arr = Hobc_temp if Hobc_arr is None else Hobc_arr + Hobc_temp
+        Hpbc_arr = Hpbc_temp if Hpbc_arr is None else Hpbc_arr + Hpbc_temp
 
     return Hobc_arr, Hpbc_arr
 
 # --- construct array of Hamiltonian setting OBC in one direction --- #
-def H_arr_obc(h_k_func, direction, N1, k2_vals, k3_vals):
+def H_batch(h_k_func, direction, N1, k2_vals, k3_vals):
     """
     Constructs Hamiltonian matrices on a arr for a 1D chain using both open and periodic boundary conditions.
     This function is a wrapper around the `H_obc_arr_from_hop_dict` function, allowing for
@@ -248,7 +139,7 @@ def H_arr_obc(h_k_func, direction, N1, k2_vals, k3_vals):
     """
     k1, k2, k3 = sp.symbols('k1 k2 k3', real=True)
     hoppings, k2, k3 = hop_dict_by_direction(h_k_func, direction, k2, k3)
-    Hobc_arr, Hpbc_arr = H_obc_arr_from_hop_dict(hoppings, N1, k2, k2_vals, k3, k3_vals)
+    Hobc_arr, Hpbc_arr = H_batch_from_hop_dict(hoppings, N1, k2, k2_vals, k3, k3_vals)
     return Hobc_arr, Hpbc_arr
 
 
@@ -317,18 +208,20 @@ if __name__ == "__main__":
     ky_vals = np.linspace(-np.pi, np.pi, 100)
     kz_vals = np.linspace(0, np.pi, 100)
 
-    h_obc_x, h_pbc_x = H_arr_obc(hHopf_Herm, 'x', N, ky_vals, kz_vals)
-    h_obc_y, h_pbc_y = H_arr_obc(hHopf_Herm, 'y', N, kz_vals, kx_vals)
-    h_obc_z, h_pbc_z = H_arr_obc(hHopf_Herm, 'z', N, kx_vals, ky_vals)
+    h_obc_x, h_pbc_x = H_batch(hHopf_Herm, 'x', N, ky_vals, kz_vals)
+    h_obc_y, h_pbc_y = H_batch(hHopf_Herm, 'y', N, kz_vals, kx_vals)
+    h_obc_z, h_pbc_z = H_batch(hHopf_Herm, 'z', N, kx_vals, ky_vals)
 
-    eigvals_obc_x, eigvecs_obc_x = eig_batched(h_obc_x)
-    eigvals_obc_y, eigvecs_obc_y = eig_batched(h_obc_y)
-    eigvals_obc_z, eigvecs_obc_z = eig_batched(h_obc_z)
+    eigvals_obc_x, eigvecs_obc_x = eig_batch(h_obc_x)
+    eigvals_obc_y, eigvecs_obc_y = eig_batch(h_obc_y)
+    eigvals_obc_z, eigvecs_obc_z = eig_batch(h_obc_z)
 
-    from .vis import plot_surface_modes
+    from knotted_graph.vis import plot_surface_modes
 
-    fig = plot_surface_modes((eigvals_obc_x, eigvals_obc_y, eigvals_obc_z),
-                   (kx_vals, ky_vals, kz_vals),
-                   (0.04, 0.07, 0.07),
-                   nH_coeff=nH_coeff)
+    fig = plot_surface_modes(
+            (eigvals_obc_x, eigvals_obc_y, eigvals_obc_z),
+            (kx_vals, ky_vals, kz_vals),
+            (0.04, 0.07, 0.07),
+            nH_coeff=nH_coeff,
+        )
     fig.show()

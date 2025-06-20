@@ -33,13 +33,10 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
-    "numpy",
-    "numba",
-    "sympy",
-    "scipy",
-    "networkx",
-    "scikit-image",
+    "poly2graph",
+    "igraph",
     "minorminer",
+    "shapely",
 ]
 
 [project.optional-dependencies]

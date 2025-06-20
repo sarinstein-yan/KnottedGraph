@@ -1,9 +1,8 @@
+import math
 import numpy as np
 import networkx as nx
-import math
-import numpy as np 
-import matplotlib.patches as patches
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from typing import Union

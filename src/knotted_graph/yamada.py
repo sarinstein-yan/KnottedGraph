@@ -4,7 +4,8 @@ import itertools
 import re
 from collections import defaultdict
 from functools import lru_cache
-import igraph as ig 
+import igraph as ig
+
 def igraph_multigraph_key(G):
     node_list = list(G.nodes())
     idx       = {n:i for i,n in enumerate(node_list)}
@@ -144,4 +145,46 @@ def optimized_yamada(pd_code: str):
     return sp.expand(Y * A**(-m))
 
 
- 
+def is_trivalent(G):
+    """
+    Check if a graph is trivalent -- if all vertices have degree <= 3.
+    
+    Parameters:
+      G : networkx.MultiGraph / networkx.Graph
+         The undirected graph to check.
+    
+    Returns:
+      True if the graph is trivalent, False otherwise.
+    """
+    degs = nx.degree(G)
+    return all(degree <= 3 for node, degree in degs)
+
+def BouquetGraph(n):
+    """
+    Construct the Bouquet_n graph.
+    
+    Parameters:
+      n : int
+         The number of petals in the Bouquet_n graph.
+    
+    Returns:
+      A NetworkX MultiGraph representing the Bouquet_n graph.
+    """
+    edge_list = [(0, 0) for _ in range(n)]
+    G = nx.from_edgelist(edge_list, nx.MultiGraph)
+    return G
+
+def ThetaGraph(n):
+    """
+    Construct the Theta_n graph.
+    
+    Parameters:
+      n : int
+         The number of edges in the Theta_n graph.
+    
+    Returns:
+      A NetworkX MultiGraph representing the Theta_n graph.
+    """
+    edge_list = [(0, 1) for _ in range(n)]
+    G = nx.from_edgelist(edge_list, nx.MultiGraph)
+    return G

@@ -4,12 +4,13 @@ Currently, they are not very effective, and manually entering the angles to obta
 However, I am including them here to give you an idea of my previous efforts. If we are unable to make progress on this in later stages, we can simply remove the code.
 '''
 
-import plotly.graph_objects as go  # Interactive plotting library
 import numpy as np               # Numerical operations
-from shapely.geometry import Point, LineString, GeometryCollection, MultiPoint
-from shapely.ops import split                   # Geometry splitting utility
 from concurrent.futures import ThreadPoolExecutor  # For parallel processing
+import plotly.graph_objects as go  # Interactive plotting library
+from shapely.ops import split                   # Geometry splitting utility
+from shapely.geometry import Point, LineString, GeometryCollection, MultiPoint
 from shapely.strtree import STRtree
+
 
 def compute_rotation_matrix(azimuth_deg: float, elevation_deg: float) -> np.ndarray:
     """
@@ -475,4 +476,3 @@ def find_best_view(
     # ──────────────────────────────────────────────────────────────
     best_view, _ = optimize_view_sa(simplified_graph, count_with_penalty_2d)
     return best_view
- 

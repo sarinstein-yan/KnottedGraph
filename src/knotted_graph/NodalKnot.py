@@ -1,14 +1,17 @@
 import numpy as np
 import networkx as nx
-from .skeleton2graph import skeleton2graph
 import skimage.morphology as morph
 import minorminer
+from poly2graph import skeleton2graph
 
-from .vis import (
+from knotted_graph.vis import (
     plot_3D_and_2D_projections,
     plot_3D_graph,
 )
-from .util import remove_leaf_nodes,collapse_deg2_exact_with_pts
+from knotted_graph.util import (
+    remove_leaf_nodes,
+    collapse_deg2_exact_with_pts,
+)
 
 class NodalKnot:
     
