@@ -52,7 +52,7 @@ def collapse_deg2_exact_with_pts(G):
             # standard collapse for components with junctions
             for j in junctions:
                 H.add_node(j)
-                H.nodes[j]['o'] = G.nodes[j].get('o')
+                H.nodes[j]['pos'] = G.nodes[j].get('pos')
 
             seen_edges = set()
             for j in junctions:
@@ -64,12 +64,12 @@ def collapse_deg2_exact_with_pts(G):
                         seen_edges.add(tag)
 
                         # collect chain from j to next junction
-                        path_pts = [G.nodes[j].get('o')]
+                        path_pts = [G.nodes[j].get('pos')]
                         append_edge_pts(path_pts, ea.get('pts', []))
 
                         prev, cur = j, nbr
                         while cur not in junctions and G.degree(cur) == 2:
-                            path_pts.append(G.nodes[cur].get('o'))
+                            path_pts.append(G.nodes[cur].get('pos'))
                             # step to the other neighbor
                             #nxt = [n for n in G.neighbors(cur) if n != prev][0]
                             # look for the one neighbor that isn’t `prev`
@@ -88,10 +88,10 @@ def collapse_deg2_exact_with_pts(G):
                             prev, cur = cur, nxt
 
                         # append final node
-                        path_pts.append(G.nodes[cur].get('o'))
+                        path_pts.append(G.nodes[cur].get('pos'))
                         if cur not in H.nodes:
                             H.add_node(cur)
-                            H.nodes[cur]['o'] = G.nodes[cur].get('o')
+                            H.nodes[cur]['pos'] = G.nodes[cur].get('pos')
 
                         H.add_edge(j, cur, pts=np.array(path_pts))
         else:
@@ -99,10 +99,10 @@ def collapse_deg2_exact_with_pts(G):
             # choose representative (prefer deg-2)
             rep = next((n for n, d in degmap.items() if d == 2), None) or next(iter(comp))
             H.add_node(rep)
-            H.nodes[rep]['o'] = G.nodes[rep].get('o')
+            H.nodes[rep]['pos'] = G.nodes[rep].get('pos')
 
             # start path at rep
-            path_pts = [G.nodes[rep].get('o')]
+            path_pts = [G.nodes[rep].get('pos')]
             seen_edges = set()
             nbrs = list(G.neighbors(rep))
             if nbrs:
@@ -116,7 +116,7 @@ def collapse_deg2_exact_with_pts(G):
                         break
                 # walk until back to rep
                 while cur != rep:
-                    path_pts.append(G.nodes[cur].get('o'))
+                    path_pts.append(G.nodes[cur].get('pos'))
                     nxts = [n for n in G.neighbors(cur) if n != prev]
                     if not nxts:
                         break
@@ -129,7 +129,7 @@ def collapse_deg2_exact_with_pts(G):
                             break
                     prev, cur = cur, nxt
                 # close loop
-                path_pts.append(G.nodes[rep].get('o'))
+                path_pts.append(G.nodes[rep].get('pos'))
 
             H.add_edge(rep, rep, pts=np.array(path_pts))
     H = nx.convert_node_labels_to_integers(H, first_label=1, ordering='sorted')
@@ -174,7 +174,7 @@ def get_edge_pts(G):
     
 def get_node_pts(G):
     pts_list = []
-    for n, o in G.nodes(data='o'):
+    for n, o in G.nodes(data='pos'):
         pts_list.append(o)
     if pts_list:
         return np.vstack(pts_list)

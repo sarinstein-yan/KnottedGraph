@@ -159,11 +159,11 @@ def plot_3D_graph(G: Union[nx.Graph, nx.MultiGraph]) -> go.Figure:
             )
         )
 
-    # — node traces: now include every node with an 'o' attribute —
+    # — node traces: now include every node with an 'pos' attribute —
     node_x, node_y, node_z = [], [], []
     for n, data in G.nodes(data=True):
-        if 'o' in data:
-            o = data['o']
+        if 'pos' in data:
+            o = data['pos']
             if len(o) == 3:
                 node_x.append(o[0])
                 node_y.append(o[1])
