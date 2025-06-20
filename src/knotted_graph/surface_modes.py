@@ -1,5 +1,4 @@
 import numpy as np
-import tensorflow as tf
 import sympy as sp
 from poly2graph import (
     kron_batch, 
