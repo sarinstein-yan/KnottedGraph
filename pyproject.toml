@@ -35,15 +35,16 @@ classifiers = [
 dependencies = [
     "poly2graph",
     "igraph",
-    "minorminer",
     "shapely",
+    "minorminer",
+    "tabulate",
+    "jupyterlab",
+    "pyvista[all]",
 ]
 
 [project.optional-dependencies]
 dev = [
     "plotly",
-    "pyvista",
-    "jupyterlab",
 ]
 
 [project.urls]

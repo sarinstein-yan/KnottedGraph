@@ -3,6 +3,7 @@ import networkx as nx
 import skimage.morphology as morph
 import minorminer
 from poly2graph import skeleton2graph
+from tabulate import tabulate
 
 from knotted_graph.vis import (
     plot_3D_and_2D_projections,
@@ -10,7 +11,7 @@ from knotted_graph.vis import (
 )
 from knotted_graph.util import (
     remove_leaf_nodes,
-    collapse_deg2_exact_with_pts,
+    remove_deg2_preserving_pts,
 )
 
 class NodalKnot:
@@ -40,14 +41,11 @@ class NodalKnot:
         self.k_to_zw_func = k_to_zw_func
         self.zw_to_c_func = zw_to_c_func
 
-         
-
         # Set grid parameters with defaults if not provided
         self.kx_min = kx_min; self.kx_max = kx_max
         self.ky_min = ky_min; self.ky_max = ky_max
         self.kz_min = kz_min; self.kz_max = kz_max
         self.pts_per_dim = pts_per_dim
-
         
         # Initialize the attributes
         self.val = None
@@ -312,9 +310,12 @@ class NodalKnot:
         # Convert the 3d skeleton image to a graph using poly2graph
         G = skeleton2graph(skeleton_3d)
         
-        # Remove leaf nodes if desired
-        if clean: G = remove_leaf_nodes(G)
-        G=collapse_deg2_exact_with_pts(G)
+        if clean: 
+            # Remove leaf nodes
+            G = remove_leaf_nodes(G)
+            # Remove degree-2 nodes that does not affect the topology
+            G = remove_deg2_preserving_pts(G)
+        
         self.graph = G
         return G
     
@@ -371,29 +372,42 @@ class NodalKnot:
 
     @staticmethod
     def print_graph_properties(G):
-        print("Number of nodes:", G.number_of_nodes())
-        print("Number of edges:", G.number_of_edges())
-        
-        # Print degree distribution
-        degree_hist = nx.degree_histogram(G)
-        print("Degree distribution (degree: frequency):")
-        for degree, count in enumerate(degree_hist):
-            if count > 0:
-                print(f"  {degree}: {count}")
 
-        # Check connectivity and compute additional metrics if connected
+        data = []
+        # Basic properties
+        num_nodes = G.number_of_nodes()
+        num_edges = G.number_of_edges()
+        data.append(["Number of nodes", num_nodes])
+        data.append(["Number of edges", num_edges])
+
+        # Degree distribution
+        degree_hist = nx.degree_histogram(G)
+        degree_dist = [(deg, count) for deg, count in enumerate(degree_hist) if count > 0]
+
+        # Connectivity and component info
         if nx.is_connected(G):
-            print("Graph is connected.")
-            print("Diameter:", nx.diameter(G))
-            print("Average shortest path length:", nx.average_shortest_path_length(G))
+            connected = "Yes"
+            diameter = nx.diameter(G)
+            avg_path = nx.average_shortest_path_length(G)
+            data.append(["Connected", connected])
+            data.append(["Diameter", diameter])
+            data.append(["Avg shortest path", avg_path])
         else:
+            connected = "No"
             num_components = nx.number_connected_components(G)
-            print("Graph is not connected.")
-            print("Number of connected components:", num_components)
-            # Optionally, print the size of each component
+            data.append(["Connected", connected])
+            data.append(["# Connected components", num_components])
+            # Component sizes
             components = sorted(nx.connected_components(G), key=len, reverse=True)
             for i, comp in enumerate(components, 1):
-                print(f"  Component {i} has {len(comp)} nodes.")
+                data.append([f"Component {i} size", len(comp)])
+
+        print(tabulate(data, headers=["Property", "Value"], tablefmt="github"))
+
+        # Print degree distribution as a table
+        if degree_dist:
+            print("\nDegree distribution:")
+            print(tabulate(degree_dist, headers=["Degree", "Frequency"], tablefmt="github"))
 
 
     @staticmethod         
@@ -418,4 +432,3 @@ class NodalKnot:
         else:
             print("The given graph does not contain the minor graph.")
             return None
-    

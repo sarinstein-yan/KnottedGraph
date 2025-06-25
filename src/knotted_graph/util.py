@@ -2,8 +2,36 @@ import numpy as np
 import networkx as nx
 from typing import Union
 
-  
-def append_edge_pts(path, edge_pts):
+
+def smooth_edge_pts(G, alpha=0.5):
+    """
+    Smooth the edge points of a graph G by averaging each point with its neighbors.
+    
+    Parameters:
+        G : nx.Graph or nx.MultiGraph
+            The input graph with edge points stored in 'pts' attribute.
+        alpha : float, optional
+            The smoothing factor (0 < alpha < 1). Default is 0.5.
+    
+    Returns:
+        G_smooth : nx.Graph or nx.MultiGraph
+            A new graph with smoothed edge points.
+    """
+    G_smooth = G.copy()
+    for u, v, data in G.edges(data=True):
+        pts = data.get('pts', [])
+        if len(pts) > 2:
+            smoothed_pts = []
+            for i in range(len(pts)):
+                prev_pt = pts[i - 1] if i > 0 else pts[i]
+                next_pt = pts[i + 1] if i < len(pts) - 1 else pts[i]
+                smoothed_pt = (1 - alpha) * pts[i] + alpha * (prev_pt + next_pt) / 2
+                smoothed_pts.append(smoothed_pt)
+            G_smooth[u][v]['pts'] = np.array(smoothed_pts)
+    return G_smooth
+
+
+def _append_edge_pts(path, edge_pts):
     """
     Append the list edge_pts to path, but
       1) reverse edge_pts if it currently runs *into* path[-1],
@@ -28,9 +56,9 @@ def append_edge_pts(path, edge_pts):
             "Edge segment doesn’t connect: "
             f"path[-1]={path[-1]}, next_pts endpoints={pts[0],pts[-1]}"
         )
- 
 
-def collapse_deg2_exact_with_pts(G):
+
+def remove_deg2_preserving_pts(G):
     """
     Collapse degree-2 chains in each connected component of G, retaining node‑ and edge‑pts along paths.
 
@@ -65,7 +93,7 @@ def collapse_deg2_exact_with_pts(G):
 
                         # collect chain from j to next junction
                         path_pts = [G.nodes[j].get('pos')]
-                        append_edge_pts(path_pts, ea.get('pts', []))
+                        _append_edge_pts(path_pts, ea.get('pts', []))
 
                         prev, cur = j, nbr
                         while cur not in junctions and G.degree(cur) == 2:
@@ -83,7 +111,7 @@ def collapse_deg2_exact_with_pts(G):
                                 t2 = _tag(cur, nxt, k2)
                                 if t2 not in seen_edges:
                                     seen_edges.add(t2)
-                                    append_edge_pts(path_pts, ea2.get('pts', []))
+                                    _append_edge_pts(path_pts, ea2.get('pts', []))
                                     break
                             prev, cur = cur, nxt
 
@@ -112,7 +140,7 @@ def collapse_deg2_exact_with_pts(G):
                     tag = _tag(prev, cur, key)
                     if tag not in seen_edges:
                         seen_edges.add(tag)
-                        append_edge_pts(path_pts, ea.get('pts', []))
+                        _append_edge_pts(path_pts, ea.get('pts', []))
                         break
                 # walk until back to rep
                 while cur != rep:
@@ -125,7 +153,7 @@ def collapse_deg2_exact_with_pts(G):
                         t2 = _tag(cur, nxt, k2)
                         if t2 not in seen_edges:
                             seen_edges.add(t2)
-                            append_edge_pts(path_pts, ea2.get('pts', []))
+                            _append_edge_pts(path_pts, ea2.get('pts', []))
                             break
                     prev, cur = cur, nxt
                 # close loop
