@@ -31,6 +31,35 @@ def smooth_edge_pts(G, alpha=0.5):
     return G_smooth
 
 
+def remove_leaf_nodes(G: Union[nx.Graph, nx.MultiGraph]) -> Union[nx.Graph, nx.MultiGraph]:
+    """
+    Remove all leaf nodes (nodes with degree 1) and their incident edges from the graph.
+    
+    This function creates a copy of the input graph and then iteratively removes any node
+    that has degree 1. Removing a node automatically removes its incident edge(s).
+    The process repeats until no leaf nodes remain.
+
+    Parameters
+    ----------
+    G : Union[nx.Graph, nx.MultiGraph]
+        The input graph.
+
+    Returns
+    -------
+    Union[nx.Graph, nx.MultiGraph]
+        A new graph with all leaf nodes (and their incident edges) removed.
+    """
+    H = G.copy()
+    while True:
+        # Identify all leaf nodes (nodes with degree exactly 1)
+        leaf_nodes = [node for node, degree in H.degree() if degree == 1]
+        if not leaf_nodes:
+            break  # Exit when there are no leaf nodes left.
+        for node in leaf_nodes:
+            H.remove_node(node)
+    return H
+
+
 def _append_edge_pts(path, edge_pts):
     """
     Append the list edge_pts to path, but
@@ -58,12 +87,29 @@ def _append_edge_pts(path, edge_pts):
         )
 
 
-def remove_deg2_preserving_pts(G):
+def remove_deg2_preserving_pts(
+    G: Union[nx.Graph, nx.MultiGraph]
+) -> nx.MultiGraph:
     """
-    Collapse degree-2 chains in each connected component of G, retaining node‑ and edge‑pts along paths.
+    Collapse degree-2 chains in each connected component of G, 
+    retaining node and edge points along paths.
+    - For components with any nodes of degree > 2: treat those 
+    nodes as junctions and collapse chains between them.
+    - For components without any nodes of degree > 2: collapse 
+    the entire component into a single self-loop on a chosen 
+    representative node, preserving the full path points.
 
-    - For components with any deg>2 nodes: treat deg>2 nodes as junctions and collapse chains between them using the standard logic.
-    - For components without deg>2 nodes: collapse the entire component into a single self-loop on a chosen representative node, preserving the full path pts.
+    Parameters
+    ----------
+    G : Union[nx.Graph, nx.MultiGraph]
+        The input graph. Each node should have a 'pos' attribute, 
+        and each edge may have a 'pts' attribute.
+
+    Returns
+    -------
+    nx.MultiGraph
+        A new graph with degree-2 chains collapsed. Node and edge 
+        points are preserved along the collapsed paths.
     """
     G = nx.MultiGraph(G)
     H = nx.MultiGraph()
@@ -160,34 +206,8 @@ def remove_deg2_preserving_pts(G):
                 path_pts.append(G.nodes[rep].get('pos'))
 
             H.add_edge(rep, rep, pts=np.array(path_pts))
+    
     H = nx.convert_node_labels_to_integers(H, first_label=1, ordering='sorted')
-    return H
-
-
-def remove_leaf_nodes(G: Union[nx.Graph, nx.MultiGraph]) -> Union[nx.Graph, nx.MultiGraph]:
-    """
-    Remove all leaf nodes (nodes with degree 1) and their incident edges from the graph.
-    
-    This function creates a copy of the input graph and then iteratively removes any node
-    that has degree 1. Removing a node automatically removes its incident edge(s).
-    The process repeats until no leaf nodes remain.
-    
-    Parameters:
-        G : nx.Graph or nx.MultiGraph
-            The input graph.
-            
-    Returns:
-        H : nx.Graph or nx.MultiGraph
-            A new graph with all leaf nodes (and their incident edges) removed.
-    """
-    H = G.copy()
-    while True:
-        # Identify all leaf nodes (nodes with degree exactly 1)
-        leaf_nodes = [node for node, degree in H.degree() if degree == 1]
-        if not leaf_nodes:
-            break  # Exit when there are no leaf nodes left.
-        for node in leaf_nodes:
-            H.remove_node(node)
     return H
 
 

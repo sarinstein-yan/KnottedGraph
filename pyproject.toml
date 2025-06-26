@@ -52,7 +52,7 @@ Homepage = "https://github.com/sarinstein-yan/Nodal-Knot"
 Repository = "https://github.com/sarinstein-yan/Nodal-Knot"
 
 [tool.hatch.version]
-path = "src/nodal_knot/__init__.py"
+path = "src/knotted_graph/__init__.py"
 
 [tool.hatch.build.targets.sdist]
 exclude = [

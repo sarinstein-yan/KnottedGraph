@@ -3,6 +3,7 @@ import networkx as nx
 import skimage.morphology as morph
 import minorminer
 from poly2graph import skeleton2graph
+import logging
 from tabulate import tabulate
 
 from knotted_graph.vis import (
@@ -171,11 +172,11 @@ class NodalKnot:
             
         """
         if isinstance(thickness, (int, float)):
-            print("Calculating according to following condition:\n" \
-            "norm(f)-c where C=constant")
+            logging.info("Calculating according to following condition:\n"
+                 "norm(f)-c where C=constant")
         elif isinstance(thickness, list):
-            print("Calculating according to following condition:\n" \
-            "norm(f)^2+C+R*real(f)+I*Im(f) where C=constant, R=real_coef, I=imag_coef")
+            logging.info("Calculating according to following condition:\n"
+                 "norm(f)^2+C+R*real(f)+I*Im(f) where C=constant, R=real_coef, I=imag_coef")
             
         # check if self.val is available
         if self.val is None or kwargs:
