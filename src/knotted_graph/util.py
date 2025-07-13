@@ -1,52 +1,77 @@
 import numpy as np
 import networkx as nx
-from typing import Union
+from rdp import rdp, pldist
+from typing import Union, Any
+from numpy.typing import NDArray
 
 
-def smooth_edge_pts(G, alpha=0.5):
-    """
-    Smooth the edge points of a graph G by averaging each point with its neighbors.
-    
-    Parameters:
-        G : nx.Graph or nx.MultiGraph
-            The input graph with edge points stored in 'pts' attribute.
-        alpha : float, optional
-            The smoothing factor (0 < alpha < 1). Default is 0.5.
-    
-    Returns:
-        G_smooth : nx.Graph or nx.MultiGraph
-            A new graph with smoothed edge points.
-    """
-    G_smooth = G.copy()
-    for u, v, data in G.edges(data=True):
-        pts = data.get('pts', [])
-        if len(pts) > 2:
-            smoothed_pts = []
-            for i in range(len(pts)):
-                prev_pt = pts[i - 1] if i > 0 else pts[i]
-                next_pt = pts[i + 1] if i < len(pts) - 1 else pts[i]
-                smoothed_pt = (1 - alpha) * pts[i] + alpha * (prev_pt + next_pt) / 2
-                smoothed_pts.append(smoothed_pt)
-            G_smooth[u][v]['pts'] = np.array(smoothed_pts)
-    return G_smooth
+def count_total_pts(
+    G: nx.MultiGraph,
+) -> int:
+    """Count the total number of points in the graph's edges."""
+    return sum(len(G[u][v][key]['pts']) 
+               for u, v, key in G.edges(keys=True))
 
 
-def remove_leaf_nodes(G: Union[nx.Graph, nx.MultiGraph]) -> Union[nx.Graph, nx.MultiGraph]:
-    """
-    Remove all leaf nodes (nodes with degree 1) and their incident edges from the graph.
-    
-    This function creates a copy of the input graph and then iteratively removes any node
-    that has degree 1. Removing a node automatically removes its incident edge(s).
-    The process repeats until no leaf nodes remain.
+def smooth_edges(
+    G: nx.MultiGraph,
+    epsilon: float = 0.,
+    dist: Any = pldist,
+    algo: str = "iter",
+    return_mask: bool = False,
+    copy: bool = True,
+) -> (Any | NDArray):
+    """Smooth the edge points of a directed graph.
 
     Parameters
     ----------
-    G : Union[nx.Graph, nx.MultiGraph]
+    G : nx.MultiGraph
+        The input directed graph.
+    epsilon : float, optional
+        The RDP simplification tolerance, by default 0.
+    dist : Any, optional
+        The distance function to use, by default pldist.
+    algo : str, optional
+        The algorithm to use for RDP, by default "iter".
+    return_mask : bool, optional
+        Whether to return a mask of the simplified points, by default False.
+    copy : bool, optional
+        Whether to return a copy of the graph, by default True.
+        
+    Returns
+    -------
+    nx.MultiGraph
+        The graph with smoothed edge points.
+    """
+    G = G.copy() if copy else G
+    for u, v, key, pts in G.edges(keys=True, data='pts'):
+        if pts is None or len(pts) < 3:
+            continue
+        G[u][v][key]['pts'] = rdp(
+            pts, epsilon=epsilon, dist=dist, algo=algo, return_mask=return_mask
+        )
+    return G
+
+
+def remove_leaf_nodes(
+    G: nx.MultiGraph
+) -> nx.MultiGraph:
+    """
+    Remove all leaf nodes (nodes with degree 1) and their incident edges from 
+    the graph.
+    
+    This function creates a copy of the input graph and then iteratively removes 
+    any node that has degree 1. Removing a node automatically removes its incident 
+    edge(s). The process repeats until no leaf nodes remain.
+
+    Parameters
+    ----------
+    G : nx.MultiGraph
         The input graph.
 
     Returns
     -------
-    Union[nx.Graph, nx.MultiGraph]
+    nx.MultiGraph
         A new graph with all leaf nodes (and their incident edges) removed.
     """
     H = G.copy()
@@ -88,7 +113,7 @@ def _append_edge_pts(path, edge_pts):
 
 
 def remove_deg2_preserving_pts(
-    G: Union[nx.Graph, nx.MultiGraph]
+    G: nx.MultiGraph
 ) -> nx.MultiGraph:
     """
     Collapse degree-2 chains in each connected component of G, 
@@ -101,7 +126,7 @@ def remove_deg2_preserving_pts(
 
     Parameters
     ----------
-    G : Union[nx.Graph, nx.MultiGraph]
+    G : nx.MultiGraph
         The input graph. Each node should have a 'pos' attribute, 
         and each edge may have a 'pts' attribute.
 

@@ -14,7 +14,7 @@ __all__ = [
     "hz2hk",
     "expand_hz_as_hop_dict",
 
-    "PlanarDiagram_Codes",
+    "planar_diagram_code",
     "find_best_view",
 
     "optimized_yamada",
@@ -53,7 +53,7 @@ from poly2graph import (
 from knotted_graph.NodalKnot import NodalKnot
 
 from knotted_graph.pd_codes import (
-    PlanarDiagram_Codes,
+    planar_diagram_code,
     find_best_view,
 )
 
