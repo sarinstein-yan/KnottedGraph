@@ -67,7 +67,7 @@ from knotted_graph.yamada import (
     BouquetGraph,
     ThetaGraph,
 )
-    
+
 from knotted_graph.surface_modes import (
     hop_dict_by_direction,
     H_batch_from_hop_dict,
@@ -76,6 +76,9 @@ from knotted_graph.surface_modes import (
 
 from knotted_graph.util import (
     remove_leaf_nodes,
+    remove_deg2_preserving_pts,
+    is_PT_symmetric,
+    count_total_pts,
     get_all_pts, 
     get_edge_pts, 
     get_node_pts,

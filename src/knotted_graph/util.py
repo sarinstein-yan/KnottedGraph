@@ -1,8 +1,19 @@
 import numpy as np
+import sympy as sp
 import networkx as nx
 from rdp import rdp, pldist
 from typing import Union, Any
 from numpy.typing import NDArray
+
+# PT-operator
+def PT(h: sp.Matrix) -> sp.Matrix:
+    """Parity-time operator."""
+    sx = sp.Matrix([[0, 1], [1, 0]])
+    return sx * h.conjugate() * sx
+
+def is_PT_symmetric(h: sp.Matrix) -> bool:
+    """Check if a Hamiltonian is PT-symmetric."""
+    return sp.simplify(h - PT(h)) == 0
 
 
 def count_total_pts(
