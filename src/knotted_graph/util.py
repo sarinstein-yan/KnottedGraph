@@ -2,18 +2,54 @@ import numpy as np
 import sympy as sp
 import networkx as nx
 from rdp import rdp, pldist
-from typing import Union, Any
+from typing import Any, Tuple, Optional, Sequence
 from numpy.typing import NDArray
 
 # PT-operator
-def PT(h: sp.Matrix) -> sp.Matrix:
-    """Parity-time operator."""
-    sx = sp.Matrix([[0, 1], [1, 0]])
-    return sx * h.conjugate() * sx
+def PT(
+    h: sp.Matrix, 
+    k_symbols: Optional[Tuple[sp.Symbol, sp.Symbol, sp.Symbol]] = None,
+) -> sp.Matrix:
+    """Apply the PT-symmetry operation to a 2x2 matrix.
 
-def is_PT_symmetric(h: sp.Matrix) -> bool:
-    """Check if a Hamiltonian is PT-symmetric."""
-    return sp.simplify(h - PT(h)) == 0
+    Parameters
+    ----------
+    h : sp.Matrix
+        The 2x2 matrix to be transformed.
+    k_symbols : Optional[Tuple[sp.Symbol, sp.Symbol, sp.Symbol]], optional
+        The momentum space coordinates, by default None, which assumes
+        only momentum symbols are present in the matrix.
+
+    Returns
+    -------
+    sp.Matrix
+        The transformed 2x2 matrix.
+    """    
+    if k_symbols is None:
+        k_symbols = sorted(h.free_symbols, key=lambda s: s.name)
+    sx = sp.Matrix([[0, 1], [1, 0]])
+    return sx * sp.conjugate(h).xreplace({k: -k for k in k_symbols}) * sx
+
+def is_PT_symmetric(
+        h: sp.Matrix, 
+        k_symbols: Optional[Tuple[sp.Symbol, sp.Symbol, sp.Symbol]] = None
+    ) -> bool:
+    """Check if a 2x2 Operator is PT-symmetric.
+
+    Parameters
+    ----------
+    h : sp.Matrix
+        The 2x2 matrix to be checked.
+    k_symbols : (sp.Symbol, sp.Symbol, sp.Symbol), optional
+        The momentum space coordinates, by default None, which assumes
+        only momentum symbols are present in the matrix.
+
+    Returns
+    -------
+    bool
+        True if the operator is PT-symmetric, False otherwise.
+    """
+    return sp.simplify(h - PT(h, k_symbols=k_symbols)) == sp.zeros(2, 2)
 
 
 def total_edge_pts(

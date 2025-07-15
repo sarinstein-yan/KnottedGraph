@@ -51,7 +51,7 @@ class NodalSkeleton:
                 for s in self.pauli_vec
             )
         elif isinstance(char, Sequence) and len(char) == 3:
-            self.bloch_vec = tuple(char)
+            self.bloch_vec = (c + sp.Integer(0) for c in char)
             self.h_k = sum((h*s for h,s in zip(char, self.pauli_vec)), 
                            start=sp.zeros(2, 2))
         else:
@@ -67,6 +67,12 @@ class NodalSkeleton:
         else:
             raise ValueError("`k_symbols` must be a tuple of three sympy"\
                              " symbols (kx, ky, kz).")
+        
+        # check Hamiltonian properties
+        self.is_Hermitian = sp.simplify(self.h_k - self.h_k.H) == sp.zeros(2, 2)
+        # if self.is_Hermitian:
+        #     raise ValueError("The Hamiltonian must be non-Hermitian.")
+        self.is_PT_symmetric = is_PT_symmetric(self.h_k)
         
         # lambda functions of the bloch vector components
         self.bloch_vec_funcs = tuple(
@@ -95,7 +101,6 @@ class NodalSkeleton:
         # default cache for skeleton graph
         self.skeleton_graph_cache = None
         self.skeleton_graph_cache_args = None
-
 
     @cached_property
     def spectrum(self) -> NDArray:
@@ -195,10 +200,7 @@ class NodalSkeleton:
         G = self.skeleton_graph_cache or self.skeleton_graph()
 
     
-    @cached_property
-    def is_PT_symmetric(self) -> bool:
-        """Check if the Hamiltonian is PT-symmetric."""
-        return is_PT_symmetric(self.h_k)
+
 
     def graph_summary(
             self, 
@@ -294,6 +296,8 @@ if __name__ == "__main__":
 
     # Check properties
     print(f"self.h_k: {ske.h_k}")
+    print(f"Is Hermitian: {ske.is_Hermitian}")
+    print(f"Is PT-symmetric: {ske.is_PT_symmetric}")
     print(f"self.span: {ske.span}")
     print(f"self.dimension: {ske.dimension}")
     print(f"self.kx_span: {ske.kx_span}")
@@ -312,7 +316,6 @@ if __name__ == "__main__":
     print(f"Total edge points: {ske.total_edge_pts}")
     print(f"Skeleton graph: {ske.skeleton_graph_cache.number_of_nodes()} nodes, "
         f"{ske.skeleton_graph_cache.number_of_edges()} edges")
-    print(f"Is PT-symmetric: {ske.is_PT_symmetric}")
     ske.graph_summary()
     print(f"Check minor: {ske.check_minor(
         ske.skeleton_graph_cache, 
