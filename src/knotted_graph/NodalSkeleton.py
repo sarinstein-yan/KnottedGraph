@@ -200,8 +200,12 @@ class NodalSkeleton:
         """Check if the Hamiltonian is PT-symmetric."""
         return is_PT_symmetric(self.h_k)
 
-    @staticmethod
-    def graph_summary(G):
+    def graph_summary(
+            self, 
+            G: Optional[nx.Graph | nx.MultiGraph] = None
+        ) -> None:
+        
+        G = G if G is not None else self.skeleton_graph_cache
         # Basic properties
         data = []
         data.append(["Number of nodes", G.number_of_nodes()])
@@ -285,7 +289,7 @@ if __name__ == "__main__":
     cz = sp.simplify(sp.im(f))
 
     # Create a NodalSkeleton instance
-    char = (cx, sp.I, cz)
+    char = (cx, sp.Rational(1,10)*sp.I, cz)
     ske = NodalSkeleton(char)
 
     # Check properties
@@ -309,3 +313,8 @@ if __name__ == "__main__":
     print(f"Skeleton graph: {ske.skeleton_graph_cache.number_of_nodes()} nodes, "
         f"{ske.skeleton_graph_cache.number_of_edges()} edges")
     print(f"Is PT-symmetric: {ske.is_PT_symmetric}")
+    ske.graph_summary()
+    print(f"Check minor: {ske.check_minor(
+        ske.skeleton_graph_cache, 
+        ske.skeleton_graph_cache.subgraph([0])
+    )}")

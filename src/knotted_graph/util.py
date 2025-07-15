@@ -243,7 +243,7 @@ def remove_deg2_preserving_pts(
 
             H.add_edge(rep, rep, pts=np.array(path_pts))
     
-    H = nx.convert_node_labels_to_integers(H, first_label=1, ordering='sorted')
+    H = nx.convert_node_labels_to_integers(H, ordering='sorted')
     return H
 
 
