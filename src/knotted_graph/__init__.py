@@ -78,7 +78,7 @@ from knotted_graph.util import (
     remove_leaf_nodes,
     remove_deg2_preserving_pts,
     is_PT_symmetric,
-    count_total_pts,
+    total_edge_pts,
     get_all_pts, 
     get_edge_pts, 
     get_node_pts,

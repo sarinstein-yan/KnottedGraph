@@ -17,20 +17,22 @@ from knotted_graph.util import (
 )
 
 # TODO:
-# - [] initialize with sympy
+# - [x] initialize with sympy
 # - [] solve 3D real space H, find the zero eigenvalue boundaries
 # - [x] skeleton graph by skan
 # - [x] graph simplification by `OSPnx.simplification`
-# - [] initialize unparametrized
+# - [z] initialize unparametrized
 # - Graph as: 
-#       - [] nodes as points
+#       - [x] nodes as points
 #       - edges as 
 #           - [] shapely.LineString, 
 #           - [x] `rdp`-simplified
-#           - [] when plotting, wrap in pv.Spline
+#           - [x] when plotting, wrap in pv.Spline
 # - [] Berry Curvature function and field plotted by pv's glyphs
 # - [] May collect data so that the rotation of the knot is easier. pv also has rotate function
-# - [] pd code: if there are long (> 5 pixels) segments overlapping, find a different angle
+# - [] pd code: 
+#           if there are long (> 5 pixels) segments overlapping, find a different angle
+#           i.e. all linestrings' intersections containing not just points
 class NodalKnot:
     
     def __init__(self, 
@@ -75,6 +77,45 @@ class NodalKnot:
         self.skeleton_points = None
         self.graph = None
 
+    @property
+    def span(self):
+        """
+        Calculate the span of the grid in each dimension.
+
+        Returns:
+        -------
+        span : tuple
+            The span of the grid as (kx_span, ky_span, kz_span).
+        """
+        return (self.kx_max - self.kx_min,
+                self.ky_max - self.ky_min,
+                self.kz_max - self.kz_min)
+
+    @property
+    def spacing(self):
+        """
+        Calculate the spacing between points in the grid.
+
+        Returns:
+        -------
+        spacing : float
+            The spacing between points in the grid.
+        """
+        return ((self.kx_max - self.kx_min) / self.pts_per_dim,
+                (self.ky_max - self.ky_min) / self.pts_per_dim,
+                (self.kz_max - self.kz_min) / self.pts_per_dim)
+    
+    @property
+    def origin(self):
+        """
+        Calculate the origin of the grid.
+
+        Returns:
+        -------
+        origin : tuple
+            The origin of the grid as (kx_min, ky_min, kz_min).
+        """
+        return (self.kx_min, self.ky_min, self.kz_min)
 
     def generate_region(self,
             kx_min=None, kx_max=None,

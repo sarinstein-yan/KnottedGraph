@@ -1,0 +1,311 @@
+import numpy as np
+import sympy as sp
+import networkx as nx
+import skimage.morphology as morph
+from poly2graph import skeleton2graph
+import minorminer
+import logging
+from functools import cached_property, lru_cache
+from tabulate import tabulate
+
+import pyvista as pv
+import matplotlib.pyplot as plt
+
+from knotted_graph.util import (
+    remove_leaf_nodes,
+    remove_deg2_preserving_pts,
+    smooth_edges,
+    is_PT_symmetric,
+    total_edge_pts,
+)
+
+from typing import List, Tuple, Union, Optional, Any, Dict, Callable, Sequence
+from numpy.typing import NDArray, ArrayLike
+
+
+class NodalSkeleton:
+
+    pauli_x = sp.ImmutableDenseMatrix([[0, 1], [1, 0]])
+    pauli_y = sp.ImmutableDenseMatrix([[0, -sp.I], [sp.I, 0]])
+    pauli_z = sp.ImmutableDenseMatrix([[1, 0], [0, -1]])
+    pauli_vec = (pauli_x, pauli_y, pauli_z)
+    
+    def __init__(
+        self,
+        char: Union[sp.Matrix, sp.ImmutableMatrix, Sequence[sp.Expr]],
+        k_symbols: Tuple[sp.Symbol, sp.Symbol, sp.Symbol] = None,
+        span: Tuple[Tuple[float, float],
+                    Tuple[float, float],
+                    Tuple[float, float]] = ((-np.pi, np.pi),
+                                            (-np.pi, np.pi),
+                                            (0,      np.pi)),
+        dimension: int = 300,
+        # dimension_enhancement: Optional[int] = 1,
+        # ^ TODO: auto span detection
+    ):
+        # only support two-band Hamiltonian
+        if isinstance(char, (sp.Matrix,sp.ImmutableMatrix)) and char.shape==(2,2):
+            self.h_k = char
+            self.bloch_vec = tuple(
+                sp.simplify((char * s).trace()/2)
+                for s in self.pauli_vec
+            )
+        elif isinstance(char, Sequence) and len(char) == 3:
+            self.bloch_vec = tuple(char)
+            self.h_k = sum((h*s for h,s in zip(char, self.pauli_vec)), 
+                           start=sp.zeros(2, 2))
+        else:
+            raise ValueError("`char` must be a 2x2 sympy Matrix or a sequence "\
+                             "of three coefficients for the Pauli matrices.")
+            
+        if k_symbols is None:
+            self.k_symbols = sorted(self.h_k.free_symbols, key=lambda s: s.name)
+            self.kx_symbol, self.ky_symbol, self.kz_symbol = self.k_symbols
+        elif len(k_symbols) == 3:
+            self.k_symbols = k_symbols
+            self.kx_symbol, self.ky_symbol, self.kz_symbol = k_symbols
+        else:
+            raise ValueError("`k_symbols` must be a tuple of three sympy"\
+                             " symbols (kx, ky, kz).")
+        
+        # lambda functions of the bloch vector components
+        self.bloch_vec_funcs = tuple(
+            sp.lambdify(self.k_symbols, b, 'numpy')
+            for b in self.bloch_vec
+        )
+        
+        # plotting helpers
+        self.span = np.asarray(span)
+        self.dimension = dimension
+        self.spacing = np.diff(self.span, axis=1).squeeze() / (dimension-1)
+        self.origin = self.span[:, 0]
+
+        # set k-space spans and coordinates
+        self.kx_span, self.ky_span, self.kz_span = span
+        for axis, (mn, mx) in zip(('x', 'y', 'z'), span):
+            setattr(self, f'k{axis}_min', mn)
+            setattr(self, f'k{axis}_max', mx)
+            setattr(self, f'k{axis}_vals', np.linspace(mn, mx, dimension))
+        
+        self.kx_grid, self.ky_grid, self.kz_grid = np.meshgrid(
+            self.kx_vals, self.ky_vals, self.kz_vals,
+            indexing='ij'
+        )
+
+        # default cache for skeleton graph
+        self.skeleton_graph_cache = None
+        self.skeleton_graph_cache_args = None
+
+
+    @cached_property
+    def spectrum(self) -> NDArray:
+        r"""The k-space spectrum ('upper'/'positive' band).
+
+        Returns
+        -------
+        NDArray
+            The spectrum of the upper band, calculated as:
+            \[
+            + \sqrt{\lvert \vec{d} \rvert^2}
+            \]
+            where \(\vec{d}\) represents the Bloch vector components.
+            I.e., the half of the energy band gap.
+        """
+        d_grid = np.asarray([
+            func(self.kx_grid, self.ky_grid, self.kz_grid).astype(np.complex128)
+            if expr.free_symbols
+            else np.full_like(self.kx_grid, expr, dtype=np.complex128)
+            for (expr, func) in zip(self.bloch_vec, self.bloch_vec_funcs)
+        ])
+        return np.sqrt(np.sum(d_grid**2, axis=0))
+    
+    @cached_property
+    def band_gap(self) -> NDArray:
+        r"""The k-space band gap.
+
+        Returns
+        -------
+        NDArray
+            The band gap, calculated as:
+            \[
+            \Delta = 2 \lvert \vec{d} \rvert
+            \]
+        """
+        return 2 * np.abs(self.spectrum)
+    
+    @property
+    def _interior_mask(self) -> NDArray:
+        """The filled interior of the exceptional surface as a binary mask.
+        I.e. the region of pure imaginary energy."""
+        return self.spectrum.imag != 0
+    
+    @cached_property
+    def _skeleton_image(self) -> NDArray:
+        """The skeleton (medial axis) of the exceptional surface."""
+        return morph.skeletonize(self._interior_mask, method='lee')
+    
+    @cached_property
+    def skeleton_points(self) -> NDArray:
+        """The coordinates of the exceptional surface skeleton points."""
+        point_mask = np.where(self._skeleton_image)
+        return np.asarray([self.kx_grid[point_mask],
+                           self.ky_grid[point_mask],
+                           self.kz_grid[point_mask]]).T
+    
+    def skeleton_graph(
+        self, 
+        smooth_epsilon: int = 4,
+        clean: bool = True,
+        *,
+        skeleton_image: Optional[NDArray] = None
+    ) -> nx.MultiGraph:
+        """The skeleton graph of the exceptional surface."""
+        
+        # Check if the arguments match the cached ones
+        args = (smooth_epsilon, clean, id(skeleton_image))
+        if self.skeleton_graph_cache is not None and \
+           self.skeleton_graph_cache_args == args:
+            return self.skeleton_graph_cache
+        
+        # Compute the graph
+        G = skeleton2graph(self._skeleton_image) \
+            if skeleton_image is None else skeleton_image
+        if clean:
+            G = remove_leaf_nodes(G)
+            G = remove_deg2_preserving_pts(G)
+        G = smooth_edges(G, epsilon=smooth_epsilon, copy=False)
+
+        # cache the result
+        self.skeleton_graph_cache = G
+        self.skeleton_graph_cache_args = args
+        return G
+    
+    @property
+    def total_edge_pts(self) -> int:
+        """The total number of edge points in the skeleton graph."""
+        return total_edge_pts(self.skeleton_graph_cache or self.skeleton_graph())
+    
+    def clear_cache(self):
+        """Clear the cached skeleton graph."""
+        self.skeleton_graph_cache = None
+        self.skeleton_graph_cache_args = None
+        
+    def _prepare_plot_data(self) -> None:
+        """Prepare the data for plotting."""
+        G = self.skeleton_graph_cache or self.skeleton_graph()
+
+    
+    @cached_property
+    def is_PT_symmetric(self) -> bool:
+        """Check if the Hamiltonian is PT-symmetric."""
+        return is_PT_symmetric(self.h_k)
+
+    @staticmethod
+    def graph_summary(G):
+        # Basic properties
+        data = []
+        data.append(["Number of nodes", G.number_of_nodes()])
+        data.append(["Number of edges", G.number_of_edges()])
+        # Connectivity and component info
+        if nx.is_connected(G):
+            connected = "Yes"
+            diameter = nx.diameter(G)
+            avg_path = nx.average_shortest_path_length(G)
+            data.append(["Connected", connected])
+            data.append(["Diameter", diameter])
+            data.append(["Avg shortest path", avg_path])
+        else:
+            connected = "No"
+            num_components = nx.number_connected_components(G)
+            data.append(["Connected", connected])
+            data.append(["# Connected components", num_components])
+            # Component sizes
+            components = sorted(nx.connected_components(G), 
+                                key=len, 
+                                reverse=True)
+            for i, comp in enumerate(components, 1):
+                data.append([f"Component {i} size", len(comp)])
+        print(tabulate(data, 
+                       headers=["Property", "Value"], 
+                       tablefmt="github"))
+
+        # Degree distribution
+        degree_hist = nx.degree_histogram(G)
+        degree_dist = [(deg, count) for deg, count in 
+                       enumerate(degree_hist) if count > 0]
+        if degree_dist:
+            print("\nDegree distribution:")
+            print(tabulate(degree_dist, 
+                           headers=["Degree", "Frequency"], 
+                           tablefmt="github"))
+
+
+    @staticmethod         
+    def check_minor(
+        host_graph: nx.MultiGraph | nx.Graph,
+        minor_graph: nx.Graph
+    ) -> Any:
+        """Check whether `minor_graph` is a minor of `host_graph`.
+
+        Parameters
+        ----------
+        host_graph : nx.MultiGraph | nx.Graph
+            The graph in which to search for the minor.
+        minor_graph : nx.Graph
+            The graph to be checked as a minor.
+
+        Returns
+        -------
+        Any
+            The embedding mapping if `minor_graph` is a minor of `host_graph`,
+            otherwise None.
+        """
+        # Attempt to find an embedding of minor_graph in host_graph.
+        embedding = minorminer.find_embedding(minor_graph, host_graph)
+        
+        if embedding:
+            print("The given graph contains the minor graph.")
+            return embedding
+        else:
+            print("The given graph does not contain the minor graph.")
+            return None
+
+
+
+if __name__ == "__main__":
+    
+    ### Example usage
+    # Hamiltonian of a hoft-link metal
+    kx, ky, kz = sp.symbols('k_x k_y k_z', real=True)
+    z = sp.cos(2*kz) + sp.Rational(1, 2) \
+        + sp.I*(sp.cos(kx) + sp.cos(ky) + sp.cos(kz) - 2)
+    w = sp.sin(kx) + sp.I*sp.sin(ky)
+    f = z**2 - w**2 
+    cx = sp.simplify(sp.re(f))
+    cz = sp.simplify(sp.im(f))
+
+    # Create a NodalSkeleton instance
+    char = (cx, sp.I, cz)
+    ske = NodalSkeleton(char)
+
+    # Check properties
+    print(f"self.h_k: {ske.h_k}")
+    print(f"self.span: {ske.span}")
+    print(f"self.dimension: {ske.dimension}")
+    print(f"self.kx_span: {ske.kx_span}")
+    print(f"self.ky_span: {ske.ky_span}")
+    print(f"self.kz_span: {ske.kz_span}")
+    print(f"self.kx_min: {ske.kx_min}")
+    print(f"self.kx_max: {ske.kx_max}")
+    print(f"self.ky_min: {ske.ky_min}")
+    print(f"self.ky_max: {ske.ky_max}")
+    print(f"self.kz_min: {ske.kz_min}")
+    print(f"self.kz_max: {ske.kz_max}")
+    print(f"self.spacing: {ske.spacing}")
+    print(f"self.origin: {ske.origin}")
+    print(f"self.spectrum: {ske.spectrum.shape} ({ske.spectrum.dtype})")
+    print(f"self._skeleton_image: {ske._skeleton_image.shape} ({ske._skeleton_image.dtype})")
+    print(f"Total edge points: {ske.total_edge_pts}")
+    print(f"Skeleton graph: {ske.skeleton_graph_cache.number_of_nodes()} nodes, "
+        f"{ske.skeleton_graph_cache.number_of_edges()} edges")
+    print(f"Is PT-symmetric: {ske.is_PT_symmetric}")

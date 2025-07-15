@@ -16,11 +16,11 @@ def is_PT_symmetric(h: sp.Matrix) -> bool:
     return sp.simplify(h - PT(h)) == 0
 
 
-def count_total_pts(
+def total_edge_pts(
     G: nx.MultiGraph,
 ) -> int:
     """Count the total number of points in the graph's edges."""
-    return sum(len(G[u][v][key]['pts']) 
+    return sum(len(G[u][v][key]['pts'])
                for u, v, key in G.edges(keys=True))
 
 
