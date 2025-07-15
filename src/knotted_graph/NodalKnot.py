@@ -12,27 +12,11 @@ from knotted_graph.vis import (
 )
 from knotted_graph.util import (
     remove_leaf_nodes,
-    remove_deg2_preserving_pts,
+    simplify_edges,
     smooth_edges,
 )
 
-# TODO:
-# - [x] initialize with sympy
-# - [] solve 3D real space H, find the zero eigenvalue boundaries
-# - [x] skeleton graph by skan
-# - [x] graph simplification by `OSPnx.simplification`
-# - [z] initialize unparametrized
-# - Graph as: 
-#       - [x] nodes as points
-#       - edges as 
-#           - [] shapely.LineString, 
-#           - [x] `rdp`-simplified
-#           - [x] when plotting, wrap in pv.Spline
-# - [] Berry Curvature function and field plotted by pv's glyphs
-# - [] May collect data so that the rotation of the knot is easier. pv also has rotate function
-# - [] pd code: 
-#           if there are long (> 5 pixels) segments overlapping, find a different angle
-#           i.e. all linestrings' intersections containing not just points
+
 class NodalKnot:
     
     def __init__(self, 
@@ -386,7 +370,7 @@ class NodalKnot:
             # Remove leaf nodes
             G = remove_leaf_nodes(G)
             # Remove degree-2 nodes that does not affect the topology
-            G = remove_deg2_preserving_pts(G)
+            G = simplify_edges(G)
             # smooth the edge points
             G = smooth_edges(G, epsilon=smooth_epsilon, copy=False)
         

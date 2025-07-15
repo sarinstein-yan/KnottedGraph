@@ -145,19 +145,6 @@ def optimized_yamada(pd_code: str):
     return sp.expand(Y * A**(-m))
 
 
-def is_trivalent(G):
-    """
-    Check if a graph is trivalent -- if all vertices have degree <= 3.
-    
-    Parameters:
-      G : networkx.MultiGraph / networkx.Graph
-         The undirected graph to check.
-    
-    Returns:
-      True if the graph is trivalent, False otherwise.
-    """
-    degs = nx.degree(G)
-    return all(degree <= 3 for node, degree in degs)
 
 def BouquetGraph(n):
     """

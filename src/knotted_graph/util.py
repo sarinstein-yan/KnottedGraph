@@ -3,7 +3,8 @@ import sympy as sp
 import networkx as nx
 from rdp import rdp, pldist
 from typing import Any, Tuple, Optional, Sequence
-from numpy.typing import NDArray
+from numpy.typing import NDArray, ArrayLike
+
 
 # PT-operator
 def PT(
@@ -30,6 +31,7 @@ def PT(
     sx = sp.Matrix([[0, 1], [1, 0]])
     return sx * sp.conjugate(h).xreplace({k: -k for k in k_symbols}) * sx
 
+
 def is_PT_symmetric(
         h: sp.Matrix, 
         k_symbols: Optional[Tuple[sp.Symbol, sp.Symbol, sp.Symbol]] = None
@@ -50,6 +52,35 @@ def is_PT_symmetric(
         True if the operator is PT-symmetric, False otherwise.
     """
     return sp.simplify(h - PT(h, k_symbols=k_symbols)) == sp.zeros(2, 2)
+
+
+def is_trivalent(G):
+    """
+    Check if a graph is trivalent -- if all vertices have degree <= 3.
+    
+    Parameters:
+      G : networkx.MultiGraph / networkx.Graph
+         The undirected graph to check.
+    
+    Returns:
+      True if the graph is trivalent, False otherwise.
+    """
+    degs = nx.degree(G)
+    return all(degree <= 3 for node, degree in degs)
+
+
+def idx_to_coord(
+        indices: ArrayLike,
+        spacing: Sequence[float] = (1.0, 1.0, 1.0),
+        origin: Sequence[float] = (0.0, 0.0, 0.0),
+    ) -> NDArray:
+        """Convert an array of 3D image indices to spatial coordinates."""
+
+        array = np.asarray(indices)
+        if array.shape[-1] != 3:
+            raise ValueError("Input array must have shape (..., 3).")
+        
+        return array * spacing + origin
 
 
 def total_edge_pts(
@@ -155,11 +186,11 @@ def _append_edge_pts(path, edge_pts):
         # neither end of pts matches the current path end
         raise RuntimeError(
             "Edge segment doesn’t connect: "
-            f"path[-1]={path[-1]}, next_pts endpoints={pts[0],pts[-1]}"
+            f"path[-1]={path[-1]}, appended edge endpoints={pts[0],pts[-1]}"
         )
 
 
-def remove_deg2_preserving_pts(
+def simplify_edges(
     G: nx.MultiGraph
 ) -> nx.MultiGraph:
     """
@@ -239,7 +270,8 @@ def remove_deg2_preserving_pts(
                             H.add_node(cur)
                             H.nodes[cur]['pos'] = G.nodes[cur].get('pos')
 
-                        H.add_edge(j, cur, pts=np.array(path_pts))
+                        path_pts = np.asarray(path_pts)
+                        H.add_edge(j, cur, pts=path_pts)
         else:
             # no junctions: make one self-loop
             # choose representative (prefer deg-2)
@@ -277,38 +309,41 @@ def remove_deg2_preserving_pts(
                 # close loop
                 path_pts.append(G.nodes[rep].get('pos'))
 
-            H.add_edge(rep, rep, pts=np.array(path_pts))
-    
-    H = nx.convert_node_labels_to_integers(H, ordering='sorted')
+            path_pts = np.asarray(path_pts)
+            H.add_edge(rep, rep, pts=path_pts)
+
+    H = nx.convert_node_labels_to_integers(
+        H, first_label=1, ordering='sorted'
+    )
     return H
 
 
-def get_edge_pts(G):
-    pts_list = []
-    for u, v, pts in G.edges(data='pts'):
-        pts_list.append(pts)
-    if pts_list:
-        return np.vstack(pts_list)
-    else:
-        return np.array([])
+# def get_edge_pts(G):
+#     pts_list = []
+#     for u, v, pts in G.edges(data='pts'):
+#         pts_list.append(pts)
+#     if pts_list:
+#         return np.vstack(pts_list)
+#     else:
+#         return np.array([])
     
-def get_node_pts(G):
-    pts_list = []
-    for n, o in G.nodes(data='pos'):
-        pts_list.append(o)
-    if pts_list:
-        return np.vstack(pts_list)
-    else:
-        return np.array([])
+# def get_node_pts(G):
+#     pts_list = []
+#     for n, o in G.nodes(data='pos'):
+#         pts_list.append(o)
+#     if pts_list:
+#         return np.vstack(pts_list)
+#     else:
+#         return np.array([])
     
-def get_all_pts(G):
-    edge_pts = get_edge_pts(G)
-    node_pts = get_node_pts(G)
-    if edge_pts.size > 0 and node_pts.size > 0:
-        return np.vstack((edge_pts, node_pts))
-    elif edge_pts.size > 0:
-        return edge_pts
-    elif node_pts.size > 0:
-        return node_pts
-    else:
-        return np.array([])
+# def get_all_pts(G):
+#     edge_pts = get_edge_pts(G)
+#     node_pts = get_node_pts(G)
+#     if edge_pts.size > 0 and node_pts.size > 0:
+#         return np.vstack((edge_pts, node_pts))
+#     elif edge_pts.size > 0:
+#         return edge_pts
+#     elif node_pts.size > 0:
+#         return node_pts
+#     else:
+#         return np.array([])

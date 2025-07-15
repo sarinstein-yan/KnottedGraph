@@ -63,7 +63,6 @@ from knotted_graph.yamada import (
     build_state_graph,
     igraph_multigraph_key,
     parse_pd,
-    is_trivalent,
     BouquetGraph,
     ThetaGraph,
 )
@@ -76,12 +75,12 @@ from knotted_graph.surface_modes import (
 
 from knotted_graph.util import (
     remove_leaf_nodes,
-    remove_deg2_preserving_pts,
+    simplify_edges,
+    smooth_edges,
     is_PT_symmetric,
+    is_trivalent,
     total_edge_pts,
-    get_all_pts, 
-    get_edge_pts, 
-    get_node_pts,
+    idx_to_coord,
 )
 
 from knotted_graph.vis import (

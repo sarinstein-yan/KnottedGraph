@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 from knotted_graph.util import (
     remove_leaf_nodes,
-    remove_deg2_preserving_pts,
+    simplify_edges,
     smooth_edges,
     is_PT_symmetric,
     total_edge_pts,
@@ -22,6 +22,13 @@ from knotted_graph.util import (
 from typing import List, Tuple, Union, Optional, Any, Dict, Callable, Sequence
 from numpy.typing import NDArray, ArrayLike
 
+
+# TODO:
+# - Graph edges as shapely.LineString for planar analysis
+# - [] Berry Curvature function and field plotted by pv's glyphs
+# - [] pd code:
+#           if there are long (> 5 pixels) segments overlapping, find a different angle
+#           i.e. all linestrings' intersections containing not just points
 
 class NodalSkeleton:
 
@@ -39,7 +46,7 @@ class NodalSkeleton:
                     Tuple[float, float]] = ((-np.pi, np.pi),
                                             (-np.pi, np.pi),
                                             (0,      np.pi)),
-        dimension: int = 300,
+        dimension: int = 200,
         # dimension_enhancement: Optional[int] = 1,
         # ^ TODO: auto span detection
     ):
@@ -51,7 +58,7 @@ class NodalSkeleton:
                 for s in self.pauli_vec
             )
         elif isinstance(char, Sequence) and len(char) == 3:
-            self.bloch_vec = (c + sp.Integer(0) for c in char)
+            self.bloch_vec = tuple(c + sp.Integer(0) for c in char)
             self.h_k = sum((h*s for h,s in zip(char, self.pauli_vec)), 
                            start=sp.zeros(2, 2))
         else:
@@ -101,6 +108,8 @@ class NodalSkeleton:
         # default cache for skeleton graph
         self.skeleton_graph_cache = None
         self.skeleton_graph_cache_args = None
+        self._pv_data_args = None
+
 
     @cached_property
     def spectrum(self) -> NDArray:
@@ -124,6 +133,7 @@ class NodalSkeleton:
         ])
         return np.sqrt(np.sum(d_grid**2, axis=0))
     
+
     @cached_property
     def band_gap(self) -> NDArray:
         r"""The k-space band gap.
@@ -138,36 +148,41 @@ class NodalSkeleton:
         """
         return 2 * np.abs(self.spectrum)
     
+
     @property
     def _interior_mask(self) -> NDArray:
         """The filled interior of the exceptional surface as a binary mask.
         I.e. the region of pure imaginary energy."""
-        return self.spectrum.imag != 0
+        # return self.spectrum.imag != 0
+        return self.spectrum.real == 0
     
+
     @cached_property
     def _skeleton_image(self) -> NDArray:
         """The skeleton (medial axis) of the exceptional surface."""
         return morph.skeletonize(self._interior_mask, method='lee')
     
+
     @cached_property
-    def skeleton_points(self) -> NDArray:
-        """The coordinates of the exceptional surface skeleton points."""
+    def skeleton_coords(self) -> NDArray:
+        """The k-space coordinates of the exceptional surface skeleton points."""
         point_mask = np.where(self._skeleton_image)
         return np.asarray([self.kx_grid[point_mask],
                            self.ky_grid[point_mask],
                            self.kz_grid[point_mask]]).T
     
+
     def skeleton_graph(
         self, 
+        simplify: bool = True,
         smooth_epsilon: int = 4,
-        clean: bool = True,
         *,
         skeleton_image: Optional[NDArray] = None
     ) -> nx.MultiGraph:
         """The skeleton graph of the exceptional surface."""
         
         # Check if the arguments match the cached ones
-        args = (smooth_epsilon, clean, id(skeleton_image))
+        args = (smooth_epsilon, simplify, id(skeleton_image))
         if self.skeleton_graph_cache is not None and \
            self.skeleton_graph_cache_args == args:
             return self.skeleton_graph_cache
@@ -175,39 +190,220 @@ class NodalSkeleton:
         # Compute the graph
         G = skeleton2graph(self._skeleton_image) \
             if skeleton_image is None else skeleton_image
-        if clean:
+        if simplify:
             G = remove_leaf_nodes(G)
-            G = remove_deg2_preserving_pts(G)
+            G = simplify_edges(G)
         G = smooth_edges(G, epsilon=smooth_epsilon, copy=False)
+        G.graph['is_trivalent'] = is_trivalent(G)
 
         # cache the result
         self.skeleton_graph_cache = G
         self.skeleton_graph_cache_args = args
         return G
     
+
     @property
     def total_edge_pts(self) -> int:
         """The total number of edge points in the skeleton graph."""
         return total_edge_pts(self.skeleton_graph_cache or self.skeleton_graph())
-    
+
+
     def clear_cache(self):
         """Clear the cached skeleton graph."""
         self.skeleton_graph_cache = None
         self.skeleton_graph_cache_args = None
+
+
+    @cached_property
+    def spectrum_volume_pv(self) -> pv.PolyData:
+        """The real part of the spectrum as a PyVista PolyData object."""
+        engy = self.spectrum
+        volume = pv.ImageData(
+            dimensions=engy.shape,
+            spacing=self.spacing,
+            origin=self.origin
+        )
+        volume.point_data['real'] = engy.real.ravel(order='F')
+        volume.point_data['imag'] = engy.imag.ravel(order='F')
+        volume.point_data['gap'] = self.band_gap.ravel(order='F')
+        helper = np.abs(engy.real) - np.abs(engy.imag)
+        volume.point_data['ES_helper'] = helper.ravel(order='F')
+        return volume
+
+
+    @cached_property
+    def exceptional_surface_pv(self) -> pv.PolyData:
+        """The exceptional surface ad a PyVista PolyData object."""
+        return self.spectrum_volume_pv.contour(
+            isosurfaces=[0.], scalars='ES_helper'
+        )
+    
+
+    def plot_exceptional_surface(
+        self,
+        plotter: Optional[pv.Plotter] = None,
+        surf_color: Any = "#12a47f",
+        surf_opacity: float = 0.9,
+        surf_decimation: float = 0.2,
+        surf_kwargs: Dict = {},
+        add_silhouettes: bool = False,
+        silh_color: Any = 'gray',
+        silh_opacity: float = 0.2,
+        silh_origins: Optional[ArrayLike | str] = None,
+        silh_decimation: float = 0.2,
+        silh_kwargs: Dict = {},
+    ) -> pv.Plotter:
+        """Plot the exceptional surface."""
+        if plotter is None:
+            plotter = pv.Plotter()
         
-    def _prepare_plot_data(self) -> None:
-        """Prepare the data for plotting."""
+        ES = self.exceptional_surface_pv
+
+        if add_silhouettes:
+            if isinstance(silh_origins, str):
+                silh_origins = self.origin
+            elif silh_origins is None:
+                silh_origins = (None, None, None)
+
+            silh_kwargs = dict(
+                color=silh_color,
+                opacity=silh_opacity,
+                silhouette=True,
+                **silh_kwargs
+            )
+
+            for (n, o) in zip(np.eye(3), silh_origins):
+                proj = ES.project_points_to_plane(normal=n, origin=o)
+                proj = proj.decimate_pro(silh_decimation)
+                plotter.add_mesh(proj, **silh_kwargs)
+        
+        ES_deci = ES.decimate_pro(
+            surf_decimation, preserve_topology=True
+        )
+        surf_kwargs = dict(
+            color=surf_color,
+            opacity=surf_opacity,
+            smooth_shading=True,
+            specular=0.5,
+            specular_power=20,
+            metallic=1.,
+            **surf_kwargs
+        )
+        plotter.add_mesh(ES_deci, **surf_kwargs)
+
+        return plotter
+    
+    def _idx_to_coord(self, indices: ArrayLike) -> NDArray:
+        """Convert indices to coordinates in the k-space."""
+        return idx_to_coord(indices, self.spacing, self.origin)
+
+    def _pyvista_graph_data(
+            self,
+            node_radius: float = 0.08,
+            tube_radius: float = 0.04,
+        ) -> Tuple[pv.MultiBlock, pv.PolyData]:
+        """Prepare the spatial graph data for plotting."""
+        args = (tube_radius, node_radius)
+        if self._pv_data_args == args:
+            return self.node_glyphs_pv, self.edge_tubes_pv
+
         G = self.skeleton_graph_cache or self.skeleton_graph()
 
-    
+        nodes_pos = self._idx_to_coord(
+            np.asarray([n['pos'] for n in G.nodes.values()])
+        )
+        edges_pts = [self._idx_to_coord(e['pts']) for e in G.edges.values()]
+        
+        node_data = pv.PolyData(nodes_pos)
+        node_glyphs = node_data.glyph(
+            orient=False,
+            scale=False,
+            geom=pv.Sphere(radius=node_radius),
+        )
+
+        edge_data = [pv.Spline(e, 2*len(e)) for e in edges_pts]
+        edge_tubes = pv.MultiBlock()
+        for e in edge_data:
+            edge_tubes.append(e.tube(radius=tube_radius))
+        
+        self.node_data_pv = node_data
+        self.edge_data_pv = edge_data
+        self.node_glyphs_pv = node_glyphs
+        self.edge_tubes_pv = edge_tubes
+        # Update the cache key
+        self._pv_data_args = args
+        return node_glyphs, edge_tubes
+
+
+    def plot_skeleton_graph(
+            self,
+            plotter: Optional[pv.Plotter] = None,
+            add_nodes: bool = True,
+            add_edges: bool = True,
+            node_radius: float = 0.08,
+            tube_radius: float = 0.04,
+            node_color: Any = '#A60628',
+            edge_color: Any = '#348ABD',
+            node_kwargs: Dict = {},
+            edge_kwargs: Dict = {},
+            add_silhouettes: bool = False,
+            silh_color: Any = 'gray',
+            silh_origins: Optional[ArrayLike | str] = None,
+            silh_kwargs: Dict = {},
+        ) -> pv.Plotter:
+        """Plot the skeleton graph."""
+        if plotter is None:
+            plotter = pv.Plotter()
+
+        comm = dict(
+            smooth_shading=True,
+            specular=0.5,
+            specular_power=20,
+            metallic=1.,
+        )
+        
+        node_glyphs, edge_tubes = \
+            self._pyvista_graph_data(node_radius, tube_radius)
+            
+        if add_edges:
+            edge_kwargs = dict(color=edge_color, opacity=.9,
+                                **comm, **edge_kwargs)
+            plotter.add_mesh(edge_tubes, **edge_kwargs)
+
+        if add_nodes:
+            node_kwargs = dict(color=node_color, opacity=1.,
+                                **comm, **node_kwargs)
+            plotter.add_mesh(node_glyphs, **node_kwargs)
+        
+        if add_silhouettes:
+            if isinstance(silh_origins, str):
+                silh_origins = self.origin
+            elif silh_origins is None:
+                silh_origins = (None, None, None)
+            
+            silh_kwargs = dict(
+                color=silh_color,
+                # silhouette=True,
+                **silh_kwargs
+            )
+            def _add_silhouette(poly, origins, **kwargs):
+                for (n, o) in zip(np.eye(3), origins):
+                    proj = poly.project_points_to_plane(normal=n, origin=o)
+                    plotter.add_mesh(proj, **kwargs)
+            
+            for e in edge_tubes:
+                _add_silhouette(e, silh_origins, opacity=.2, **silh_kwargs)
+            
+            _add_silhouette(node_glyphs, silh_origins, opacity=1., **silh_kwargs)
+        
+        return plotter
 
 
     def graph_summary(
             self, 
             G: Optional[nx.Graph | nx.MultiGraph] = None
-        ) -> None:
-        
-        G = G if G is not None else self.skeleton_graph_cache
+        ) -> None:        
+        if G is None: G = self.skeleton_graph_cache
         # Basic properties
         data = []
         data.append(["Number of nodes", G.number_of_nodes()])
@@ -246,7 +442,7 @@ class NodalSkeleton:
                            tablefmt="github"))
 
 
-    @staticmethod         
+    @staticmethod
     def check_minor(
         host_graph: nx.MultiGraph | nx.Graph,
         minor_graph: nx.Graph
@@ -279,7 +475,6 @@ class NodalSkeleton:
 
 
 if __name__ == "__main__":
-    
     ### Example usage
     # Hamiltonian of a hoft-link metal
     kx, ky, kz = sp.symbols('k_x k_y k_z', real=True)
@@ -290,12 +485,14 @@ if __name__ == "__main__":
     cx = sp.simplify(sp.re(f))
     cz = sp.simplify(sp.im(f))
 
+    nHerm = .1
+    char = (cx, nHerm*sp.I, cz)
     # Create a NodalSkeleton instance
-    char = (cx, sp.Rational(1,10)*sp.I, cz)
     ske = NodalSkeleton(char)
 
     # Check properties
     print(f"self.h_k: {ske.h_k}")
+    print(f"self.bloch_vec: {ske.bloch_vec}")
     print(f"Is Hermitian: {ske.is_Hermitian}")
     print(f"Is PT-symmetric: {ske.is_PT_symmetric}")
     print(f"self.span: {ske.span}")
@@ -321,3 +518,26 @@ if __name__ == "__main__":
         ske.skeleton_graph_cache, 
         ske.skeleton_graph_cache.subgraph([0])
     )}")
+
+    # Check plotting
+    pl = pv.Plotter(shape=(1, 2))
+    pl.link_views()
+    silh_origins = np.diag([-np.pi, -np.pi, 0])
+
+    pl.subplot(0, 0)
+    pl = ske.plot_exceptional_surface(plotter=pl, 
+                                    add_silhouettes=True,
+                                    silh_origins=silh_origins)
+    pl.add_bounding_box()
+
+    pl.subplot(0, 1)
+    pl = ske.plot_skeleton_graph(plotter=pl, 
+                                add_silhouettes=True,
+                                silh_origins=silh_origins)
+    pl.show_bounds(xtitle="k_x", ytitle="k_y", ztitle="k_z")
+
+    pl.enable_depth_peeling()
+    pl.enable_eye_dome_lighting()
+    pl.view_isometric()
+
+    pl.close()
