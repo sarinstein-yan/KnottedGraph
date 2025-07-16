@@ -200,6 +200,7 @@ ske.band_gap.shape, ske.band_gap.dtype
 
 
 #### **Skeleton graph** (`networkx.MultiGraph`):
+-----
 
 ```python
 graph = ske.skeleton_graph(
@@ -292,6 +293,7 @@ The given graph does not contain the minor graph.
 `NodalSkeleton` uses `pyvista` for 3D plotting, creating interactive visualizations.
 
 #### Plotting the Exceptional Surface
+-----
 
 The exceptional surface is the 3D surface in k-space where the band gap closes, defined by
 $$
@@ -315,9 +317,12 @@ if EXPORT_FIGS:
 ```
 
 <p align="center">
-    <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/ES_gamma=0.1.svg" width="600" alt="Exceptional Surface at γ=0.1"/>
-    <!-- <br>
-    <a href="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/ES_gamma=0.1.html" target="_blank" style="text-decoration:underline;">Download interactive plot (save the .html and open it in a web browser)</a> -->
+    <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/ES_gamma=0.1.svg" 
+    width="600" alt="Exceptional Surface at γ=0.1"/>
+    <br>
+    <a href="https://htmlpreview.github.io/?https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/ES_gamma=0.1.html" 
+    target="_blank" style="text-decoration:underline;">
+    Click here to view the interactive 3D plot</a>
 </p>
 
 
@@ -340,12 +345,18 @@ if EXPORT_FIGS:
 ```
 
 <p align="center">
-    <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/ES_gamma=0.1_silhouettes.svg" width="600" />
+    <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/ES_gamma=0.1_silhouettes.svg" 
+    width="600" alt="Exceptional Surface with Silhouettes at γ=0.1"/>
+    <br>
+    <a href="https://htmlpreview.github.io/?https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/ES_gamma=0.1_silhouettes.html" 
+    target="_blank" style="text-decoration:underline;">
+    Click here to view the interactive 3D plot</a>
 </p>
 
 
 
 #### Plotting the ***Exceptional Skeleton Graph***
+-----
 
 The exceptional skeleton graph is the ***medial axis*** of the exceptional surface interior, where the *energy spectrum is purely imaginary*.
 
@@ -365,11 +376,17 @@ if EXPORT_FIGS:
 ```
 
 <p align="center">
-    <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/SG_gamma=0.1_silhouettes.svg" width="600" />
+    <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/SG_gamma=0.1_silhouettes.svg" 
+    width="600" alt="Exceptional Skeleton Graph at γ=0.1"/>
+    <br>
+    <a href="https://htmlpreview.github.io/?https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/SG_gamma=0.1_silhouettes.html" 
+    target="_blank" style="text-decoration:underline;">
+    Click here to view the interactive 3D plot</a>
 </p>
 
 
 #### **Non-Hermiticity induced exceptional knotted graph**
+-----
 
 For nodal knot systems, in the Hermitian limit or when non-Hermitian perturbation is small, the original knot / link topology is preserved, as shown above (`gamma=0.1`).
 
@@ -416,7 +433,12 @@ Degree distribution:
 ```
 
 <p align="center">
-    <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/ES_SG_gamma=0.2.svg" width="600" />
+    <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/ES_SG_gamma=0.2.svg" 
+    width="600" alt="Exceptional Surface and Skeleton Graph at γ=0.2"/>
+    <br>
+    <a href="https://htmlpreview.github.io/?https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/ES_SG_gamma=0.2.html" 
+    target="_blank" style="text-decoration:underline;">
+    Click here to view the interactive 3D plot</a>
 </p>
 
 ```
@@ -437,5 +459,10 @@ Degree distribution:
 ```
 
 <p align="center">
-    <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/ES_SG_gamma=0.5.svg" width="600" />
+    <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/ES_SG_gamma=0.5.svg" 
+    width="600" alt="Exceptional Surface and Skeleton Graph at γ=0.5"/>
+    <br>
+    <a href="https://htmlpreview.github.io/?https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/ES_SG_gamma=0.5.html" 
+    target="_blank" style="text-decoration:underline;">
+    Click here to view the interactive 3D plot</a>
 </p>
