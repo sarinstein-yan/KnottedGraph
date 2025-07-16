@@ -1,12 +1,19 @@
+import math
 import numpy as np
 import networkx as nx
-import math
-import numpy as np 
-import matplotlib.patches as patches
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from typing import Union
+
+__all__ = [
+    "standard_petersen_layout",
+    "draw_petersen_embedding",
+    "plot_3D_and_2D_projections",
+    "plot_3D_graph",
+    "plot_surface_modes",
+]
 
 
 def plot_3D_and_2D_projections(points):
@@ -160,11 +167,11 @@ def plot_3D_graph(G: Union[nx.Graph, nx.MultiGraph]) -> go.Figure:
             )
         )
 
-    # — node traces: now include every node with an 'o' attribute —
+    # — node traces: now include every node with an 'pos' attribute —
     node_x, node_y, node_z = [], [], []
     for n, data in G.nodes(data=True):
-        if 'o' in data:
-            o = data['o']
+        if 'pos' in data:
+            o = data['pos']
             if len(o) == 3:
                 node_x.append(o[0])
                 node_y.append(o[1])
@@ -193,6 +200,8 @@ def plot_3D_graph(G: Union[nx.Graph, nx.MultiGraph]) -> go.Figure:
         height=600
     )
     return fig
+
+
 def plot_surface_modes(eigvals_tuple, k_vals_tuple, Etol_tuple, nH_coeff):
     """
     Generates a single figure with three subplots (in a row) showing surface modes
@@ -288,8 +297,6 @@ def plot_surface_modes(eigvals_tuple, k_vals_tuple, Etol_tuple, nH_coeff):
     return fig
 
 
- 
-
 def standard_petersen_layout(R_outer=1.2, R_inner=0.7):
     coords = {}
     for i in range(5):
@@ -300,17 +307,21 @@ def standard_petersen_layout(R_outer=1.2, R_inner=0.7):
         coords[i+5] = (R_inner*math.cos(angle), R_inner*math.sin(angle))
     return coords
 
-def draw_petersen_embedding(petersen_graph, embedding,
-                            layout_func=standard_petersen_layout,
-                            box_size=(0.5,0.3),
-                            scale_factor=1.0,
-                            outer_color='lightblue',
-                            inner_color='lightcoral',
-                            edge_color='k', edge_width=3,
-                            circle_edgecolor='black',
-                            circle_facecolor='white',
-                            circle_lw=2,
-                            text_kwargs=None):
+
+def draw_petersen_embedding(
+        petersen_graph, 
+        embedding,
+        layout_func=standard_petersen_layout,
+        box_size=(0.5,0.3),
+        scale_factor=1.0,
+        outer_color='lightblue',
+        inner_color='lightcoral',
+        edge_color='k', edge_width=3,
+        circle_edgecolor='black',
+        circle_facecolor='white',
+        circle_lw=2,
+        text_kwargs=None
+    ):
     if text_kwargs is None:
         text_kwargs = dict(ha='center', va='center',
                            fontsize=10, fontweight='bold', zorder=11)

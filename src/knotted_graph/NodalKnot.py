@@ -1,14 +1,21 @@
 import numpy as np
 import networkx as nx
-from .skeleton2graph import skeleton2graph
 import skimage.morphology as morph
 import minorminer
+from poly2graph import skeleton2graph
+import logging
+from tabulate import tabulate
 
-from .vis import (
+from knotted_graph.vis import (
     plot_3D_and_2D_projections,
     plot_3D_graph,
 )
-from .util import remove_leaf_nodes,collapse_deg2_exact_with_pts
+from knotted_graph.util import (
+    remove_leaf_nodes,
+    simplify_edges,
+    smooth_edges,
+)
+
 
 class NodalKnot:
     
@@ -37,14 +44,11 @@ class NodalKnot:
         self.k_to_zw_func = k_to_zw_func
         self.zw_to_c_func = zw_to_c_func
 
-         
-
         # Set grid parameters with defaults if not provided
         self.kx_min = kx_min; self.kx_max = kx_max
         self.ky_min = ky_min; self.ky_max = ky_max
         self.kz_min = kz_min; self.kz_max = kz_max
         self.pts_per_dim = pts_per_dim
-
         
         # Initialize the attributes
         self.val = None
@@ -57,8 +61,52 @@ class NodalKnot:
         self.skeleton_points = None
         self.graph = None
 
+    @property
+    def span(self):
+        """
+        Calculate the span of the grid in each dimension.
 
-    def generate_region(self):
+        Returns:
+        -------
+        span : tuple
+            The span of the grid as (kx_span, ky_span, kz_span).
+        """
+        return (self.kx_max - self.kx_min,
+                self.ky_max - self.ky_min,
+                self.kz_max - self.kz_min)
+
+    @property
+    def spacing(self):
+        """
+        Calculate the spacing between points in the grid.
+
+        Returns:
+        -------
+        spacing : float
+            The spacing between points in the grid.
+        """
+        return ((self.kx_max - self.kx_min) / self.pts_per_dim,
+                (self.ky_max - self.ky_min) / self.pts_per_dim,
+                (self.kz_max - self.kz_min) / self.pts_per_dim)
+    
+    @property
+    def origin(self):
+        """
+        Calculate the origin of the grid.
+
+        Returns:
+        -------
+        origin : tuple
+            The origin of the grid as (kx_min, ky_min, kz_min).
+        """
+        return (self.kx_min, self.ky_min, self.kz_min)
+
+    def generate_region(self,
+            kx_min=None, kx_max=None,
+            ky_min=None, ky_max=None,
+            kz_min=None, kz_max=None,
+            pts_per_dim=None
+        ):
         """
         Generate values of f(z, w) for a grid of (kx, ky, kz) points.
 
@@ -80,9 +128,15 @@ class NodalKnot:
         kx_grid, ky_grid, kz_grid : np.ndarray
             The 3D grids of kx, ky, kz values.
         """
-        kx_vals = np.linspace(self.kx_min, self.kx_max, self.pts_per_dim)
-        ky_vals = np.linspace(self.ky_min, self.ky_max, self.pts_per_dim)
-        kz_vals = np.linspace(self.kz_min, self.kz_max, self.pts_per_dim)
+        kx_vals = np.linspace(kx_min if kx_min is not None else self.kx_min,
+                               kx_max if kx_max is not None else self.kx_max,
+                               pts_per_dim if pts_per_dim is not None else self.pts_per_dim)
+        ky_vals = np.linspace(ky_min if ky_min is not None else self.ky_min,
+                               ky_max if ky_max is not None else self.ky_max,
+                               pts_per_dim if pts_per_dim is not None else self.pts_per_dim)
+        kz_vals = np.linspace(kz_min if kz_min is not None else self.kz_min,
+                               kz_max if kz_max is not None else self.kz_max,
+                               pts_per_dim if pts_per_dim is not None else self.pts_per_dim)
         kx_grid, ky_grid, kz_grid = np.meshgrid(kx_vals, ky_vals, kz_vals, indexing='ij')
 
         z, w = self.k_to_zw_func(kx_grid, ky_grid, kz_grid)
@@ -142,7 +196,7 @@ class NodalKnot:
     def knot_surface_points(self,
             thickness=0.,
             epsilon=None,
-            idx=None,
+            points_mask=None,
             **kwargs
         ):
         """
@@ -170,26 +224,26 @@ class NodalKnot:
             
         """
         if isinstance(thickness, (int, float)):
-            print("Calculating according to following condition:\n" \
-            "norm(f)-c where C=constant")
+            logging.info("Calculating according to following condition:\n"
+                 "norm(f)-c where C=constant")
         elif isinstance(thickness, list):
-            print("Calculating according to following condition:\n" \
-            "norm(f)^2+C+R*real(f)+I*Im(f) where C=constant, R=real_coef, I=imag_coef")
+            logging.info("Calculating according to following condition:\n"
+                 "norm(f)^2+C+R*real(f)+I*Im(f) where C=constant, R=real_coef, I=imag_coef")
             
         # check if self.val is available
         if self.val is None or kwargs:
              self.generate_region(**kwargs)
-        if idx is None:
+        if points_mask is None:
             norm = np.abs(self.val)
 
             if isinstance(thickness, (int, float)):
                 if epsilon is not None and epsilon > 0:
                 # return the thickened knot's surface
-                    idx = np.where(np.abs(norm - thickness) < epsilon)
+                    points_mask = np.where(np.abs(norm - thickness) < epsilon)
                 else:
                     # return the thickened knot as a solid (filled-up surface)
                     if thickness < 10/self.pts_per_dim: thickness = 10/self.pts_per_dim
-                    idx = np.where(norm <= thickness)
+                    points_mask = np.where(norm <= thickness)
             elif isinstance(thickness, list):
                 # list must be [constant, real_coef, imag_coef]
                 assert len(thickness) == 3, "thickness list must be [constant, real_coef, imag_coef]"
@@ -199,24 +253,26 @@ class NodalKnot:
                 thickness = constant + real_coef * real_part + imag_coef * imag_part 
                 if epsilon is not None and epsilon > 0:
                 # return the thickened knot's surface
-                    idx = np.where(np.abs(norm**2+thickness) < epsilon)
+                    points_mask = np.where(np.abs(norm**2+thickness) < epsilon)
                 else:
                     # return the thickened knot as a solid (filled-up surface)
                     if thickness < 10/self.pts_per_dim: thickness = 10/self.pts_per_dim
-                    idx = np.where(norm**2 <= thickness)
+                    points_mask = np.where(norm**2 <= thickness)
             else:
-                raise TypeError("Thickness must be either a number corresponding to i*c*pauli_y or a list of three numerics corresponding to [constant(i*c*pauli_y), real_coef, imag_coef} deformation ")
+                raise TypeError("Thickness must be either a number corresponding to i*c*pauli_y "\
+                                "or a list of three numerics corresponding to [constant(i*c*pauli_y),"\
+                                " real_coef, imag_coef} deformation ")
              
         else:
-            if idx.shape != self.val.shape:
+            if points_mask.shape != self.val.shape:
                 raise ValueError("Input `val` must have the same shape as the generated region.")
-            idx = np.where(idx)
+            points_mask = np.where(points_mask)
 
-        pts = np.array([self.kx_grid[idx],
-                        self.ky_grid[idx],
-                        self.kz_grid[idx]]).T
+        pts = np.array([self.kx_grid[points_mask],
+                        self.ky_grid[points_mask],
+                        self.kz_grid[points_mask]]).T
         
-        if idx is None: self.selected_points = pts
+        if points_mask is None: self.selected_points = pts
 
         return pts
     
@@ -274,14 +330,15 @@ class NodalKnot:
         # First, generate the skeleton
         self.knot_skeleton(thickness, epsilon, **kwargs)
         # Extract the skeleton points based on the skeletonized volume
-        points = self.knot_surface_points(idx=self.skeleton)
+        points = self.knot_surface_points(points_mask=self.skeleton)
         self.skeleton_points = points
         return points
 
     def skeleton_graph(self, 
             skeleton_3d=None,
             clean=True,
-            **knot_skeleton_kwargs
+            smooth_epsilon=0.,
+            **generate_region_kwargs,
         ):
         """
         Convert a volume representation of skeleton points to a graph, and optionally remove leaf nodes.
@@ -302,16 +359,21 @@ class NodalKnot:
         """
         # Generate the skeleton 3d array if not provided
         if skeleton_3d is None:
-            if self.skeleton is None or knot_skeleton_kwargs:
-                self.knot_skeleton(**knot_skeleton_kwargs)
+            if self.skeleton is None or generate_region_kwargs:
+                self.knot_skeleton(**generate_region_kwargs)
             skeleton_3d = self.skeleton
         
         # Convert the 3d skeleton image to a graph using poly2graph
         G = skeleton2graph(skeleton_3d)
         
-        # Remove leaf nodes if desired
-        if clean: G = remove_leaf_nodes(G)
-        G=collapse_deg2_exact_with_pts(G)
+        if clean: 
+            # Remove leaf nodes
+            G = remove_leaf_nodes(G)
+            # Remove degree-2 nodes that does not affect the topology
+            G = simplify_edges(G)
+            # smooth the edge points
+            G = smooth_edges(G, epsilon=smooth_epsilon, copy=False)
+        
         self.graph = G
         return G
     
@@ -368,29 +430,40 @@ class NodalKnot:
 
     @staticmethod
     def print_graph_properties(G):
-        print("Number of nodes:", G.number_of_nodes())
-        print("Number of edges:", G.number_of_edges())
-        
-        # Print degree distribution
-        degree_hist = nx.degree_histogram(G)
-        print("Degree distribution (degree: frequency):")
-        for degree, count in enumerate(degree_hist):
-            if count > 0:
-                print(f"  {degree}: {count}")
 
-        # Check connectivity and compute additional metrics if connected
+        data = []
+        # Basic properties
+        data.append(["Number of nodes", G.number_of_nodes()])
+        data.append(["Number of edges", G.number_of_edges()])
+
+        # Degree distribution
+        degree_hist = nx.degree_histogram(G)
+        degree_dist = [(deg, count) for deg, count in enumerate(degree_hist) if count > 0]
+
+        # Connectivity and component info
         if nx.is_connected(G):
-            print("Graph is connected.")
-            print("Diameter:", nx.diameter(G))
-            print("Average shortest path length:", nx.average_shortest_path_length(G))
+            connected = "Yes"
+            diameter = nx.diameter(G)
+            avg_path = nx.average_shortest_path_length(G)
+            data.append(["Connected", connected])
+            data.append(["Diameter", diameter])
+            data.append(["Avg shortest path", avg_path])
         else:
+            connected = "No"
             num_components = nx.number_connected_components(G)
-            print("Graph is not connected.")
-            print("Number of connected components:", num_components)
-            # Optionally, print the size of each component
+            data.append(["Connected", connected])
+            data.append(["# Connected components", num_components])
+            # Component sizes
             components = sorted(nx.connected_components(G), key=len, reverse=True)
             for i, comp in enumerate(components, 1):
-                print(f"  Component {i} has {len(comp)} nodes.")
+                data.append([f"Component {i} size", len(comp)])
+
+        print(tabulate(data, headers=["Property", "Value"], tablefmt="github"))
+
+        # Print degree distribution as a table
+        if degree_dist:
+            print("\nDegree distribution:")
+            print(tabulate(degree_dist, headers=["Degree", "Frequency"], tablefmt="github"))
 
 
     @staticmethod         
@@ -415,4 +488,3 @@ class NodalKnot:
         else:
             print("The given graph does not contain the minor graph.")
             return None
-    

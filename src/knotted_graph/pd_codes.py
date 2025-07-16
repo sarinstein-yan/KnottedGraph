@@ -1,17 +1,33 @@
 '''
 This document includes my attempts to automate the construction of PD codes.
-Currently, they are not very effective, and manually entering the angles to obtain PD codes seems to work better.
-However, I am including them here to give you an idea of my previous efforts. If we are unable to make progress on this in later stages, we can simply remove the code.
+Currently, they are not very effective, and manually entering the angles to 
+obtain PD codes seems to work better.
+However, I am including them here to give you an idea of my previous efforts. 
+If we are unable to make progress on this in later stages, we can simply 
+remove the code.
 '''
 
-import plotly.graph_objects as go  # Interactive plotting library
 import numpy as np               # Numerical operations
-from shapely.geometry import Point, LineString, GeometryCollection, MultiPoint
-from shapely.ops import split                   # Geometry splitting utility
 from concurrent.futures import ThreadPoolExecutor  # For parallel processing
+import plotly.graph_objects as go  # Interactive plotting library
+from shapely.ops import split                   # Geometry splitting utility
+from shapely.geometry import Point, LineString, GeometryCollection, MultiPoint
 from shapely.strtree import STRtree
 
-def compute_rotation_matrix(azimuth_deg: float, elevation_deg: float) -> np.ndarray:
+
+__all__ = [
+    "compute_rotation_matrix",
+    "split_line_at_crossings",
+    "reconstruct_3d_coords",
+    "planar_diagram_code",
+    "find_best_view",
+]
+
+
+def compute_rotation_matrix(
+        azimuth_deg: float, 
+        elevation_deg: float
+    ) -> np.ndarray:
     """
     Compute a combined rotation matrix for a given azimuth (yaw) and elevation (pitch).
 
@@ -44,9 +60,11 @@ def compute_rotation_matrix(azimuth_deg: float, elevation_deg: float) -> np.ndar
     return Rx @ Rz
 
 
-def split_line_at_crossings(line: LineString,
-                             crossing_points: list[Point],
-                             tol: float = 1e-6) -> list[LineString]:
+def split_line_at_crossings(
+        line: LineString,
+        crossing_points: list[Point],
+        tol: float = 1e-6
+    ) -> list[LineString]:
     """
     Split a LineString at specified interior crossing points.
 
@@ -77,10 +95,12 @@ def split_line_at_crossings(line: LineString,
     return segments
 
 
-def reconstruct_3d_coords(coords2d: list[tuple[float,float]],
-                          base2d: list[tuple[float,float]],
-                          base3d: list[tuple[float,float,float]],
-                          tol: float = 1e-6) -> list[tuple[float,float,float]]:
+def reconstruct_3d_coords(
+        coords2d: list[tuple[float,float]],
+        base2d: list[tuple[float,float]],
+        base3d: list[tuple[float,float,float]],
+        tol: float = 1e-6
+    ) -> list[tuple[float,float,float]]:
     """
     Given a 2D split polyline and its original 2D↔3D correspondences,
     linearly interpolate to recover the 3D coordinates.
@@ -120,9 +140,11 @@ def reconstruct_3d_coords(coords2d: list[tuple[float,float]],
     return coords3d
 
 
-def PlanarDiagram_Codes(graph,
-                         view: tuple[float,float] = (45, 30),
-                         crossing_tol: float = 5) -> tuple[list[str], list[str]]:
+def planar_diagram_code(
+        graph,
+        view: tuple[float,float] = (45, 30),
+        crossing_tol: float = 5
+    ) -> tuple[list[str], list[str]]:
     """
     Main function to annotate a graph for planar diagram codes:
 
@@ -142,7 +164,7 @@ def PlanarDiagram_Codes(graph,
     # --- Step 1: Rotate & project nodes ---
     R = compute_rotation_matrix(*view)
     node_positions_2d = {
-        n: tuple((R @ np.array(data['o']))[:2])
+        n: tuple((R @ np.array(data['pos']))[:2])
         for n, data in graph.nodes(data=True)
     }
 
@@ -298,9 +320,8 @@ def PlanarDiagram_Codes(graph,
         
     return V_parts, X_parts,all_meet
 
-
-
  
+
 
 def find_best_view(
     simplified_graph,
@@ -381,7 +402,7 @@ def find_best_view(
         # 2a) Project nodes into 2D
         node_pts = []
         for n, d in H.nodes(data=True):
-            x, y = (R @ np.array(d['o']))[:2]
+            x, y = (R @ np.array(d['pos']))[:2]
             node_pts.append((float(x), float(y)))
 
         # 2b) Build all 2D line segments from down‑sampled edge pts
@@ -475,4 +496,3 @@ def find_best_view(
     # ──────────────────────────────────────────────────────────────
     best_view, _ = optimize_view_sa(simplified_graph, count_with_penalty_2d)
     return best_view
- 

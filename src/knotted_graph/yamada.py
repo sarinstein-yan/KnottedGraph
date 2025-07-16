@@ -4,7 +4,22 @@ import itertools
 import re
 from collections import defaultdict
 from functools import lru_cache
-import igraph as ig 
+import igraph as ig
+
+
+__all__ = [
+    "BouquetGraph",
+    "ThetaGraph",
+    
+    "igraph_multigraph_key",
+    "parse_pd",
+    "build_state_graph",
+    "graph_key",
+    "computeNegami_cached",
+    "optimized_yamada",
+]
+
+
 def igraph_multigraph_key(G):
     node_list = list(G.nodes())
     idx       = {n:i for i,n in enumerate(node_list)}
@@ -35,6 +50,7 @@ def parse_pd(pd_str):
         else:
             crossings.append(labels)
     return vertices, crossings
+
 
 def build_state_graph(vertices, crossings, state):
     G = nx.MultiGraph()
@@ -74,6 +90,7 @@ def build_state_graph(vertices, crossings, state):
             raise ValueError(f"Invalid state {res}")
     return G
 
+
 def graph_key(G):
     # hashable summary: sorted list of (u,v,key)
     eds = []
@@ -81,6 +98,7 @@ def graph_key(G):
         a,b = (u,v) if u<=v else (v,u)
         eds.append((a,b,k))
     return tuple(sorted(eds))
+
 
 # global store so our cached function can recover G
 _graph_store = {}
@@ -102,6 +120,7 @@ def computeNegami_cached(key):
             beta = E - V + mu
             h += ((-x)**r) * (x**mu) * (y**beta)
     return sp.simplify(h)
+
 
 # ——— Main wrapper ———
 def optimized_yamada(pd_code: str):
@@ -144,4 +163,33 @@ def optimized_yamada(pd_code: str):
     return sp.expand(Y * A**(-m))
 
 
- 
+def BouquetGraph(n):
+    """
+    Construct the Bouquet_n graph.
+    
+    Parameters:
+      n : int
+         The number of petals in the Bouquet_n graph.
+    
+    Returns:
+      A NetworkX MultiGraph representing the Bouquet_n graph.
+    """
+    edge_list = [(0, 0) for _ in range(n)]
+    G = nx.from_edgelist(edge_list, nx.MultiGraph)
+    return G
+
+
+def ThetaGraph(n):
+    """
+    Construct the Theta_n graph.
+    
+    Parameters:
+      n : int
+         The number of edges in the Theta_n graph.
+    
+    Returns:
+      A NetworkX MultiGraph representing the Theta_n graph.
+    """
+    edge_list = [(0, 1) for _ in range(n)]
+    G = nx.from_edgelist(edge_list, nx.MultiGraph)
+    return G
