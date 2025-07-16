@@ -15,6 +15,15 @@ from shapely.geometry import Point, LineString, GeometryCollection, MultiPoint
 from shapely.strtree import STRtree
 
 
+__all__ = [
+    "compute_rotation_matrix",
+    "split_line_at_crossings",
+    "reconstruct_3d_coords",
+    "planar_diagram_code",
+    "find_best_view",
+]
+
+
 def compute_rotation_matrix(
         azimuth_deg: float, 
         elevation_deg: float
@@ -311,9 +320,8 @@ def planar_diagram_code(
         
     return V_parts, X_parts,all_meet
 
-
-
  
+
 
 def find_best_view(
     simplified_graph,

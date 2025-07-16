@@ -7,6 +7,14 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from typing import Union
 
+__all__ = [
+    "standard_petersen_layout",
+    "draw_petersen_embedding",
+    "plot_3D_and_2D_projections",
+    "plot_3D_graph",
+    "plot_surface_modes",
+]
+
 
 def plot_3D_and_2D_projections(points):
     """
@@ -194,7 +202,6 @@ def plot_3D_graph(G: Union[nx.Graph, nx.MultiGraph]) -> go.Figure:
     return fig
 
 
-
 def plot_surface_modes(eigvals_tuple, k_vals_tuple, Etol_tuple, nH_coeff):
     """
     Generates a single figure with three subplots (in a row) showing surface modes
@@ -290,7 +297,6 @@ def plot_surface_modes(eigvals_tuple, k_vals_tuple, Etol_tuple, nH_coeff):
     return fig
 
 
-
 def standard_petersen_layout(R_outer=1.2, R_inner=0.7):
     coords = {}
     for i in range(5):
@@ -300,6 +306,7 @@ def standard_petersen_layout(R_outer=1.2, R_inner=0.7):
         angle = 2*math.pi*(i+0.5)/5
         coords[i+5] = (R_inner*math.cos(angle), R_inner*math.sin(angle))
     return coords
+
 
 def draw_petersen_embedding(
         petersen_graph, 

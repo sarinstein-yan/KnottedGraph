@@ -9,6 +9,12 @@ from poly2graph import (
     expand_hz_as_hop_dict,
 )
 
+__all__ = [
+    "hop_dict_by_direction",
+    "H_batch_from_hop_dict",
+    "H_batch",
+]
+
 
 def hop_dict_by_direction(hamil_sympy, direction, k2, k3):
     """
