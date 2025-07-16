@@ -2,6 +2,18 @@
 
 <a target="_blank" href="https://colab.research.google.com/github/sarinstein-yan/Nodal-Knot/blob/main/getting_started.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
 
+<p align="center">
+    <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/threelink_gamma=0.1.svg" 
+    width="600" alt="Exceptional Surface at γ=0.1"/>
+    <br>
+    <a href="https://htmlpreview.github.io/?https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/threelink_gamma=0.1.html" 
+    target="_blank" style="text-decoration:underline;">
+    Click here to view the interactive 3D plot</a>
+</p>
+
+<strong>Figure: Non-Hermitian Nodal Phases —</strong>
+Exceptional Surface (lightgreen) and *Exceptional Skeleton Graph* (the graph within)
+
 `knotted_graph` is a package designed to analyze and visualize the topological features of 2-band, 3-D non-Hermitian nodal systems. In these systems, the eigen-energies become complex, and points in momentum space where the Hamiltonian's eigenvalues and eigenvectors coalesce simultaneously are known as **exceptional points (EPs)**.
 
 In 3D non-Hermitian nodal systems, these EPs usually form an **exceptional surfaces (ES)**. The **skeleton** (i.e. **medial axis**) serves as a topological fingerprint for the non-Hermitian nodal phase. The `NodalSkeleton` class helps in:
@@ -88,7 +100,7 @@ d_x, d_y, d_z = hopf_bloch_vector(gamma)
 # Initialize the NodalSkeleton with the Hamioltonian characteristic
 ske = NodalSkeleton(
     char = (d_x, d_y, d_z),
-    # k_symbols = (kx, ky, kz), # optional, we are naming them *conventionally*
+    # k_symbols = (kx, ky, kz), # optional, we have named them *conventionally*
     # span = ((-np.pi, np.pi), (-np.pi, np.pi), (0, np.pi))
     # dimension = 200
 )
