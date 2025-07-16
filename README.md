@@ -42,23 +42,19 @@ print(kg.__version__)
 
 1. First, one needs to define a 2-band non-Hermitian Hamiltonian in terms of the momentum vector $\vec{k} = (k_x, k_y, k_z)$.
 
-    The class accepts the Hamiltonian "`Characteristic`" in two forms:
+The class accepts the Hamiltonian "`Characteristic`" in two forms:
 
-    - either as a 2x2 `sympy.Matrix`, 
+- either as a 2x2 `sympy.Matrix`, 
 
-    $$
-    H(\vec{k}) = \vec{d}(\vec{k}) \cdot \vec{\sigma}
-    $$
+$$H(\vec{k}) = \vec{d}(\vec{k}) \cdot \vec{\sigma}$$
 
-    where $\vec{\sigma} = (\sigma_x, \sigma_y, \sigma_z)$ are the Pauli matrices,
+where $\vec{\sigma} = (\sigma_x, \sigma_y, \sigma_z)$ are the Pauli matrices,
 
-    - or directly as a tuple the components of the Bloch vector `(sympy.Expr, sympy.Expr, sympy.Expr)`:
+- or directly as a tuple the components of the Bloch vector `(sympy.Expr, sympy.Expr, sympy.Expr)`:
 
-    $$
-    \vec{d}(\vec{k}) = [ d_x(\vec{k}), d_y(\vec{k}), d_z(\vec{k}) ]
-    $$
+$$\vec{d}(\vec{k}) = ( d_x(\vec{k}), d_y(\vec{k}), d_z(\vec{k}) )$$
 
-    The non-Hermiticity arises from complex terms in $\vec{d}(\vec{k})$.
+The non-Hermiticity arises from complex terms in $\vec{d}(\vec{k})$.
 
 2. Next, optionally, specify the k-space region of interest (the `span` parameter) and the resolution of the k-space grid (the `dimension` parameter).
 
@@ -120,13 +116,7 @@ ske.h_k
 
 <span style="color:#d73a49;font-weight:bold">>>></span>
 
-$$
-\left[\begin{matrix}(2 \cos{(2 k_{z})} + 1) (\cos{(k_{x})} + \cos{(k_{y})} + \cos{(k_{z})} - 2) - 2 \sin{(k_{x})} \sin{(k_{y})} & 
-\frac{(2 \cos{(2 k_{z})} + 1)^{2}}{4} - (\cos{(k_{x})} + \cos{(k_{y})} + \cos{(k_{z})} - 2)^{2} - \sin^{2}{(k_{x})} + \sin^{2}{(k_{y})} + 0.1
-\\
-\frac{(2 \cos{(2 k_{z})} + 1)^{2}}{4} - (\cos{(k_{x})} + \cos{(k_{y})} + \cos{(k_{z})} - 2)^{2} - \sin^{2}{(k_{x})} + \sin^{2}{(k_{y})} - 0.1 & 
-- (2 \cos{(2 k_{z})} + 1) (\cos{(k_{x})} + \cos{(k_{y})} + \cos{(k_{z})} - 2) + 2 \sin{(k_{x})} \sin{(k_{y})}\end{matrix}\right]
-$$
+$$\left[\begin{matrix}(2 \cos{(2 k_{z})} + 1) (\cos{(k_{x})} + \cos{(k_{y})} + \cos{(k_{z})} - 2) - 2 \sin{(k_{x})} \sin{(k_{y})} & \frac{(2 \cos{(2 k_{z})} + 1)^{2}}{4} - (\cos{(k_{x})} + \cos{(k_{y})} + \cos{(k_{z})} - 2)^{2} - \sin^{2}{(k_{x})} + \sin^{2}{(k_{y})} + 0.1 \\\\ \frac{(2 \cos{(2 k_{z})} + 1)^{2}}{4} - (\cos{(k_{x})} + \cos{(k_{y})} + \cos{(k_{z})} - 2)^{2} - \sin^{2}{(k_{x})} + \sin^{2}{(k_{y})} - 0.1 & - (2 \cos{(2 k_{z})} + 1) (\cos{(k_{x})} + \cos{(k_{y})} + \cos{(k_{z})} - 2) + 2 \sin{(k_{x})} \sin{(k_{y})}\end{matrix}\right]$$
 
 
 - Bloch vector (`(sp.Expr, sp.Expr, sp.Expr)`):
@@ -325,7 +315,9 @@ if EXPORT_FIGS:
 ```
 
 <p align="center">
-    <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/ES_gamma=0.1.svg" width="600" />
+    <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/ES_gamma=0.1.svg" width="600" alt="Exceptional Surface at γ=0.1"/>
+    <!-- <br>
+    <a href="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/ES_gamma=0.1.html" target="_blank" style="text-decoration:underline;">Download interactive plot (save the .html and open it in a web browser)</a> -->
 </p>
 
 

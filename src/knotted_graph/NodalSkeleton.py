@@ -722,10 +722,10 @@ if __name__ == "__main__":
     print(f"self._skeleton_image: {ske._skeleton_image.shape} {ske._skeleton_image.dtype}")
     print(f"Total edge points: {ske.total_edge_pts}")
     ske.graph_summary()
-    print(f"Check minor: {ske.check_minor(
+    print(f"""Check minor: {ske.check_minor(
+        ske.skeleton_graph_cache.subgraph([1]),
         ske.skeleton_graph_cache, 
-        ske.skeleton_graph_cache.subgraph([0])
-    )}")
+    )}""")
 
     # Check plotting
     pl = pv.Plotter(shape=(1, 2), window_size=(1200, 500), off_screen=True)
