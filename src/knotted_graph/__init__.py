@@ -51,6 +51,7 @@ from poly2graph import (
 )
 
 from knotted_graph.NodalKnot import NodalKnot
+from knotted_graph.NodalSkeleton import NodalSkeleton
 
 from knotted_graph.pd_codes import (
     planar_diagram_code,

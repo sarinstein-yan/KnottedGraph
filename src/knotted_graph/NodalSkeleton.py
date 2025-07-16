@@ -32,6 +32,51 @@ from numpy.typing import NDArray, ArrayLike
 #           i.e. all linestrings' intersections containing not just points
 
 class NodalSkeleton:
+    """
+    Analyzes and visualizes the nodal structures of 2-band non-Hermitian Hamiltonians.
+
+    This class computes the exceptional surface, its skeleton (medial axis),
+    and represents the skeleton as a spatial graph. It provides tools for
+    analyzing the topology of this graph and visualizing both the surface and
+    the graph in 3D k-space.
+
+    Parameters
+    ----------
+    char : Union[sp.Matrix, sp.ImmutableMatrix, Sequence[sp.Expr]]
+        The characterization of the Hamiltonian. This can be a 2x2 SymPy matrix
+        representing the Hamiltonian $H(k)$, or a sequence of three SymPy
+        expressions representing the components of the Bloch vector $\vec{d}(k)$
+        such that $H(k) = \vec{d}(k) \cdot \vec{\sigma}$, where $\vec{\sigma}$
+        are the Pauli matrices.
+    k_symbols : Tuple[sp.Symbol, sp.Symbol, sp.Symbol], optional
+        A tuple of three SymPy symbols for the momentum components (kx, ky, kz).
+        If None, they are inferred from the free symbols in `char`.
+        Defaults to None.
+    span : Tuple[(float, float), 
+                (float, float), 
+                (float, float)], optional
+        The plotting range for (kx, ky, kz) as ((kx_min, kx_max),
+        (ky_min, ky_max), (kz_min, kz_max)). Defaults to
+        ((-np.pi, np.pi), (-np.pi, np.pi), (0, np.pi)).
+    dimension : int, optional
+        The number of points to use for each dimension of the k-space grid.
+        Defaults to 200.
+
+    Attributes
+    ----------
+    h_k : sp.Matrix
+        The 2x2 SymPy matrix of the Hamiltonian.
+    bloch_vec : tuple[sp.Expr, sp.Expr, sp.Expr]
+        The components of the Bloch vector (dx, dy, dz).
+    k_symbols : tuple[sp.Symbol, sp.Symbol, sp.Symbol]
+        The symbols for the momentum components (kx, ky, kz).
+    span : np.ndarray
+        The plotting range for (kx, ky, kz).
+    dimension : int
+        The resolution of the k-space grid.
+    kx_grid, ky_grid, kz_grid : np.ndarray
+        The meshgrid arrays for the k-space coordinates.
+    """
 
     pauli_x = sp.ImmutableDenseMatrix([[0, 1], [1, 0]])
     pauli_y = sp.ImmutableDenseMatrix([[0, -sp.I], [sp.I, 0]])
@@ -153,20 +198,29 @@ class NodalSkeleton:
     @property
     def _interior_mask(self) -> NDArray:
         """The filled interior of the exceptional surface as a binary mask.
-        I.e. the region of pure imaginary energy."""
+        I.e. the region of *pure* imaginary energy."""
         # return self.spectrum.imag != 0
         return self.spectrum.real == 0
     
 
     @cached_property
     def _skeleton_image(self) -> NDArray:
-        """The skeleton (medial axis) of the exceptional surface."""
+        """A binary image of the skeleton (medial axis) of the exceptional 
+        surface."""
         return morph.skeletonize(self._interior_mask, method='lee')
     
 
     @cached_property
     def skeleton_coords(self) -> NDArray:
-        """The k-space coordinates of the exceptional surface skeleton points."""
+        """
+        The k-space coordinates of the points on the skeleton.
+
+        Returns
+        -------
+        NDArray
+            An array of shape (N, 3) where N is the number of points in the
+            skeleton, and each row is the (kx, ky, kz) coordinate of a point.
+        """
         point_mask = np.where(self._skeleton_image)
         return np.asarray([self.kx_grid[point_mask],
                            self.ky_grid[point_mask],
@@ -180,8 +234,33 @@ class NodalSkeleton:
         *,
         skeleton_image: Optional[NDArray] = None
     ) -> nx.MultiGraph:
-        """The skeleton graph of the exceptional surface."""
-        
+        """
+        Computes the graph representation of the exceptional surface's skeleton.
+
+        This method converts the skeleton image into a `networkx.MultiGraph`, where
+        nodes represent endpoints or junctions and edges represent the paths
+        connecting them. The graph can be simplified and smoothed.
+
+        Parameters
+        ----------
+        simplify : bool, optional
+            If True, removes small leaf nodes (pruning) and simplifies edges
+            by removing redundant intermediate points. Defaults to True.
+        smooth_epsilon : int, optional
+            The tolerance for edge smoothing. A larger value results in
+            smoother, less detailed edge paths. Defaults to 4.
+        skeleton_image : Optional[NDArray], optional
+            An external skeleton image to use instead of the one computed
+            internally. If None, the internally computed skeleton is used.
+            Defaults to None.
+
+        Returns
+        -------
+        nx.MultiGraph
+            The graph representation of the skeleton. Node attributes include
+            'pos' (index coordinates), and edge attributes include 'pts'
+            (a list of index coordinates along the edge).
+        """        
         # Check if the arguments match the cached ones
         args = (smooth_epsilon, simplify, id(skeleton_image))
         if self.skeleton_graph_cache is not None and \
@@ -205,19 +284,40 @@ class NodalSkeleton:
 
     @property
     def total_edge_pts(self) -> int:
-        """The total number of edge points in the skeleton graph."""
+        """
+        The total number of points constituting the edges of the skeleton graph.
+
+        Returns
+        -------
+        int
+            The sum of the number of points in all edges of the cached
+            skeleton graph.
+        """
         return total_edge_pts(self.skeleton_graph_cache or self.skeleton_graph())
 
 
     def clear_cache(self):
-        """Clear the cached skeleton graph."""
+        """Clears the cached skeleton graph and related PyVista data."""
         self.skeleton_graph_cache = None
         self.skeleton_graph_cache_args = None
+        self._pv_data_args = None
 
 
     @cached_property
     def spectrum_volume_pv(self) -> pv.PolyData:
-        """The real part of the spectrum as a PyVista PolyData object."""
+        """
+        A PyVista grid object containing the complex spectrum data over k-space.
+
+        This grid stores the real and imaginary parts of the energy spectrum,
+        the band gap, and a helper scalar field for isosurfacing the
+        exceptional surface.
+
+        Returns
+        -------
+        pv.PolyData
+            A PyVista `ImageData` object with point data for 'real', 'imag',
+            'gap', and 'ES_helper'.
+        """
         engy = self.spectrum
         volume = pv.ImageData(
             dimensions=engy.shape,
@@ -234,7 +334,17 @@ class NodalSkeleton:
 
     @cached_property
     def exceptional_surface_pv(self) -> pv.PolyData:
-        """The exceptional surface ad a PyVista PolyData object."""
+        """
+        The exceptional surface as a PyVista mesh object.
+
+        This is computed by taking an isosurface of the spectrum volume where
+        the real and imaginary parts of the energy are equal.
+
+        Returns
+        -------
+        pv.PolyData
+            A PyVista mesh (`PolyData`) representing the exceptional surface.
+        """
         return self.spectrum_volume_pv.contour(
             isosurfaces=[0.], scalars='ES_helper'
         )
@@ -254,7 +364,43 @@ class NodalSkeleton:
         silh_decimation: float = 0.2,
         silh_kwargs: Dict = {},
     ) -> pv.Plotter:
-        """Plot the exceptional surface."""
+        """
+        Plots the exceptional surface in 3D k-space using PyVista.
+
+        Parameters
+        ----------
+        plotter : pv.Plotter, optional
+            An existing PyVista plotter object to add the mesh to. If None, a new
+            plotter is created. Defaults to None.
+        surf_color : Any, optional
+            Color of the surface. Defaults to "#12a47f".
+        surf_opacity : float, optional
+            Opacity of the surface. Defaults to 0.9.
+        surf_decimation : float, optional
+            Fraction of polygons to keep for the surface mesh to improve
+            rendering performance. Value between 0.0 and 1.0. Defaults to 0.2.
+        surf_kwargs : Dict, optional
+            Additional keyword arguments passed to `plotter.add_mesh` for the surface.
+        add_silhouettes : bool, optional
+            If True, adds 2D projections (silhouettes) of the surface onto the
+            boundary planes. Defaults to False.
+        silh_color : Any, optional
+            Color of the silhouettes. Defaults to 'gray'.
+        silh_opacity : float, optional
+            Opacity of the silhouettes. Defaults to 0.2.
+        silh_origins : Optional[ArrayLike | str], optional
+            Origins for the projection planes. Can be a list of three origins,
+            'auto' to use the k-space origin, or None. Defaults to None.
+        silh_decimation : float, optional
+            Decimation factor for the silhouette meshes. Defaults to 0.2.
+        silh_kwargs : Dict, optional
+            Additional keyword arguments for the silhouette meshes.
+
+        Returns
+        -------
+        pv.Plotter
+            The PyVista plotter object with the surface mesh added.
+        """
         if plotter is None:
             plotter = pv.Plotter()
         
@@ -296,7 +442,7 @@ class NodalSkeleton:
     
 
     def _idx_to_coord(self, indices: ArrayLike) -> NDArray:
-        """Convert indices to coordinates in the k-space."""
+        """Converts grid indices to k-space coordinates."""
         return idx_to_coord(indices, self.spacing, self.origin)
 
 
@@ -305,7 +451,7 @@ class NodalSkeleton:
             node_radius: float = 0.08,
             tube_radius: float = 0.04,
         ) -> Tuple[pv.MultiBlock, pv.PolyData]:
-        """Prepare the spatial graph data for plotting."""
+        """Prepares the spatial graph data as PyVista objects for plotting."""
         args = (tube_radius, node_radius)
         if self._pv_data_args == args:
             return self.node_glyphs_pv, self.edge_tubes_pv
@@ -353,7 +499,45 @@ class NodalSkeleton:
             silh_origins: Optional[ArrayLike | str] = None,
             silh_kwargs: Dict = {},
         ) -> pv.Plotter:
-        """Plot the skeleton graph."""
+        """
+        Plots the skeleton graph in 3D k-space using PyVista.
+
+        Nodes are represented as spheres and edges as tubes.
+
+        Parameters
+        ----------
+        plotter : pv.Plotter, optional
+            An existing PyVista plotter. If None, a new one is created.
+        add_nodes : bool, optional
+            Whether to plot the graph nodes. Defaults to True.
+        add_edges : bool, optional
+            Whether to plot the graph edges. Defaults to True.
+        node_radius : float, optional
+            Radius of the spheres representing nodes. Defaults to 0.08.
+        tube_radius : float, optional
+            Radius of the tubes representing edges. Defaults to 0.04.
+        node_color : Any, optional
+            Color of the nodes. Defaults to '#A60628'.
+        edge_color : Any, optional
+            Color of the edges. Defaults to '#348ABD'.
+        node_kwargs : Dict, optional
+            Additional keyword arguments for plotting nodes.
+        edge_kwargs : Dict, optional
+            Additional keyword arguments for plotting edges.
+        add_silhouettes : bool, optional
+            If True, adds 2D projections of the graph. Defaults to False.
+        silh_color : Any, optional
+            Color of the silhouettes. Defaults to 'gray'.
+        silh_origins : Optional[ArrayLike | str], optional
+            Origins for the projection planes. Defaults to None.
+        silh_kwargs : Dict, optional
+            Additional keyword arguments for the silhouette meshes.
+
+        Returns
+        -------
+        pv.Plotter
+            The PyVista plotter object with the graph added.
+        """
         if plotter is None:
             plotter = pv.Plotter()
 
@@ -403,7 +587,19 @@ class NodalSkeleton:
     def graph_summary(
             self, 
             G: Optional[nx.Graph | nx.MultiGraph] = None
-        ) -> None:        
+        ) -> None:
+        """
+        Prints a summary of the skeleton graph's properties.
+
+        Displays information such as the number of nodes and edges, connectivity,
+        and the degree distribution.
+
+        Parameters
+        ----------
+        G : nx.Graph or nx.MultiGraph, optional
+            The graph to summarize. If None, the cached skeleton graph is used.
+            Defaults to None.
+        """
         if G is None: G = self.skeleton_graph_cache
         # Basic properties
         data = []
@@ -448,11 +644,15 @@ class NodalSkeleton:
         host_graph: nx.MultiGraph | nx.Graph,
         minor_graph: nx.Graph
     ) -> Any:
-        """Check whether `minor_graph` is a minor of `host_graph`.
+        """
+        Checks whether `minor_graph` is a minor of `host_graph`.
+
+        This function uses the `minorminer` library to find an embedding of
+        `minor_graph` within `host_graph`.
 
         Parameters
         ----------
-        host_graph : nx.MultiGraph | nx.Graph
+        host_graph : nx.MultiGraph or nx.Graph
             The graph in which to search for the minor.
         minor_graph : nx.Graph
             The graph to be checked as a minor.
@@ -460,8 +660,8 @@ class NodalSkeleton:
         Returns
         -------
         Any
-            The embedding mapping if `minor_graph` is a minor of `host_graph`,
-            otherwise None.
+            The embedding mapping (a dictionary) if `minor_graph` is a minor
+            of `host_graph`; otherwise, returns None.
         """
         # Attempt to find an embedding of minor_graph in host_graph.
         embedding = minorminer.find_embedding(minor_graph, host_graph)
