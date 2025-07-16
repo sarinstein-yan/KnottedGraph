@@ -3,23 +3,24 @@ import sympy as sp
 import networkx as nx
 import skimage.morphology as morph
 from poly2graph import skeleton2graph
-import minorminer
-import logging
 from functools import cached_property, lru_cache
 from tabulate import tabulate
+import minorminer
+import logging
 
 import pyvista as pv
-import matplotlib.pyplot as plt
 
 from knotted_graph.util import (
     remove_leaf_nodes,
     simplify_edges,
     smooth_edges,
-    is_PT_symmetric,
     total_edge_pts,
+    is_PT_symmetric,
+    is_trivalent,
+    idx_to_coord,
 )
 
-from typing import List, Tuple, Union, Optional, Any, Dict, Callable, Sequence
+from typing import Tuple, Union, Optional, Any, Dict, Sequence
 from numpy.typing import NDArray, ArrayLike
 
 
@@ -265,12 +266,12 @@ class NodalSkeleton:
             elif silh_origins is None:
                 silh_origins = (None, None, None)
 
-            silh_kwargs = dict(
-                color=silh_color,
-                opacity=silh_opacity,
-                silhouette=True,
+            silh_kwargs = {
+                "color": silh_color,
+                "opacity": silh_opacity,
+                "silhouette": True,
                 **silh_kwargs
-            )
+            }
 
             for (n, o) in zip(np.eye(3), silh_origins):
                 proj = ES.project_points_to_plane(normal=n, origin=o)
@@ -280,22 +281,24 @@ class NodalSkeleton:
         ES_deci = ES.decimate_pro(
             surf_decimation, preserve_topology=True
         )
-        surf_kwargs = dict(
-            color=surf_color,
-            opacity=surf_opacity,
-            smooth_shading=True,
-            specular=0.5,
-            specular_power=20,
-            metallic=1.,
+        surf_kwargs = {
+            "color": surf_color,
+            "opacity": surf_opacity,
+            "smooth_shading": True,
+            "specular": 0.5,
+            "specular_power": 20,
+            "metallic": 1.,
             **surf_kwargs
-        )
+        }
         plotter.add_mesh(ES_deci, **surf_kwargs)
 
         return plotter
     
+
     def _idx_to_coord(self, indices: ArrayLike) -> NDArray:
         """Convert indices to coordinates in the k-space."""
         return idx_to_coord(indices, self.spacing, self.origin)
+
 
     def _pyvista_graph_data(
             self,
@@ -312,8 +315,6 @@ class NodalSkeleton:
         nodes_pos = self._idx_to_coord(
             np.asarray([n['pos'] for n in G.nodes.values()])
         )
-        edges_pts = [self._idx_to_coord(e['pts']) for e in G.edges.values()]
-        
         node_data = pv.PolyData(nodes_pos)
         node_glyphs = node_data.glyph(
             orient=False,
@@ -321,14 +322,15 @@ class NodalSkeleton:
             geom=pv.Sphere(radius=node_radius),
         )
 
+        edges_pts = [self._idx_to_coord(e['pts']) for e in G.edges.values()]
         edge_data = [pv.Spline(e, 2*len(e)) for e in edges_pts]
         edge_tubes = pv.MultiBlock()
         for e in edge_data:
             edge_tubes.append(e.tube(radius=tube_radius))
         
         self.node_data_pv = node_data
-        self.edge_data_pv = edge_data
         self.node_glyphs_pv = node_glyphs
+        self.edge_data_pv = edge_data
         self.edge_tubes_pv = edge_tubes
         # Update the cache key
         self._pv_data_args = args
@@ -355,24 +357,23 @@ class NodalSkeleton:
         if plotter is None:
             plotter = pv.Plotter()
 
-        comm = dict(
-            smooth_shading=True,
-            specular=0.5,
-            specular_power=20,
-            metallic=1.,
-        )
+        comm = {
+            "opacity": 1.,
+            "smooth_shading": True,
+            "specular": 0.5,
+            "specular_power": 20,
+            "metallic": 1.,
+        }
         
         node_glyphs, edge_tubes = \
             self._pyvista_graph_data(node_radius, tube_radius)
             
         if add_edges:
-            edge_kwargs = dict(color=edge_color, opacity=.9,
-                                **comm, **edge_kwargs)
+            edge_kwargs = {'color': edge_color, **comm, **edge_kwargs}
             plotter.add_mesh(edge_tubes, **edge_kwargs)
 
         if add_nodes:
-            node_kwargs = dict(color=node_color, opacity=1.,
-                                **comm, **node_kwargs)
+            node_kwargs = {'color': node_color, **comm, **node_kwargs}
             plotter.add_mesh(node_glyphs, **node_kwargs)
         
         if add_silhouettes:
@@ -381,11 +382,11 @@ class NodalSkeleton:
             elif silh_origins is None:
                 silh_origins = (None, None, None)
             
-            silh_kwargs = dict(
-                color=silh_color,
-                # silhouette=True,
+            silh_kwargs = {
+                'color': silh_color,
+                # 'silhouette': True,
                 **silh_kwargs
-            )
+            }
             def _add_silhouette(poly, origins, **kwargs):
                 for (n, o) in zip(np.eye(3), origins):
                     proj = poly.project_points_to_plane(normal=n, origin=o)
@@ -475,7 +476,9 @@ class NodalSkeleton:
 
 
 if __name__ == "__main__":
+
     ### Example usage
+
     # Hamiltonian of a hoft-link metal
     kx, ky, kz = sp.symbols('k_x k_y k_z', real=True)
     z = sp.cos(2*kz) + sp.Rational(1, 2) \
@@ -485,10 +488,12 @@ if __name__ == "__main__":
     cx = sp.simplify(sp.re(f))
     cz = sp.simplify(sp.im(f))
 
-    nHerm = .1
+
+    nHerm = .2
     char = (cx, nHerm*sp.I, cz)
     # Create a NodalSkeleton instance
     ske = NodalSkeleton(char)
+
 
     # Check properties
     print(f"self.h_k: {ske.h_k}")
@@ -508,11 +513,9 @@ if __name__ == "__main__":
     print(f"self.kz_max: {ske.kz_max}")
     print(f"self.spacing: {ske.spacing}")
     print(f"self.origin: {ske.origin}")
-    print(f"self.spectrum: {ske.spectrum.shape} ({ske.spectrum.dtype})")
-    print(f"self._skeleton_image: {ske._skeleton_image.shape} ({ske._skeleton_image.dtype})")
+    print(f"self.spectrum: {ske.spectrum.shape} {ske.spectrum.dtype}")
+    print(f"self._skeleton_image: {ske._skeleton_image.shape} {ske._skeleton_image.dtype}")
     print(f"Total edge points: {ske.total_edge_pts}")
-    print(f"Skeleton graph: {ske.skeleton_graph_cache.number_of_nodes()} nodes, "
-        f"{ske.skeleton_graph_cache.number_of_edges()} edges")
     ske.graph_summary()
     print(f"Check minor: {ske.check_minor(
         ske.skeleton_graph_cache, 
@@ -520,24 +523,11 @@ if __name__ == "__main__":
     )}")
 
     # Check plotting
-    pl = pv.Plotter(shape=(1, 2))
+    pl = pv.Plotter(shape=(1, 2), window_size=(1200, 500), off_screen=True)
     pl.link_views()
-    silh_origins = np.diag([-np.pi, -np.pi, 0])
-
     pl.subplot(0, 0)
-    pl = ske.plot_exceptional_surface(plotter=pl, 
-                                    add_silhouettes=True,
-                                    silh_origins=silh_origins)
-    pl.add_bounding_box()
-
+    ske.plot_exceptional_surface(plotter=pl)
     pl.subplot(0, 1)
-    pl = ske.plot_skeleton_graph(plotter=pl, 
-                                add_silhouettes=True,
-                                silh_origins=silh_origins)
-    pl.show_bounds(xtitle="k_x", ytitle="k_y", ztitle="k_z")
-
-    pl.enable_depth_peeling()
-    pl.enable_eye_dome_lighting()
-    pl.view_isometric()
-
+    ske.plot_skeleton_graph(plotter=pl)
     pl.close()
+    print("Plotting done. Use `pl.show()` to display the plot in a notebook.")

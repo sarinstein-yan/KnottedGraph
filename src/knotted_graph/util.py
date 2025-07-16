@@ -2,14 +2,17 @@ import numpy as np
 import sympy as sp
 import networkx as nx
 from rdp import rdp, pldist
-from typing import Any, Tuple, Optional, Sequence
+
+import logging
+from typing import List, Tuple, Iterable, Set, Optional, Any, Sequence, TypeVar
 from numpy.typing import NDArray, ArrayLike
+kSymbols = TypeVar('kSymbols', bound=Tuple[sp.Symbol, sp.Symbol, sp.Symbol])
 
 
 # PT-operator
 def PT(
     h: sp.Matrix, 
-    k_symbols: Optional[Tuple[sp.Symbol, sp.Symbol, sp.Symbol]] = None,
+    k_symbols: Optional[kSymbols] = None,
 ) -> sp.Matrix:
     """Apply the PT-symmetry operation to a 2x2 matrix.
 
@@ -17,7 +20,7 @@ def PT(
     ----------
     h : sp.Matrix
         The 2x2 matrix to be transformed.
-    k_symbols : Optional[Tuple[sp.Symbol, sp.Symbol, sp.Symbol]], optional
+    k_symbols : (sp.Symbol, sp.Symbol, sp.Symbol), optional
         The momentum space coordinates, by default None, which assumes
         only momentum symbols are present in the matrix.
 
@@ -34,7 +37,7 @@ def PT(
 
 def is_PT_symmetric(
         h: sp.Matrix, 
-        k_symbols: Optional[Tuple[sp.Symbol, sp.Symbol, sp.Symbol]] = None
+        k_symbols: Optional[kSymbols] = None
     ) -> bool:
     """Check if a 2x2 Operator is PT-symmetric.
 
@@ -163,6 +166,9 @@ def remove_leaf_nodes(
     return H
 
 
+
+# Helpers for simplify_edges
+
 def _append_edge_pts(path, edge_pts):
     """
     Append the list edge_pts to path, but
@@ -185,137 +191,180 @@ def _append_edge_pts(path, edge_pts):
         # this means something’s really off: 
         # neither end of pts matches the current path end
         raise RuntimeError(
-            "Edge segment doesn’t connect: "
-            f"path[-1]={path[-1]}, appended edge endpoints={pts[0],pts[-1]}"
+            "Edge segment doesn’t connect contiguously:\n"
+            f"  current tail = {path[-1]}\n"
+            f"  segment ends = ({pts[0]}, {pts[-1]})"
         )
 
 
-def simplify_edges(
-    G: nx.MultiGraph
-) -> nx.MultiGraph:
-    """
-    Collapse degree-2 chains in each connected component of G, 
-    retaining node and edge points along paths.
-    - For components with any nodes of degree > 2: treat those 
-    nodes as junctions and collapse chains between them.
-    - For components without any nodes of degree > 2: collapse 
-    the entire component into a single self-loop on a chosen 
-    representative node, preserving the full path points.
+
+def _edge_tag(u: int, v: int, key: int) -> Tuple[int, int, int]:
+    """Return a canonical tag for a multiedge so that (u,v,key) ≡ (v,u,key)."""
+    return (u, v, key) if u <= v else (v, u, key)
+
+
+def _has_cycles(G: nx.MultiGraph) -> bool:
+    """Quick check for *any* cycle in *G*."""
+    if G.number_of_edges() == 0:
+        return False
+    try:
+        nx.find_cycle(G)
+        return True
+    except nx.NetworkXNoCycle:
+        return False
+
+
+def _collapse_component_with_junctions(
+    G: nx.MultiGraph, comp: Set[int], H: nx.MultiGraph
+) -> None:
+    """Collapse chains inside *comp* that contains ≥1 junction (deg>2) nodes."""
+
+    junctions = {n for n in comp if G.degree(n) > 2}
+    # 1. Copy junctions verbatim to *H*
+    for j in junctions:
+        H.add_node(j, **G.nodes[j])
+
+    seen_edges: Set[Tuple[int, int, int]] = set()
+
+    for j in junctions:
+        for nbr, edict in G.adj[j].items():
+            for key, ea in edict.items():
+                tag = _edge_tag(j, nbr, key)
+                if tag in seen_edges:
+                    continue
+                seen_edges.add(tag)
+
+                # --- collect path points from j to the next junction ---
+                path_pts: List[NDArray] = [G.nodes[j]["pos"]]
+                _append_edge_pts(path_pts, ea.get("pts", []))
+
+                prev, cur = j, nbr
+                # Walk until we land on a junction or get stuck.
+                while cur not in junctions and G.degree(cur) == 2:
+                    path_pts.append(G.nodes[cur]["pos"])
+
+                    # Step to the only neighbour different from *prev*
+                    nxt_candidates = [n for n in G.neighbors(cur) if n != prev]
+                    if not nxt_candidates:
+                        break  # dead‑end
+                    nxt = nxt_candidates[0]
+
+                    # add (cur, nxt) edge points (first non‑visited multiedge)
+                    for k2, ea2 in G[cur][nxt].items():
+                        tag2 = _edge_tag(cur, nxt, k2)
+                        if tag2 not in seen_edges:
+                            seen_edges.add(tag2)
+                            _append_edge_pts(path_pts, ea2.get("pts", []))
+                            break
+                    prev, cur = cur, nxt
+
+                # close the chain on final node *cur*
+                path_pts.append(G.nodes[cur]["pos"])
+                if cur not in H:
+                    H.add_node(cur, **G.nodes[cur])
+
+                H.add_edge(j, cur, pts=np.asarray(path_pts))
+
+
+def _collapse_cycle_component(
+    G: nx.MultiGraph, comp: Set[int], H: nx.MultiGraph
+) -> None:
+    """Collapse a component with *no* junctions (all deg≤2) to a self‑loop."""
+
+    # Choose a representative node (prefer a degree‑2 node if available).
+    rep = next((n for n in comp if G.degree(n) == 2), None) or next(iter(comp))
+    H.add_node(rep, **G.nodes[rep])
+
+    # Nothing to collapse if isolated node.
+    if G.degree(rep) == 0:
+        return
+
+    path_pts: List[NDArray] = [G.nodes[rep]["pos"]]
+    seen_edges: Set[Tuple[int, int, int]] = set()
+
+    # Initial step: pick an arbitrary outgoing edge (rep, cur)
+    prev, cur = rep, next(iter(G.neighbors(rep)))
+
+    for key, ea in G[prev][cur].items():
+        tag = _edge_tag(prev, cur, key)
+        if tag not in seen_edges:
+            seen_edges.add(tag)
+            _append_edge_pts(path_pts, ea.get("pts", []))
+            break
+
+    # Walk around the cycle until we return to *rep*
+    while cur != rep:
+        path_pts.append(G.nodes[cur]["pos"])
+        nxt_candidates = [n for n in G.neighbors(cur) if n != prev]
+        if not nxt_candidates:  # open chain – shouldn’t happen for a cycle comp
+            break
+        nxt = nxt_candidates[0]
+
+        for k2, ea2 in G[cur][nxt].items():
+            tag2 = _edge_tag(cur, nxt, k2)
+            if tag2 not in seen_edges:
+                seen_edges.add(tag2)
+                _append_edge_pts(path_pts, ea2.get("pts", []))
+                break
+        prev, cur = cur, nxt
+
+    # Close the loop
+    path_pts.append(G.nodes[rep]["pos"])
+
+    H.add_edge(rep, rep, pts=np.asarray(path_pts))
+
+
+# Public API
+def simplify_edges(G: nx.MultiGraph) -> nx.MultiGraph:
+    """Collapse degree‑2 chains in *G* while preserving geometry.
+
+    The algorithm operates *per connected component*:
+    1. **Early exit** – If *G* contains **no cycles**, return a copy of the
+       node‑only graph (no edges).
+    2. Components that include *junction* nodes (degree > 2) have each chain
+       between junctions collapsed to a *single* multiedge storing all the
+       collected poly‑line points.
+    3. Components with *no* junctions (i.e. simple cycles / isolated edges)
+       are reduced to a single self‑loop on a representative node while
+       preserving the entire path.
 
     Parameters
     ----------
     G : nx.MultiGraph
-        The input graph. Each node should have a 'pos' attribute, 
-        and each edge may have a 'pts' attribute.
+        Input graph. Each node should have a **pos** attribute containing its
+        3‑vector coordinates. Each edge may optionally have a **pts** attribute
+        (sequence of points *between* the two endpoints).
 
     Returns
     -------
     nx.MultiGraph
-        A new graph with degree-2 chains collapsed. Node and edge 
-        points are preserved along the collapsed paths.
+        A new graph with the same geometric information but with chains of
+        degree‑2 nodes collapsed. Node labels are re‑indexed starting from 1.
     """
-    G = nx.MultiGraph(G)
+
+    G = nx.MultiGraph(G)  # work on a copy to keep the original intact.
+
+    # (0) Early‑exit: the graph is empty or acyclic – no knot / link structure.
+    if not _has_cycles(G):
+        logging.info("No cycles found – returning node-only graph."
+                     " May imply no knot / link structure.")
+        H = nx.MultiGraph()
+        for n, data in G.nodes(data=True):
+            H.add_node(n, **data)
+        return nx.convert_node_labels_to_integers(H, first_label=1)
+
+    # (1) Process each connected component independently.
     H = nx.MultiGraph()
-
-    def _tag(u, v, key):
-        return (u, v, key) if u <= v else (v, u, key)
-
     for comp in nx.connected_components(G):
-        # map degrees
-        degmap = {n: G.degree(n) for n in comp}
-        junctions = {n for n, d in degmap.items() if d > 2}
-
-        if junctions:
-            # standard collapse for components with junctions
-            for j in junctions:
-                H.add_node(j)
-                H.nodes[j]['pos'] = G.nodes[j].get('pos')
-
-            seen_edges = set()
-            for j in junctions:
-                for nbr, edict in G.adj[j].items():
-                    for key, ea in edict.items():
-                        tag = _tag(j, nbr, key)
-                        if tag in seen_edges:
-                            continue
-                        seen_edges.add(tag)
-
-                        # collect chain from j to next junction
-                        path_pts = [G.nodes[j].get('pos')]
-                        _append_edge_pts(path_pts, ea.get('pts', []))
-
-                        prev, cur = j, nbr
-                        while cur not in junctions and G.degree(cur) == 2:
-                            path_pts.append(G.nodes[cur].get('pos'))
-                            # step to the other neighbor
-                            #nxt = [n for n in G.neighbors(cur) if n != prev][0]
-                            # look for the one neighbor that isn’t `prev`
-                            candidates = [n for n in G.neighbors(cur) if n != prev]
-                            if not candidates:
-                                # no further neighbor → stop collapsing this chain
-                                break
-                            nxt = candidates[0]
-
-                            for k2, ea2 in G[cur][nxt].items():
-                                t2 = _tag(cur, nxt, k2)
-                                if t2 not in seen_edges:
-                                    seen_edges.add(t2)
-                                    _append_edge_pts(path_pts, ea2.get('pts', []))
-                                    break
-                            prev, cur = cur, nxt
-
-                        # append final node
-                        path_pts.append(G.nodes[cur].get('pos'))
-                        if cur not in H.nodes:
-                            H.add_node(cur)
-                            H.nodes[cur]['pos'] = G.nodes[cur].get('pos')
-
-                        path_pts = np.asarray(path_pts)
-                        H.add_edge(j, cur, pts=path_pts)
+        # Any node with deg>2 marks a junction.
+        if any(G.degree(n) > 2 for n in comp):
+            _collapse_component_with_junctions(G, comp, H)
         else:
-            # no junctions: make one self-loop
-            # choose representative (prefer deg-2)
-            rep = next((n for n, d in degmap.items() if d == 2), None) or next(iter(comp))
-            H.add_node(rep)
-            H.nodes[rep]['pos'] = G.nodes[rep].get('pos')
+            _collapse_cycle_component(G, comp, H)
 
-            # start path at rep
-            path_pts = [G.nodes[rep].get('pos')]
-            seen_edges = set()
-            nbrs = list(G.neighbors(rep))
-            if nbrs:
-                prev, cur = rep, nbrs[0]
-                # record first edge
-                for key, ea in G[prev][cur].items():
-                    tag = _tag(prev, cur, key)
-                    if tag not in seen_edges:
-                        seen_edges.add(tag)
-                        _append_edge_pts(path_pts, ea.get('pts', []))
-                        break
-                # walk until back to rep
-                while cur != rep:
-                    path_pts.append(G.nodes[cur].get('pos'))
-                    nxts = [n for n in G.neighbors(cur) if n != prev]
-                    if not nxts:
-                        break
-                    nxt = nxts[0]
-                    for k2, ea2 in G[cur][nxt].items():
-                        t2 = _tag(cur, nxt, k2)
-                        if t2 not in seen_edges:
-                            seen_edges.add(t2)
-                            _append_edge_pts(path_pts, ea2.get('pts', []))
-                            break
-                    prev, cur = cur, nxt
-                # close loop
-                path_pts.append(G.nodes[rep].get('pos'))
+    # (2) Relabel nodes for compactness and deterministic order.
+    return nx.convert_node_labels_to_integers(H, first_label=1, ordering="sorted")
 
-            path_pts = np.asarray(path_pts)
-            H.add_edge(rep, rep, pts=path_pts)
-
-    H = nx.convert_node_labels_to_integers(
-        H, first_label=1, ordering='sorted'
-    )
-    return H
 
 
 # def get_edge_pts(G):
