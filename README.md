@@ -4,15 +4,15 @@
 
 <div align="center" style="display: flex; flex-direction: row; justify-content: center; gap: 20px;">
     <div>
-        <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/dev/assets/threelink_gamma=0.1.svg" 
+        <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/threelink_gamma=0.1.svg" 
         width="600" alt="Exceptional Surface at γ=0.1"/>
         <br>
-        <a href="https://htmlpreview.github.io/?https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/dev/assets/threelink_gamma=0.1.html" 
+        <a href="https://htmlpreview.github.io/?https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/threelink_gamma=0.1.html" 
         target="_blank" style="text-decoration:underline;">
         Click here to view the interactive 3D plot</a>
     </div>
     <div>
-        <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/dev/assets/threelink_gamma=0.1.gif" 
+        <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/threelink_gamma=0.1.gif" 
         width="600" alt="Exceptional Surface Animation at γ=0.1"/>
     </div>
 </div>
