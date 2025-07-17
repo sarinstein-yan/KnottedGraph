@@ -13,6 +13,7 @@ __all__ = [
     "is_PT_symmetric",
     "is_trivalent",
     "idx_to_coord",
+    "get_all_edge_pts",
     "total_edge_pts",
     "smooth_edges",
     "remove_leaf_nodes",
@@ -97,12 +98,20 @@ def idx_to_coord(
         return array * spacing + origin
 
 
+def get_all_edge_pts(
+    G: nx.MultiGraph,
+) -> NDArray:
+    """Get all edge points from the graph as a list of arrays."""
+    edge_pts_list = [G[u][v][k]['pts']
+                        for u, v, k in G.edges(keys=True)]
+    return np.concatenate(edge_pts_list)
+
+
 def total_edge_pts(
     G: nx.MultiGraph,
 ) -> int:
     """Count the total number of points in the graph's edges."""
-    return sum(len(G[u][v][key]['pts'])
-               for u, v, key in G.edges(keys=True))
+    return len(get_all_edge_pts(G))
 
 
 def smooth_edges(
