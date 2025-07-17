@@ -479,7 +479,7 @@ class NodalSkeleton:
         edge_data = [pv.Spline(e, 2*len(e)) for e in edges_pts]
         edge_tubes = pv.MultiBlock([
             e.tube(radius=tube_radius) for e in edge_data
-        ]).combine()
+        ])
         
         self.node_data_pv = node_data
         self.node_glyphs_pv = node_glyphs
@@ -588,7 +588,8 @@ class NodalSkeleton:
                     plotter.add_mesh(proj, **kwargs)
             
             if add_edges:
-                _add_silhouette(edge_tubes, silh_origins, opacity=.2, **silh_kwargs)
+                for e in edge_tubes:
+                    _add_silhouette(e, silh_origins, opacity=.2, **silh_kwargs)
             if add_nodes:
                 _add_silhouette(node_glyphs, silh_origins, opacity=1., **silh_kwargs)
         
