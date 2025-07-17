@@ -123,8 +123,6 @@ class NodalSkeleton:
         
         # check Hamiltonian properties
         self.is_Hermitian = sp.simplify(self.h_k - self.h_k.H) == sp.zeros(2, 2)
-        # if self.is_Hermitian:
-        #     raise ValueError("The Hamiltonian must be non-Hermitian.")
         self.is_PT_symmetric = is_PT_symmetric(self.h_k)
         
         # lambda functions of the bloch vector components
@@ -207,8 +205,13 @@ class NodalSkeleton:
     def _skeleton_image(self) -> NDArray:
         """A binary image of the skeleton (medial axis) of the exceptional 
         surface."""
-        return morph.skeletonize(self._interior_mask, method='lee')
-    
+        image = morph.skeletonize(self._interior_mask, method='lee')
+        if np.sum(image) == 0:
+            raise ValueError(
+                "The skeleton image is empty. "
+                "Ensure the Hamiltonian has a non-empty exceptional surface."
+            )
+        return image
 
     @cached_property
     def skeleton_coords(self) -> NDArray:
@@ -275,6 +278,7 @@ class NodalSkeleton:
             G = simplify_edges(G)
         G = smooth_edges(G, epsilon=smooth_epsilon, copy=False)
         G.graph['is_trivalent'] = is_trivalent(G)
+        self.is_graph_trivalent = G.graph['is_trivalent']
 
         # cache the result
         self.skeleton_graph_cache = G
@@ -324,8 +328,8 @@ class NodalSkeleton:
             spacing=self.spacing,
             origin=self.origin
         )
-        volume.point_data['real'] = engy.real.ravel(order='F')
         volume.point_data['imag'] = engy.imag.ravel(order='F')
+        volume.point_data['real'] = engy.real.ravel(order='F')
         volume.point_data['gap'] = self.band_gap.ravel(order='F')
         helper = np.abs(engy.real) - np.abs(engy.imag)
         volume.point_data['ES_helper'] = helper.ravel(order='F')
@@ -429,6 +433,7 @@ class NodalSkeleton:
         )
         surf_kwargs = {
             "color": surf_color,
+            "label": "Exceptional Surface",
             "opacity": surf_opacity,
             "smooth_shading": True,
             "specular": 0.5,
@@ -553,11 +558,15 @@ class NodalSkeleton:
             self._pyvista_graph_data(node_radius, tube_radius)
             
         if add_edges:
-            edge_kwargs = {'color': edge_color, **comm, **edge_kwargs}
+            edge_kwargs = {'color': edge_color, 
+                           'label': 'Graph Edge',
+                           **comm, **edge_kwargs}
             plotter.add_mesh(edge_tubes, **edge_kwargs)
 
         if add_nodes:
-            node_kwargs = {'color': node_color, **comm, **node_kwargs}
+            node_kwargs = {'color': node_color, 
+                           'label': 'Graph Node',
+                           **comm, **node_kwargs}
             plotter.add_mesh(node_glyphs, **node_kwargs)
         
         if add_silhouettes:
