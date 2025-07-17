@@ -586,9 +586,11 @@ class NodalSkeleton:
                 for (n, o) in zip(np.eye(3), origins):
                     proj = poly.project_points_to_plane(normal=n, origin=o)
                     plotter.add_mesh(proj, **kwargs)
-
-            _add_silhouette(edge_tubes, silh_origins, opacity=.2, **silh_kwargs)
-            _add_silhouette(node_glyphs, silh_origins, opacity=1., **silh_kwargs)
+            
+            if add_edges:
+                _add_silhouette(edge_tubes, silh_origins, opacity=.2, **silh_kwargs)
+            if add_nodes:
+                _add_silhouette(node_glyphs, silh_origins, opacity=1., **silh_kwargs)
         
         return plotter
 
@@ -648,10 +650,10 @@ class NodalSkeleton:
                            tablefmt="github"))
 
 
-    @staticmethod
     def check_minor(
-        host_graph: nx.MultiGraph | nx.Graph,
-        minor_graph: nx.Graph
+        self,
+        minor_graph: nx.Graph,
+        host_graph: Optional[nx.MultiGraph | nx.Graph] = None,
     ) -> Any:
         """
         Checks whether `minor_graph` is a minor of `host_graph`.
@@ -661,10 +663,11 @@ class NodalSkeleton:
 
         Parameters
         ----------
-        host_graph : nx.MultiGraph or nx.Graph
-            The graph in which to search for the minor.
         minor_graph : nx.Graph
             The graph to be checked as a minor.
+        host_graph : nx.MultiGraph or nx.Graph, optional
+            The graph in which to search for the minor.
+            Defaults to None, looking for the self.skeleton_graph_cache.
 
         Returns
         -------
@@ -672,6 +675,9 @@ class NodalSkeleton:
             The embedding mapping (a dictionary) if `minor_graph` is a minor
             of `host_graph`; otherwise, returns None.
         """
+        if host_graph is None:
+            host_graph = self.skeleton_graph_cache
+        
         # Attempt to find an embedding of minor_graph in host_graph.
         embedding = minorminer.find_embedding(minor_graph, host_graph)
         
@@ -679,7 +685,7 @@ class NodalSkeleton:
             print("The given graph contains the minor graph.")
             return embedding
         else:
-            print("The given graph does not contain the minor graph.")
+            print("The given graph DOES NOT contain the minor graph.")
             return None
 
 
@@ -726,10 +732,10 @@ if __name__ == "__main__":
     print(f"self._skeleton_image: {ske._skeleton_image.shape} {ske._skeleton_image.dtype}")
     print(f"Total edge points: {ske.total_edge_pts}")
     ske.graph_summary()
-    print(f"Check minor: {ske.check_minor(
+    print(f"""Check minor: {ske.check_minor(
+        ske.skeleton_graph_cache.subgraph([1]),
         ske.skeleton_graph_cache, 
-        ske.skeleton_graph_cache.subgraph([0])
-    )}")
+    )}""")
 
     # Check plotting
     pl = pv.Plotter(shape=(1, 2), window_size=(1200, 500), off_screen=True)
