@@ -27,12 +27,14 @@ from numpy.typing import NDArray, ArrayLike
 # TODO:
 # - Graph edges as shapely.LineString for planar analysis
 # - [] Berry Curvature function and field plotted by pv's glyphs
+# - [] Orthogonal slices of the spectrum.imag + edge_points
+# - [] Orbiting gif
 # - [] pd code:
 #           if there are long (> 5 pixels) segments overlapping, find a different angle
 #           i.e. all linestrings' intersections containing not just points
 
 class NodalSkeleton:
-    """
+    r"""
     Analyzes and visualizes the nodal structures of 2-band non-Hermitian Hamiltonians.
 
     This class computes the exceptional surface, its skeleton (medial axis),
@@ -441,7 +443,7 @@ class NodalSkeleton:
             "metallic": 1.,
             **surf_kwargs
         }
-        plotter.add_mesh(ES_deci, **surf_kwargs)
+        plotter.add_mesh(ES_deci, name='exceptional_surface', **surf_kwargs)
 
         return plotter
     
@@ -475,9 +477,9 @@ class NodalSkeleton:
 
         edges_pts = [self._idx_to_coord(e['pts']) for e in G.edges.values()]
         edge_data = [pv.Spline(e, 2*len(e)) for e in edges_pts]
-        edge_tubes = pv.MultiBlock()
-        for e in edge_data:
-            edge_tubes.append(e.tube(radius=tube_radius))
+        edge_tubes = pv.MultiBlock([
+            e.tube(radius=tube_radius) for e in edge_data
+        ]).combine()
         
         self.node_data_pv = node_data
         self.node_glyphs_pv = node_glyphs
@@ -561,14 +563,14 @@ class NodalSkeleton:
             edge_kwargs = {'color': edge_color, 
                            'label': 'Graph Edge',
                            **comm, **edge_kwargs}
-            plotter.add_mesh(edge_tubes, **edge_kwargs)
+            plotter.add_mesh(edge_tubes, name='edge', **edge_kwargs)
 
         if add_nodes:
             node_kwargs = {'color': node_color, 
                            'label': 'Graph Node',
                            **comm, **node_kwargs}
-            plotter.add_mesh(node_glyphs, **node_kwargs)
-        
+            plotter.add_mesh(node_glyphs, name='node', **node_kwargs)
+
         if add_silhouettes:
             if isinstance(silh_origins, str):
                 silh_origins = self.origin
@@ -584,10 +586,8 @@ class NodalSkeleton:
                 for (n, o) in zip(np.eye(3), origins):
                     proj = poly.project_points_to_plane(normal=n, origin=o)
                     plotter.add_mesh(proj, **kwargs)
-            
-            for e in edge_tubes:
-                _add_silhouette(e, silh_origins, opacity=.2, **silh_kwargs)
-            
+
+            _add_silhouette(edge_tubes, silh_origins, opacity=.2, **silh_kwargs)
             _add_silhouette(node_glyphs, silh_origins, opacity=1., **silh_kwargs)
         
         return plotter

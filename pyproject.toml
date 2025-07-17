@@ -15,10 +15,13 @@ maintainers  = [
 ]
 keywords = [
     "non-Hermitian topology",
-    "knotted graph",
+    "nodal structure",
     "exceptional surface",
-    "3D spatial multigraph",
-    "morphological image processing"
+    "knotted graph",
+    "spatial multigraph",
+    "skeleton graph",
+    "morphological image processing",
+    "medial axis",
 ]
 readme = {"file" = "README.md", "content-type" = "text/markdown"}
 license = {file = "LICENSE"}
