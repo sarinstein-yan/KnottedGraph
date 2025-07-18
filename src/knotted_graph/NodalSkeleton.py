@@ -29,9 +29,12 @@ from numpy.typing import NDArray, ArrayLike
 # - [] Berry Curvature function and field plotted by pv's glyphs
 # - [] Orthogonal slices of the spectrum.imag + edge_points
 # - [] Orbiting gif
-# - [] pd code:
-#           if there are long (> 5 pixels) segments overlapping, find a different angle
-#           i.e. all linestrings' intersections containing not just points
+# - pd code: 
+    # - [] from_graph_to_pd_code, from_pd_code_to_yamada, from_graph_to_yamada, 
+    # - [] self.pd_code, self.yamada, self.graph_diagram_pv (parallel projection)
+    # - [] if there are long (> 5 pixels) segments overlapping, find a different angle \
+    #       i.e. all linestrings' intersections containing not just points
+
 
 class NodalSkeleton:
     r"""
