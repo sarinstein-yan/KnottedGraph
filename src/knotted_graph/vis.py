@@ -10,13 +10,13 @@ from typing import Union
 __all__ = [
     "standard_petersen_layout",
     "draw_petersen_embedding",
-    "plot_3D_and_2D_projections",
-    "plot_3D_graph",
+    "plot_3D_and_projections_plotly",
+    "plot_3D_graph_plotly",
     "plot_surface_modes",
 ]
 
 
-def plot_3D_and_2D_projections(points):
+def plot_3D_and_projections_plotly(points):
     """
     Plot the zero regions in 3D space and their 2D projections.
 
@@ -129,7 +129,7 @@ def plot_3D_and_2D_projections(points):
     return fig
 
 
-def plot_3D_graph(G: Union[nx.Graph, nx.MultiGraph]) -> go.Figure:
+def plot_3D_graph_plotly(G: Union[nx.Graph, nx.MultiGraph]) -> go.Figure:
     """
     Robust 3D Plotly visualizer for a knotted graph.
 

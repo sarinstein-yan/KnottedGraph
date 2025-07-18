@@ -25,6 +25,8 @@ from knotted_graph.vis import *
 
 import knotted_graph
 __all__ = [
+    "NodalSkeleton",
+
     "kron_batch",
     "eig_batch",
     "skeleton2graph",
@@ -33,9 +35,6 @@ __all__ = [
     "hk2hz",
     "hz2hk",
     "expand_hz_as_hop_dict",
-
-    "NodalSkeleton",
-    "NodalKnot",
 ] + knotted_graph.pd_codes.__all__ \
     + knotted_graph.yamada.__all__ \
     + knotted_graph.surface_modes.__all__ \

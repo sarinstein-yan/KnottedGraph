@@ -1,6 +1,8 @@
 # `knotted_graph`: Analyzing Non-Hermitian Topological Nodal Structures
 
 <a target="_blank" href="https://colab.research.google.com/github/sarinstein-yan/Nodal-Knot/blob/main/getting_started.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
+![pre-alpha](https://img.shields.io/badge/status-pre--alpha-red?style=flat-square)
+
 
 <div align="center" style="display: flex; flex-direction: row; justify-content: center; gap: 20px;">
     <div>
@@ -32,6 +34,9 @@ In 3D non-Hermitian nodal systems, these EPs usually form an **exceptional surfa
 This guide will walk you through the process of using the `NodalSkeleton` class, from defining a Hamiltonian to analyzing its exceptional skeleton graph.
 
 ## Installation
+
+> [!NOTE] 
+> The development is still in pre-alpha stage, expect bugs and rapid API changes.
 
 <!-- You can install the package via pip:
 ```bash
@@ -88,7 +93,7 @@ from knotted_graph import NodalSkeleton
 # Define momentum symbols
 kx, ky, kz = sp.symbols('k_x k_y k_z', real=True)
 
-# Define a non-Hermitian Bloch vector that can form a trefoil knot
+# Define a non-Hermitian Bloch vector that can form a Hopf link
 def hopf_bloch_vector(gamma, k_symbols=(kx, ky, kz)):
     """Returns the Bloch vector components for a Hopf link."""
     kx, ky, kz = k_symbols
@@ -103,7 +108,7 @@ def hopf_bloch_vector(gamma, k_symbols=(kx, ky, kz)):
 gamma = 0.8  # Non-Hermitian strength
 d_x, d_y, d_z = hopf_bloch_vector(gamma)
 
-# Initialize the NodalSkeleton with the Hamioltonian characteristic
+# Initialize the `NodalSkeleton` with the Hamioltonian characteristic
 ske = NodalSkeleton(
     char = (d_x, d_y, d_z),
     # k_symbols = (kx, ky, kz), # optional, we have named them *conventionally*
@@ -222,7 +227,7 @@ ske.band_gap.shape, ske.band_gap.dtype
 
 ```python
 graph = ske.skeleton_graph(
-    simplify = True,  # Topological simplification
+    # simplify = True,  # Topological simplification
     # smooth_epsilon = 4,  # Smoothness, unit is pixel
     # skeleton_image = ... # Can construct a skeleton graph from an skeletonized image
 )
@@ -247,7 +252,7 @@ graph.graph['is_trivalent']
 <span style="color:#d73a49;font-weight:bold">>>></span>
 
 ```
-True
+(True, True)
 ```
 
 
@@ -297,10 +302,10 @@ ske.check_minor(k4_graph, host_graph=graph)
 
 ```
 Checking for K3 minor...
-The given graph does not contain the minor graph.
+The given graph DOES NOT contain the minor graph.
 
 Checking for K4 minor...
-The given graph does not contain the minor graph.
+The given graph DOES NOT contain the minor graph.
 ```
 
 
@@ -484,3 +489,20 @@ Degree distribution:
     target="_blank" style="text-decoration:underline;">
     Click here to view the interactive 3D plot</a>
 </p>
+
+
+## TODO:
+- [ ] Documentation website
+- [ ] Berry Curvature calculation and vector field visualization
+- [ ] Yamada optimization
+- [ ] Graph diagram visualization with parallel projection
+- [ ] Batched processing. Move the spectrum calculation batch to GPU.
+- [ ] Multi-band Hamiltonians support
+
+
+<!-- ## Citation
+If you find this work useful, please cite our paper:
+
+```bibtex
+
+``` -->

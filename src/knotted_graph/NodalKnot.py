@@ -7,8 +7,8 @@ import logging
 from tabulate import tabulate
 
 from knotted_graph.vis import (
-    plot_3D_and_2D_projections,
-    plot_3D_graph,
+    plot_3D_and_projections_plotly,
+    plot_3D_graph_plotly,
 )
 from knotted_graph.util import (
     remove_leaf_nodes,
@@ -395,7 +395,7 @@ class NodalKnot:
         fig : plotly.graph_objects.Figure
             The Plotly figure object for visualization.
         """
-        fig = plot_3D_and_2D_projections(points)
+        fig = plot_3D_and_projections_plotly(points)
 
         if file_name:
             fig.write_html(file_name)
@@ -420,7 +420,7 @@ class NodalKnot:
         fig : plotly.graph_objects.Figure
             The Plotly figure object for visualization.
         """
-        fig = plot_3D_graph(G)
+        fig = plot_3D_graph_plotly(G)
 
         if file_name:
             fig.write_html(file_name)
