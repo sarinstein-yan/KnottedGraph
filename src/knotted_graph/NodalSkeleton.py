@@ -11,6 +11,7 @@ import logging
 import pyvista as pv
 
 from knotted_graph.util import (
+    compute_yamada_safely,
     remove_leaf_nodes,
     simplify_edges,
     smooth_edges,
@@ -19,6 +20,7 @@ from knotted_graph.util import (
     is_trivalent,
     idx_to_coord,
 )
+from knotted_graph.yamada import compute_yamada_polynomial
 
 from typing import Tuple, Union, Optional, Any, Dict, Sequence
 from numpy.typing import NDArray, ArrayLike
@@ -28,10 +30,10 @@ from numpy.typing import NDArray, ArrayLike
 # - Graph edges as shapely.LineString for planar analysis
 # - [] Berry Curvature function and field plotted by pv's glyphs
 # - [] Orthogonal slices of the spectrum.imag + edge_points
-# - [] Orbiting gif
-# - [] pd code:
-#           if there are long (> 5 pixels) segments overlapping, find a different angle
-#           i.e. all linestrings' intersections containing not just points
+# - pd code: 
+    # - [] from_graph_to_pd_code, from_pd_code_to_yamada, from_graph_to_yamada, 
+    # - [] self.pd_code, self.yamada, self.graph_diagram_pv (parallel projection, and if possible color the undercrossing in transparent)
+
 
 class NodalSkeleton:
     r"""
@@ -594,7 +596,72 @@ class NodalSkeleton:
                 _add_silhouette(node_glyphs, silh_origins, opacity=1., **silh_kwargs)
         
         return plotter
+    
 
+    def yamada_polynomial(
+        self, 
+        variable: sp.Symbol, 
+        normalize: bool = True, 
+        n_jobs: int = -1,
+        *,
+        num_rotations: int = 10,
+        rotation_angles: tuple[float] = (0.,0.,0.),
+        rotation_order: str = 'ZYX'
+    ) -> sp.Expr:
+        """
+        Computes the Yamada polynomial for the skeleton graph.
+
+        Parameters
+        ----------
+        variable : sp.Symbol
+            The variable to use in the polynomial.
+        normalize : bool, optional
+            Whether to normalize the polynomial. Defaults to True.
+        n_jobs : int, optional
+            The number of jobs to run in parallel. Defaults to -1.
+        num_rotations: int, optional
+            ONLY if the skeleton graph is trivalent.
+            The number of different rotations to sample. Defaults to 10.
+        rotation_angles : tuple[float], optional
+            ONLY if the skeleton graph is NOT trivalent.
+            The angles for the rotations in radians. Defaults to (0., 0., 0.).
+            See `NodalSkeleton.util.get_rotation_matrix` for details.
+        rotation_order : str, optional
+            ONLY if the skeleton graph is NOT trivalent.
+            The order of rotations to apply. Defaults to 'ZYX'.
+            See `NodalSkeleton.util.get_rotation_matrix` for details.
+
+        Returns
+        -------
+        sp.Expr
+            The Yamada polynomial.
+        """
+        if not self.skeleton_graph_cache:
+            self.skeleton_graph()
+        
+        if self.is_graph_trivalent:
+            logging.info(
+                f"The skeleton graph is trivalent, running {num_rotations} different"
+                " rotations to compute the Yamada polynomial safely."
+            )
+            return compute_yamada_safely(
+                self.skeleton_graph_cache, variable, 
+                normalize=normalize, n_jobs=n_jobs, 
+                num_rotations=num_rotations
+            )
+        else:
+            logging.warning(
+                "The skeleton graph is not trivalent. "
+               f"Calculating the rotation angles {rotation_angles} "
+               f"in {rotation_order} order."
+            )
+            return compute_yamada_polynomial(
+                self.skeleton_graph_cache, variable, 
+                normalize=normalize, n_jobs=n_jobs,
+                rotation_angles=rotation_angles,
+                rotation_order=rotation_order
+            )
+    
 
     def graph_summary(
             self, 

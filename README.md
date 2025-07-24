@@ -1,6 +1,8 @@
 # `knotted_graph`: Analyzing Non-Hermitian Topological Nodal Structures
 
 <a target="_blank" href="https://colab.research.google.com/github/sarinstein-yan/Nodal-Knot/blob/main/getting_started.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
+![pre-alpha](https://img.shields.io/badge/status-pre--alpha-red?style=flat-square)
+
 
 <div align="center" style="display: flex; flex-direction: row; justify-content: center; gap: 20px;">
     <div>
@@ -32,6 +34,9 @@ In 3D non-Hermitian nodal systems, these EPs usually form an **exceptional surfa
 This guide will walk you through the process of using the `NodalSkeleton` class, from defining a Hamiltonian to analyzing its exceptional skeleton graph.
 
 ## Installation
+
+> [!NOTE] 
+> The development is still in pre-alpha stage, expect bugs and rapid API changes.
 
 <!-- You can install the package via pip:
 ```bash
@@ -88,7 +93,7 @@ from knotted_graph import NodalSkeleton
 # Define momentum symbols
 kx, ky, kz = sp.symbols('k_x k_y k_z', real=True)
 
-# Define a non-Hermitian Bloch vector that can form a trefoil knot
+# Define a non-Hermitian Bloch vector that can form a Hopf link
 def hopf_bloch_vector(gamma, k_symbols=(kx, ky, kz)):
     """Returns the Bloch vector components for a Hopf link."""
     kx, ky, kz = k_symbols
@@ -103,7 +108,7 @@ def hopf_bloch_vector(gamma, k_symbols=(kx, ky, kz)):
 gamma = 0.8  # Non-Hermitian strength
 d_x, d_y, d_z = hopf_bloch_vector(gamma)
 
-# Initialize the NodalSkeleton with the Hamioltonian characteristic
+# Initialize the `NodalSkeleton` with the Hamioltonian characteristic
 ske = NodalSkeleton(
     char = (d_x, d_y, d_z),
     # k_symbols = (kx, ky, kz), # optional, we have named them *conventionally*
@@ -222,7 +227,7 @@ ske.band_gap.shape, ske.band_gap.dtype
 
 ```python
 graph = ske.skeleton_graph(
-    simplify = True,  # Topological simplification
+    # simplify = True,  # Topological simplification
     # smooth_epsilon = 4,  # Smoothness, unit is pixel
     # skeleton_image = ... # Can construct a skeleton graph from an skeletonized image
 )
@@ -247,7 +252,7 @@ graph.graph['is_trivalent']
 <span style="color:#d73a49;font-weight:bold">>>></span>
 
 ```
-True
+(True, True)
 ```
 
 
@@ -297,10 +302,10 @@ ske.check_minor(k4_graph, host_graph=graph)
 
 ```
 Checking for K3 minor...
-The given graph does not contain the minor graph.
+The given graph DOES NOT contain the minor graph.
 
 Checking for K4 minor...
-The given graph does not contain the minor graph.
+The given graph DOES NOT contain the minor graph.
 ```
 
 
@@ -484,3 +489,159 @@ Degree distribution:
     target="_blank" style="text-decoration:underline;">
     Click here to view the interactive 3D plot</a>
 </p>
+
+
+### Planar Diagram and Yamada Polynomial
+
+If a skeleton graph is trivalent (all node degrees <= 3), the *Yamada polynomial* is an isotopic invariant of the spatial graph.
+
+If not trivalent, the Yamada polynomial is still well-defined, but it is not an isotopic invariant, but rather a *rigid isotopy invariant* --- it depends on how one projects the 3D skeleton graph onto a 2D plane.
+---
+For a trivalent skeleton graph, `NodalSkeleton.yamada_polynomial(variable)` by default will sample `num_rotations=10` different projections that quotient out the rotational symmetry that produces the same planar diagram, and start from the planar diagram with the *least* number of crossings.
+
+If it finds two Yamada polynomials agree, which usually happens right after computing from the best two projections, it will return the agreed Yamada polynomial.
+
+If after `num_rotations` computations, no two Yamada polynomials agree, it will return the projection data and the corresponding Yamada polynomials.
+
+```python
+# define the variable of the Yamada polynomial
+A = sp.symbols('A')
+
+_ = ske.skeleton_graph() # Ensure the skeleton graph is computed and cached
+print("Is the skeleton graph trivalent?", ske.is_graph_trivalent)
+
+# Compute the Yamada polynomial for the Hopf Link
+Y = ske.yamada_polynomial(
+    variable=A, 
+    # normalize=True, # Normalize the Yamada polynomial
+    # n_jobs=-1, # Use all available cores for one view
+
+    num_rotations=10, # ONLY for trivalent graphs
+    
+    # rotation_angles=(0., 0., 0.), # ONLY for non-trivalent graphs
+    # rotation_order='ZYX' # ONLY for non-trivalent graphs
+)
+Y
+```
+
+<span style="color:#d73a49;font-weight:bold">>>></span>
+
+```
+Is the skeleton graph trivalent? True
+Computing Yamada polynomial:  20%|██        | 2/10 [00:00<00:00, 13.35it/s]
+```
+
+$$- A^{6} - 2 A^{5} - 3 A^{4} - 3 A^{3} - 3 A^{2} - 2 A - 1$$
+
+
+There a few ways to compute the Yamada polynomial apart from the `NodalSkeleton.yamada_polynomial()` method. \
+E.g., by a function call:
+
+```python
+kg.compute_yamada_safely(
+    skeleton_graph=hopf_link,
+    variable=A,
+    # num_rotations=10,
+    # normalize=True,
+    # n_jobs=-1
+)
+```
+
+<span style="color:#d73a49;font-weight:bold">>>></span>
+
+```
+Is the skeleton graph trivalent? True
+Computing Yamada polynomial:  20%|██        | 2/10 [00:00<00:00, 13.35it/s]
+```
+
+$$- A^{6} - 2 A^{5} - 3 A^{4} - 3 A^{3} - 3 A^{2} - 2 A - 1$$
+
+
+Or from the planar diagram code:
+> [!Warning]
+> This is not guaranteed to be correct because a view is to be input manually
+
+```python
+pd = kg.PDCode(skeleton_graph=hopf_link)
+
+pd_code = pd.compute(
+    # specify the projection angles and order if needed
+    rotation_angles=(137.5, 81.4, 0.),
+    # rotation_order='ZYX',
+)
+print(f"planar diagram code: {pd_code}")
+
+pd.compute_yamada(A, normalize=True)
+```
+
+<span style="color:#d73a49;font-weight:bold">>>></span>
+
+```
+planar diagram code: V[0,2];V[3,5];X[4,1,3,2];X[4,0,5,1]
+```
+
+$$- A^{6} - 2 A^{5} - 3 A^{4} - 3 A^{3} - 3 A^{2} - 2 A - 1$$
+
+
+Or from a thin wrapper function:
+> [!Warning]
+> This is not guaranteed to be correct because a view is to be input manually
+
+
+```python
+kg.compute_yamada_polynomial(hopf_link, A, (137.5, 81.4, 0.))
+```
+
+<span style="color:#d73a49;font-weight:bold">>>></span>
+
+$$- A^{6} - 2 A^{5} - 3 A^{4} - 3 A^{3} - 3 A^{2} - 2 A - 1$$
+
+
+---
+For a non-trivalent skeleton graph, the `NodalSkeleton.yamada_polynomial(variable)` will only compute from one projection, specified by the 
+`rotation_angles[=(0., 0., 0.)]` and `rotation_order[='ZYX']`
+parameters (see `NodalSkeleton.util.get_rotation_matrix` for the meaning of these parameters).
+
+One can call `knotted_graph.util.generate_isotopy_projections` to generate a list of projections sorted by the number of crossings in the planar diagram, and then call `NodalSkeleton.yamada_polynomial(variable, rotation_angles=best_proj['angles'])` to compute the Yamada polynomial from the best projection.
+
+```python
+projections = kg.generate_isotopy_projections(
+    skeleton_graph=hopf_link, 
+    num_rotations=10
+)
+
+best_proj = projections[0]
+print(f"Keys of a projection: {best_proj.keys()}")
+print(f"Number of crossings: {best_proj['num_crossings']}")
+print(f"Angles: {best_proj['angles']}")
+print(f"pd_code: {best_proj['pd_code']}")
+
+kg.compute_yamada_polynomial(hopf_link, A, best_proj['angles'])
+# Or `ske.yamada_polynomial(variable=A, rotation_angles=best_proj['angles'])`
+```
+
+<span style="color:#d73a49;font-weight:bold">>>></span>
+
+```
+Keys of a projection: dict_keys(['num_crossings', 'vertices', 'crossings', 'arcs', 'angles', 'pd_code'])
+Number of crossings: 2
+Angles: [0.0, 87.13401601740115, 0.0]
+pd_code: V[0,2];V[3,5];X[5,1,4,0];X[1,3,2,4]
+```
+
+
+
+## TODO:
+- [ ] Documentation website
+- [ ] Berry Curvature calculation and vector field visualization
+- [ ] Graph diagram visualization with parallel projection
+- [ ] Batched processing. Move the spectrum calculation batch to GPU.
+- [ ] Multi-band Hamiltonians support
+
+
+<!-- ## Citation
+If you find this work useful, please cite our paper:
+
+```bibtex
+
+``` -->

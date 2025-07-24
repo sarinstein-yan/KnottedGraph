@@ -3,20 +3,18 @@ import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 from typing import Union
 
 __all__ = [
     "standard_petersen_layout",
     "draw_petersen_embedding",
-    "plot_3D_and_2D_projections",
-    "plot_3D_graph",
+    "plot_3D_and_projections_plotly",
+    "plot_3D_graph_plotly",
     "plot_surface_modes",
 ]
 
 
-def plot_3D_and_2D_projections(points):
+def plot_3D_and_projections_plotly(points):
     """
     Plot the zero regions in 3D space and their 2D projections.
 
@@ -30,6 +28,8 @@ def plot_3D_and_2D_projections(points):
     fig : plotly.graph_objects.Figure
         The Plotly figure object for visualization.
     """
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
     # Separate coordinates for convenience
     kx_vals = [p[0] for p in points]
     ky_vals = [p[1] for p in points]
@@ -129,13 +129,14 @@ def plot_3D_and_2D_projections(points):
     return fig
 
 
-def plot_3D_graph(G: Union[nx.Graph, nx.MultiGraph]) -> go.Figure:
+def plot_3D_graph_plotly(G: Union[nx.Graph, nx.MultiGraph]) -> "go.Figure":
     """
     Robust 3D Plotly visualizer for a knotted graph.
 
     - Flattens mixed Python lists/arrays of edge 'pts' into a clean (N,3) array.
     - Plots edges as blue lines and **all** nodes as red markers.
     """
+    import plotly.graph_objects as go
     edge_traces = []
     edge_color = 'blue'
 

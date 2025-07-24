@@ -37,18 +37,19 @@ classifiers = [
 ]
 dependencies = [
     "poly2graph",
-    "igraph",
     "shapely",
-    "minorminer",
-    "tabulate",
     "jupyterlab",
     "pyvista[all]",
+    "minorminer",
+    "tabulate",
     "rdp",
+    "tqdm",
 ]
 
 [project.optional-dependencies]
-dev = [
+all = [
     "plotly",
+    "igraph",
 ]
 
 [project.urls]
