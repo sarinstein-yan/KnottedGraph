@@ -2,7 +2,7 @@
 
 <a target="_blank" href="https://colab.research.google.com/github/sarinstein-yan/Nodal-Knot/blob/main/getting_started.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
 ![pre-alpha](https://img.shields.io/badge/status-pre--alpha-red?style=flat-square)
-
+[![PyPI](https://img.shields.io/pypi/v/knotted_graph)](https://pypi.org/project/knotted_graph/)
 
 <div align="center" style="display: flex; flex-direction: row; justify-content: center; gap: 20px;">
     <div>
@@ -38,17 +38,18 @@ This guide will walk you through the process of using the `NodalSkeleton` class,
 > [!NOTE] 
 > The development is still in pre-alpha stage, expect bugs and rapid API changes.
 
-<!-- You can install the package via pip:
+You can install the package via pip:
+
 ```bash
 $ pip install knotted_graph
 ```
-or  -->
-clone the repository and install it manually:
+
+or clone the repository and install it manually:
 
 ```bash
 $ git clone https://github.com/sarinstein-yan/Nodal-Knot.git
 $ cd Nodal-Knot
-$ pip install .
+$ pip install -e .
 ```
 
 This module is tested on `Python >= 3.11`.

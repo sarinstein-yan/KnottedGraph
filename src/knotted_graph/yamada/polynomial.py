@@ -117,13 +117,14 @@ def compute_yamada_from_states(
 
     # 3) substitute and simplify
     Y = total_poly.xreplace({x: -1, y: -A-2-A**(-1)})
-    Y = sp.simplify(sp.expand(Y))
+    Y = sp.expand(sp.simplify(Y))
 
     # 4) optionally normalize
     if normalize:
         terms = Y.as_ordered_terms()
         lowest_exp = min(t.as_coeff_exponent(A)[1] for t in terms)
-        Y = sp.expand(Y * (-A)**(-lowest_exp))
+        Y = Y * (-A)**(-lowest_exp)
+        Y = sp.expand(sp.simplify(Y))
 
     return Y
 

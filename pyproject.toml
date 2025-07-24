@@ -55,6 +55,7 @@ all = [
 [project.urls]
 Homepage = "https://github.com/sarinstein-yan/Nodal-Knot"
 Repository = "https://github.com/sarinstein-yan/Nodal-Knot"
+PyPI = "https://pypi.org/project/knotted_graph/"
 
 [tool.hatch.version]
 path = "src/knotted_graph/__init__.py"
