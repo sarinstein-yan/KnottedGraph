@@ -8,13 +8,13 @@ from .geom import Vertex, Crossing, Arc
 
 
 __all__ = [
-    "compute_Negami",
-    "compute_Yamada_from_states",
+    "compute_negami",
+    "compute_yamada_from_states",
     "Yamada",
 ]
 
 
-def compute_Negami(G: nx.MultiGraph, x: sp.Symbol, y: sp.Symbol) -> sp.Expr:
+def compute_negami(G: nx.MultiGraph, x: sp.Symbol, y: sp.Symbol) -> sp.Expr:
     """
     Compute the Negami polynomial for a graph G.
     Negami polynomial is a bivariate Laurent polynomial:
@@ -58,7 +58,7 @@ def compute_Negami(G: nx.MultiGraph, x: sp.Symbol, y: sp.Symbol) -> sp.Expr:
     return sp.expand(h_poly)
 
 
-def compute_Yamada_from_states(
+def compute_yamada_from_states(
     state_graphs: list[nx.MultiGraph],
     exponents: list[int],
     A: sp.Symbol,
@@ -106,7 +106,7 @@ def compute_Yamada_from_states(
         n_jobs=n_jobs,
         prefer='threads',
     )(
-        delayed(compute_Negami)(G, x, y)
+        delayed(compute_negami)(G, x, y)
         for G in state_graphs
     )
     
@@ -116,14 +116,14 @@ def compute_Yamada_from_states(
         total_poly += (A**exp) * h_val
 
     # 3) substitute and simplify
-    Y = total_poly.subs(x, -1).subs(y, -A - 2 - A**(-1))
-    Y = sp.expand(sp.simplify(Y))
+    Y = total_poly.xreplace({x: -1, y: -A-2-A**(-1)})
+    Y = sp.simplify(sp.expand(Y))
 
     # 4) optionally normalize
     if normalize:
         terms = Y.as_ordered_terms()
         lowest_exp = min(t.as_coeff_exponent(A)[1] for t in terms)
-        Y = sp.expand(Y * A**(-lowest_exp))
+        Y = sp.expand(Y * (-A)**(-lowest_exp))
 
     return Y
 
@@ -195,6 +195,6 @@ class Yamada():
         Compute the Yamada polynomial for the knot diagram.
         """
         state_graphs, exponents = self._build_state_graphs()
-        return compute_Yamada_from_states(
+        return compute_yamada_from_states(
             state_graphs, exponents, variable, normalize=normalize, n_jobs=n_jobs
         )

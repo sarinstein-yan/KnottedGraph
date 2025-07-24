@@ -53,8 +53,7 @@ class Crossing:
         
         # Sort by angle for counter-clockwise order
         ccw_idx = np.argsort(angles)
-        arc_ids_ccw = np.asarray(arc_ids)[ccw_idx]
-        return arc_ids_ccw.tolist()
+        return [arc_ids[i] for i in ccw_idx]
     
     @cached_property
     def pd_code(self) -> str:

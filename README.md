@@ -531,7 +531,7 @@ Is the skeleton graph trivalent? True
 Computing Yamada polynomial:  20%|██        | 2/10 [00:00<00:00, 13.35it/s]
 ```
 
-$$- A^{6} - 2 A^{5} - 3 A^{4} - 3 A^{3} - 3 A^{2} - 2 A - 1$$
+$$A^{6} + 2 A^{5} + 3 A^{4} + 3 A^{3} + 3 A^{2} + 2 A + 1$$
 
 
 There a few ways to compute the Yamada polynomial apart from the `NodalSkeleton.yamada_polynomial()` method. \
@@ -554,7 +554,7 @@ Is the skeleton graph trivalent? True
 Computing Yamada polynomial:  20%|██        | 2/10 [00:00<00:00, 13.35it/s]
 ```
 
-$$- A^{6} - 2 A^{5} - 3 A^{4} - 3 A^{3} - 3 A^{2} - 2 A - 1$$
+$$A^{6} + 2 A^{5} + 3 A^{4} + 3 A^{3} + 3 A^{2} + 2 A + 1$$
 
 
 Or from the planar diagram code:
@@ -580,7 +580,7 @@ pd.compute_yamada(A, normalize=True)
 planar diagram code: V[0,2];V[3,5];X[4,1,3,2];X[4,0,5,1]
 ```
 
-$$- A^{6} - 2 A^{5} - 3 A^{4} - 3 A^{3} - 3 A^{2} - 2 A - 1$$
+$$A^{6} + 2 A^{5} + 3 A^{4} + 3 A^{3} + 3 A^{2} + 2 A + 1$$
 
 
 Or from a thin wrapper function:
@@ -594,7 +594,7 @@ kg.compute_yamada_polynomial(hopf_link, A, (137.5, 81.4, 0.))
 
 <span style="color:#d73a49;font-weight:bold">>>></span>
 
-$$- A^{6} - 2 A^{5} - 3 A^{4} - 3 A^{3} - 3 A^{2} - 2 A - 1$$
+$$A^{6} + 2 A^{5} + 3 A^{4} + 3 A^{3} + 3 A^{2} + 2 A + 1$$
 
 
 ---

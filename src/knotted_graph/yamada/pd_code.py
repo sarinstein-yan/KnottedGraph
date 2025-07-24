@@ -291,6 +291,7 @@ class PDCode:
         
         return ";".join(v_parts + x_parts)
     
+    
     def compute_yamada(
             self, 
             variable: sp.Symbol,
