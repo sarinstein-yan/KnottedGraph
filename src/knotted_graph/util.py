@@ -9,6 +9,8 @@ from numpy.typing import NDArray, ArrayLike
 kSymbols = TypeVar('kSymbols', bound=Tuple[sp.Symbol, sp.Symbol, sp.Symbol])
 
 __all__ = [
+    "generate_isotopy_projections",
+    "compute_yamada_safely",
     "PT",
     "is_PT_symmetric",
     "is_trivalent",
@@ -18,7 +20,72 @@ __all__ = [
     "smooth_edges",
     "remove_leaf_nodes",
     "simplify_edges",
+    "BouquetGraph",
+    "ThetaGraph",
+    "weisfeiler_lehman_multigraph_hash",
 ]
+
+
+def generate_isotopy_projections(
+        skeleton_graph: nx.MultiGraph,
+        num_rotations: int = 10
+) -> List[Tuple[List[float], str]]:
+    """Generate isotopy projections of the skeleton graph."""
+    from knotted_graph import PDCode, generate_isotopy_angles
+
+    isotopy_samples = generate_isotopy_angles(num_rotations, order='ZYX')
+    processor = PDCode(skeleton_graph)
+    
+    projection = []
+    for angles in isotopy_samples:
+        angles = angles.tolist()
+        pd_code = processor.compute(angles)
+        num_crossings = len(processor.crossings)
+        
+        projection.append({
+            'num_crossings': num_crossings,
+            'vertices': list(processor.vertices.values()),
+            'crossings': list(processor.crossings.values()),
+            'arcs': list(processor.arcs.values()),
+            'angles': angles,
+            'pd_code': pd_code,
+        })
+    
+    # Sort by number of crossings
+    projection.sort(key=lambda x: x['num_crossings'])
+    return projection
+
+
+def compute_yamada_safely(
+        skeleton_graph: nx.MultiGraph,
+        variable: sp.Symbol,
+        num_rotations: int = 10,
+        normalize: bool = True,
+        n_jobs: int = -1
+    ) -> sp.Expr | Tuple[List[dict], List[sp.Expr]]:
+    """Process graph with multiple rotations and rank by crossing count."""
+    from knotted_graph import Yamada
+    from tqdm import tqdm
+
+    projection = generate_isotopy_projections(skeleton_graph, num_rotations)
+    yamada = []
+    for p in tqdm(projection, desc="Computing Yamada polynomial"):
+        try:
+            y = Yamada(
+                    p['vertices'], p['crossings'], p['arcs']
+                ).compute(
+                    variable, normalize=normalize, n_jobs=n_jobs
+                )
+        except Exception as e:
+            logging.error(f"Error computing Yamada polynomial: {e}")
+            continue
+        for _y in yamada:
+            if sp.simplify(y - _y) == 0:
+                return y
+        yamada.append(y)
+
+    print(f"No agreement found in {len(yamada)} projections.")
+    return projection, yamada
 
 
 # PT-operator
@@ -187,8 +254,7 @@ def remove_leaf_nodes(
 
 
 
-# Helpers for simplify_edges
-
+# --- Helpers for simplify_edges ---
 def _append_edge_pts(path, edge_pts):
     """
     Append the list edge_pts to path, but
@@ -216,12 +282,9 @@ def _append_edge_pts(path, edge_pts):
             f"  segment ends = ({pts[0]}, {pts[-1]})"
         )
 
-
-
 def _edge_tag(u: int, v: int, key: int) -> Tuple[int, int, int]:
     """Return a canonical tag for a multiedge so that (u,v,key) ≡ (v,u,key)."""
     return (u, v, key) if u <= v else (v, u, key)
-
 
 def _has_cycles(G: nx.MultiGraph) -> bool:
     """Quick check for *any* cycle in *G*."""
@@ -232,7 +295,6 @@ def _has_cycles(G: nx.MultiGraph) -> bool:
         return True
     except nx.NetworkXNoCycle:
         return False
-
 
 def _collapse_component_with_junctions(
     G: nx.MultiGraph, comp: Set[int], H: nx.MultiGraph
@@ -285,7 +347,6 @@ def _collapse_component_with_junctions(
 
                 H.add_edge(j, cur, pts=np.asarray(path_pts))
 
-
 def _collapse_cycle_component(
     G: nx.MultiGraph, comp: Set[int], H: nx.MultiGraph
 ) -> None:
@@ -333,8 +394,7 @@ def _collapse_cycle_component(
 
     H.add_edge(rep, rep, pts=np.asarray(path_pts))
 
-
-# Public API
+# --- Public API ---
 def simplify_edges(G: nx.MultiGraph) -> nx.MultiGraph:
     """Collapse degree‑2 chains in *G* while preserving geometry.
 
@@ -371,7 +431,7 @@ def simplify_edges(G: nx.MultiGraph) -> nx.MultiGraph:
         H = nx.MultiGraph()
         for n, data in G.nodes(data=True):
             H.add_node(n, **data)
-        return nx.convert_node_labels_to_integers(H, first_label=1)
+        return nx.convert_node_labels_to_integers(H)
 
     # (1) Process each connected component independently.
     H = nx.MultiGraph()
@@ -383,36 +443,66 @@ def simplify_edges(G: nx.MultiGraph) -> nx.MultiGraph:
             _collapse_cycle_component(G, comp, H)
 
     # (2) Relabel nodes for compactness and deterministic order.
-    return nx.convert_node_labels_to_integers(H, first_label=1, ordering="sorted")
+    return nx.convert_node_labels_to_integers(H, ordering="sorted")
 
 
-
-# def get_edge_pts(G):
-#     pts_list = []
-#     for u, v, pts in G.edges(data='pts'):
-#         pts_list.append(pts)
-#     if pts_list:
-#         return np.vstack(pts_list)
-#     else:
-#         return np.array([])
+def BouquetGraph(n):
+    """
+    Construct the Bouquet_n graph.
     
-# def get_node_pts(G):
-#     pts_list = []
-#     for n, o in G.nodes(data='pos'):
-#         pts_list.append(o)
-#     if pts_list:
-#         return np.vstack(pts_list)
-#     else:
-#         return np.array([])
+    Parameters:
+      n : int
+         The number of petals in the Bouquet_n graph.
     
-# def get_all_pts(G):
-#     edge_pts = get_edge_pts(G)
-#     node_pts = get_node_pts(G)
-#     if edge_pts.size > 0 and node_pts.size > 0:
-#         return np.vstack((edge_pts, node_pts))
-#     elif edge_pts.size > 0:
-#         return edge_pts
-#     elif node_pts.size > 0:
-#         return node_pts
-#     else:
-#         return np.array([])
+    Returns:
+      A NetworkX MultiGraph representing the Bouquet_n graph.
+    """
+    edge_list = [(0, 0) for _ in range(n)]
+    G = nx.from_edgelist(edge_list, nx.MultiGraph)
+    return G
+
+
+def ThetaGraph(n):
+    """
+    Construct the Theta_n graph.
+    
+    Parameters:
+      n : int
+         The number of edges in the Theta_n graph.
+    
+    Returns:
+      A NetworkX MultiGraph representing the Theta_n graph.
+    """
+    edge_list = [(0, 1) for _ in range(n)]
+    G = nx.from_edgelist(edge_list, nx.MultiGraph)
+    return G
+
+
+def weisfeiler_lehman_multigraph_hash(
+        g_multi: nx.MultiGraph,
+        iters: int = 3,
+    ):
+    """WL hash that tolerates MultiGraphs by collapsing them first."""
+    def _simple_copy_with_multiplicity(
+            g_multi: nx.MultiGraph
+        ):
+        """Collapse a (multi)graph into a simple Graph, recording multiplicity."""
+        if not g_multi.is_multigraph():
+            return g_multi  # already simple, nothing to do
+
+        g_simple = nx.Graph() if isinstance(g_multi, nx.MultiGraph) else nx.DiGraph()
+        g_simple.add_nodes_from(g_multi.nodes())
+
+        for u, v, _k in g_multi.edges(keys=True):
+            if g_simple.has_edge(u, v):
+                g_simple[u][v]["m"] += 1  # bump multiplicity
+            else:
+                g_simple.add_edge(u, v, m=1)
+        return g_simple
+    
+    g_for_hash = _simple_copy_with_multiplicity(g_multi)
+    return nx.weisfeiler_lehman_graph_hash(
+        g_for_hash,
+        iterations=iters,
+        edge_attr="m"  # include multiplicity in the label
+    )
