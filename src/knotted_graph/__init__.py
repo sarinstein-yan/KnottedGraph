@@ -18,6 +18,7 @@ from knotted_graph.yamada import *
 from knotted_graph.util import *
 from knotted_graph.vis import *
 from knotted_graph.surface_modes import *
+from knotted_graph.examples import *
 
 
 import knotted_graph
@@ -39,4 +40,5 @@ __all__ = [
 + knotted_graph.yamada.pd_code.__all__ \
 + knotted_graph.util.__all__ \
 + knotted_graph.vis.__all__ \
-+ knotted_graph.surface_modes.__all__ 
++ knotted_graph.surface_modes.__all__ \
++ knotted_graph.examples.__all__

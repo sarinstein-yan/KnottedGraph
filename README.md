@@ -497,6 +497,7 @@ Degree distribution:
 If a skeleton graph is trivalent (all node degrees <= 3), the *Yamada polynomial* is an isotopic invariant of the spatial graph.
 
 If not trivalent, the Yamada polynomial is still well-defined, but it is not an isotopic invariant, but rather a *rigid isotopy invariant* --- it depends on how one projects the 3D skeleton graph onto a 2D plane.
+
 ---
 For a trivalent skeleton graph, `NodalSkeleton.yamada_polynomial(variable)` by default will sample `num_rotations=10` different projections that quotient out the rotational symmetry that produces the same planar diagram, and start from the planar diagram with the *least* number of crossings.
 
