@@ -56,9 +56,9 @@ class NodalSkeleton:
         A tuple of three SymPy symbols for the momentum components (kx, ky, kz).
         If None, they are inferred from the free symbols in `char`.
         Defaults to None.
-    span : Tuple[(float, float), 
-                (float, float), 
-                (float, float)], optional
+    span : Tuple[(float, float),
+                 (float, float),
+                 (float, float)], optional
         The plotting range for (kx, ky, kz) as ((kx_min, kx_max),
         (ky_min, ky_max), (kz_min, kz_max)). Defaults to
         ((-np.pi, np.pi), (-np.pi, np.pi), (0, np.pi)).
@@ -127,7 +127,7 @@ class NodalSkeleton:
     pauli_y = sp.ImmutableDenseMatrix([[0, -sp.I], [sp.I, 0]])
     pauli_z = sp.ImmutableDenseMatrix([[1, 0], [0, -1]])
     pauli_vec = (pauli_x, pauli_y, pauli_z)
-    
+
     def __init__(
         self,
         char: Union[sp.Matrix, sp.ImmutableMatrix, Sequence[sp.Expr]],
@@ -150,12 +150,12 @@ class NodalSkeleton:
             )
         elif isinstance(char, Sequence) and len(char) == 3:
             self.bloch_vec = tuple(c + sp.Integer(0) for c in char)
-            self.h_k = sum((h*s for h,s in zip(char, self.pauli_vec)), 
+            self.h_k = sum((h*s for h,s in zip(char, self.pauli_vec)),
                            start=sp.zeros(2, 2))
         else:
             raise ValueError("`char` must be a 2x2 sympy Matrix or a sequence "\
                              "of three coefficients for the Pauli matrices.")
-            
+
         if k_symbols is None:
             self.k_symbols = sorted(self.h_k.free_symbols, key=lambda s: s.name)
             self.kx_symbol, self.ky_symbol, self.kz_symbol = self.k_symbols
@@ -165,17 +165,17 @@ class NodalSkeleton:
         else:
             raise ValueError("`k_symbols` must be a tuple of three sympy"\
                              " symbols (kx, ky, kz).")
-        
+
         # check Hamiltonian properties
         self.is_Hermitian = sp.simplify(self.h_k - self.h_k.H) == sp.zeros(2, 2)
         self.is_PT_symmetric = is_PT_symmetric(self.h_k)
-        
+
         # lambda functions of the bloch vector components
         self.bloch_vec_funcs = tuple(
             sp.lambdify(self.k_symbols, b, 'numpy')
             for b in self.bloch_vec
         )
-        
+
         # plotting helpers
         self.span = np.asarray(span)
         self.dimension = dimension
@@ -188,7 +188,7 @@ class NodalSkeleton:
             setattr(self, f'k{axis}_min', mn)
             setattr(self, f'k{axis}_max', mx)
             setattr(self, f'k{axis}_vals', np.linspace(mn, mx, dimension))
-        
+
         self.kx_grid, self.ky_grid, self.kz_grid = np.meshgrid(
             self.kx_vals, self.ky_vals, self.kz_vals,
             indexing='ij'
@@ -226,7 +226,7 @@ class NodalSkeleton:
             I.e., the half of the energy band gap.
         """
         return np.sqrt(np.sum(self._bloch_vec_grid**2, axis=0))
-    
+
 
     @cached_property
     def band_gap(self) -> NDArray:
@@ -279,7 +279,7 @@ class NodalSkeleton:
                 'd2_idx': real_indices[1],
             }
         return {'valid': False}
-    
+
     @cached_property
     def _berry_prerequisites(self) -> Dict[str, Any]:
         """Checks prerequisites for Berry curvature calculation."""
@@ -292,7 +292,7 @@ class NodalSkeleton:
         if not prereqs['valid']:
             raise NotImplementedError("Berry curvature is only defined for Bloch vectors "
                                       "with two real and one imaginary component.")
-        
+
         gamma = float(prereqs['gamma'])
         d1_grid = self._bloch_vec_grid[prereqs['d1_idx']].real
         d2_grid = self._bloch_vec_grid[prereqs['d2_idx']].real
@@ -307,11 +307,11 @@ class NodalSkeleton:
             grad_d2[2]*grad_d1[0] - grad_d2[0]*grad_d1[2],
             grad_d2[0]*grad_d1[1] - grad_d2[1]*grad_d1[0]
         ], axis=0)
-        
+
         eps_sq = gamma**2 - d1_grid**2 - d2_grid**2
         # Mask for regions outside ES or on the singularity
         PT_mask = eps_sq <= 0
-        
+
         # Use np.divide to handle division by zero gracefully
         with np.errstate(divide='ignore', invalid='ignore'):
             denominator = 2 * eps_sq**1.5
@@ -330,11 +330,11 @@ class NodalSkeleton:
         I.e. the region of *pure* imaginary energy."""
         # return self.spectrum.imag != 0
         return self.spectrum.real == 0
-    
+
 
     @cached_property
     def _skeleton_image(self) -> NDArray:
-        """A binary image of the skeleton (medial axis) of the exceptional 
+        """A binary image of the skeleton (medial axis) of the exceptional
         surface."""
         image = morph.skeletonize(self._interior_mask, method='lee')
         if np.sum(image) == 0:
@@ -359,10 +359,10 @@ class NodalSkeleton:
         return np.asarray([self.kx_grid[point_mask],
                            self.ky_grid[point_mask],
                            self.kz_grid[point_mask]]).T
-    
+
 
     def skeleton_graph(
-        self, 
+        self,
         simplify: bool = True,
         smooth_epsilon: int = 4,
         *,
@@ -394,13 +394,13 @@ class NodalSkeleton:
             The graph representation of the skeleton. Node attributes include
             'pos' (index coordinates), and edge attributes include 'pts'
             (a list of index coordinates along the edge).
-        """        
+        """
         # Check if the arguments match the cached ones
         args = (smooth_epsilon, simplify, id(skeleton_image))
         if self.skeleton_graph_cache is not None and \
            self.skeleton_graph_cache_args == args:
             return self.skeleton_graph_cache
-        
+
         # Compute the graph
         G = skeleton2graph(self._skeleton_image) \
             if skeleton_image is None else skeleton_image
@@ -415,7 +415,7 @@ class NodalSkeleton:
         self.skeleton_graph_cache = G
         self.skeleton_graph_cache_args = args
         return G
-    
+
 
     @property
     def total_edge_pts(self) -> int:
@@ -484,7 +484,7 @@ class NodalSkeleton:
         vol.point_data['log10(|berry|+1)'] = np.log10(vol.point_data['|berry|'] + 1)
 
         return vol
-    
+
 
     @cached_property
     def exceptional_surface_pv(self) -> pv.PolyData:
@@ -502,7 +502,7 @@ class NodalSkeleton:
         return self.fields_pv.contour(
             isosurfaces=[0.], scalars='ES_helper'
         )
-    
+
 
     def plot_exceptional_surface(
         self,
@@ -557,7 +557,7 @@ class NodalSkeleton:
         """
         if plotter is None:
             plotter = pv.Plotter()
-        
+
         ES = self.exceptional_surface_pv
 
         if add_silhouettes:
@@ -577,7 +577,7 @@ class NodalSkeleton:
                 proj = ES.project_points_to_plane(normal=n, origin=o)
                 proj = proj.decimate_pro(silh_decimation)
                 plotter.add_mesh(proj, **silh_kwargs)
-        
+
         ES_deci = ES.decimate_pro(
             surf_decimation, preserve_topology=True
         )
@@ -594,7 +594,7 @@ class NodalSkeleton:
         plotter.add_mesh(ES_deci, name='exceptional_surface', **surf_kwargs)
 
         return plotter
-    
+
 
     def _idx_to_coord(self, indices: ArrayLike) -> NDArray:
         """Converts grid indices to k-space coordinates."""
@@ -605,7 +605,7 @@ class NodalSkeleton:
             self,
             node_radius: float = 0.08,
             tube_radius: float = 0.04,
-        ) -> Tuple[pv.MultiBlock, pv.PolyData]:
+    ) -> Tuple[pv.MultiBlock, pv.PolyData]:
         """Prepares the spatial graph data as PyVista objects for plotting."""
         args = (tube_radius, node_radius)
         if self._pv_data_args == args:
@@ -628,7 +628,7 @@ class NodalSkeleton:
         edge_tubes = pv.MultiBlock([
             e.tube(radius=tube_radius) for e in edge_data
         ])
-        
+
         self.node_data_pv = node_data
         self.node_glyphs_pv = node_glyphs
         self.edge_data_pv = edge_data
@@ -703,18 +703,18 @@ class NodalSkeleton:
             "specular_power": 20,
             "metallic": 1.,
         }
-        
+
         node_glyphs, edge_tubes = \
             self._pyvista_graph_data(node_radius, tube_radius)
-            
+
         if add_edges:
-            edge_kwargs = {'color': edge_color, 
+            edge_kwargs = {'color': edge_color,
                            'label': 'Graph Edge',
                            **comm, **edge_kwargs}
             plotter.add_mesh(edge_tubes, name='edge', **edge_kwargs)
 
         if add_nodes:
-            node_kwargs = {'color': node_color, 
+            node_kwargs = {'color': node_color,
                            'label': 'Graph Node',
                            **comm, **node_kwargs}
             plotter.add_mesh(node_glyphs, name='node', **node_kwargs)
@@ -724,7 +724,7 @@ class NodalSkeleton:
                 silh_origins = self.origin
             elif silh_origins is None:
                 silh_origins = (None, None, None)
-            
+
             silh_kwargs = {
                 'color': silh_color,
                 # 'silhouette': True,
@@ -734,21 +734,21 @@ class NodalSkeleton:
                 for (n, o) in zip(np.eye(3), origins):
                     proj = poly.project_points_to_plane(normal=n, origin=o)
                     plotter.add_mesh(proj, **kwargs)
-            
+
             if add_edges:
                 for e in edge_tubes:
                     _add_silhouette(e, silh_origins, opacity=.2, **silh_kwargs)
             if add_nodes:
                 _add_silhouette(node_glyphs, silh_origins, opacity=1., **silh_kwargs)
-        
+
         return plotter
-    
+
 
     def plot_vector_field(
             self,
             plotter: Optional[pv.Plotter] = None,
-            orient: Optional[str | False] = None,
-            scale: Optional[str | False] = None,
+            orient: str | bool = None,
+            scale: str | bool = None,
             cmap: str = 'coolwarm',
             glyph_factor: float = 0.1,
             glyph_tolerance: float = 0.01,
@@ -762,10 +762,66 @@ class NodalSkeleton:
             surf_decimation: float = 0.2,
             surf_kwargs: Dict = {},
         ) -> pv.Plotter:
-        
+        """
+        Plots a vector field within the exceptional surface using glyphs.
+
+        This is a general-purpose method for visualizing vector data (e.g.,
+        Berry curvature, energy dispersion) at points inside the exceptional
+        surface. Glyphs (like arrows or spheres) are used to represent the
+        vector at each point.
+
+        Parameters
+        ----------
+        plotter : pv.Plotter, optional
+            An existing PyVista plotter. If None, a new one is created.
+        orient : str | bool, optional
+            The name of the vector field in `fields_pv.point_data` to use for
+            orienting the glyphs. If False, glyphs are not oriented.
+            Defaults to None.
+        scale : str | bool, optional
+            The name of the scalar or vector field in `fields_pv.point_data` to
+            use for scaling the glyphs. If a vector field is provided, its
+            magnitude is used. If False, glyphs are not scaled. Defaults to None.
+        cmap : str, optional
+            The colormap for the glyphs. Defaults to 'coolwarm'.
+        glyph_factor : float, optional
+            A scaling factor for the glyphs. Defaults to 0.1.
+        glyph_tolerance : float, optional
+            Controls the density of the glyphs. A smaller value means more
+            glyphs. Defaults to 0.01.
+        glyph_geom : pv.PolyData, optional
+            The geometry to use for the glyphs (e.g., `pv.Arrow()`). If None,
+            the default PyVista glyph is used.
+        glyph_kwargs : Dict, optional
+            Additional keyword arguments passed to `plotter.add_mesh` for the
+            glyphs.
+        orient_data : NDArray, optional
+            Custom array of vectors for glyph orientation. If provided, it's added
+            to the plotter data with the name specified by `orient`.
+        scale_data : NDArray, optional
+            Custom array of scalars for glyph scaling. If provided, it's added
+            to the plotter data with the name specified by `scale`.
+        show_surf : bool, optional
+            If True, the exceptional surface is plotted as a translucent
+            background. Defaults to True.
+        surf_color : Any, optional
+            Color of the exceptional surface. Defaults to 'gray'.
+        surf_opacity : float, optional
+            Opacity of the exceptional surface. Defaults to 0.05.
+        surf_decimation : float, optional
+            Decimation factor for the surface mesh to improve performance.
+            Defaults to 0.2.
+        surf_kwargs : Dict, optional
+            Additional keyword arguments for the surface mesh.
+
+        Returns
+        -------
+        pv.Plotter
+            The PyVista plotter object with the vector field added.
+        """
         if plotter is None:
             plotter = pv.Plotter()
-        
+
         vol = self.fields_pv.copy()
         mask = np.where(vol.point_data['imag'] != 0)[0]
         if orient_data:
@@ -801,14 +857,14 @@ class NodalSkeleton:
                 **surf_kwargs
             }
             plotter.add_mesh(ES_deci, name='exceptional_surface', **surf_kwargs)
-        
+
         return plotter
-    
+
 
     def plot_scalar_field(
             self,
             plotter: Optional[pv.Plotter] = None,
-            scale: Optional[str | False] = None,
+            scale: str | bool = None,
             cmap: str = 'coolwarm',
             glyph_factor: float = 0.01,
             glyph_tolerance: float = 0.01,
@@ -821,6 +877,48 @@ class NodalSkeleton:
             surf_decimation: float = 0.2,
             surf_kwargs: Dict = {},
         ) -> pv.Plotter:
+        """
+        Plots a scalar field within the exceptional surface using glyphs.
+
+        This method visualizes a scalar field by scaling glyphs (e.g., spheres)
+        at points inside the exceptional surface. It's a convenience wrapper
+        around `plot_vector_field` with orientation disabled.
+
+        Parameters
+        ----------
+        plotter : pv.Plotter, optional
+            An existing PyVista plotter. If None, a new one is created.
+        scale : str | bool, optional
+            The name of the scalar field in `fields_pv.point_data` to use for
+            scaling the glyphs. Defaults to None.
+        cmap : str, optional
+            The colormap for the glyphs. Defaults to 'coolwarm'.
+        glyph_factor : float, optional
+            A scaling factor for the glyphs. Defaults to 0.01.
+        glyph_tolerance : float, optional
+            Controls the density of the glyphs. Defaults to 0.01.
+        glyph_geom : pv.PolyData, optional
+            The geometry to use for the glyphs. Defaults to `pv.Sphere()`.
+        glyph_kwargs : Dict, optional
+            Additional keyword arguments for the glyphs.
+        scale_data : NDArray, optional
+            Custom array of scalars for glyph scaling.
+        show_surf : bool, optional
+            If True, displays the translucent exceptional surface. Defaults to True.
+        surf_color : Any, optional
+            Color of the exceptional surface. Defaults to 'gray'.
+        surf_opacity : float, optional
+            Opacity of the exceptional surface. Defaults to 0.05.
+        surf_decimation : float, optional
+            Decimation factor for the surface mesh. Defaults to 0.2.
+        surf_kwargs : Dict, optional
+            Additional keyword arguments for the surface mesh.
+
+        Returns
+        -------
+        pv.Plotter
+            The PyVista plotter object with the scalar field added.
+        """
         return self.plot_vector_field(
             plotter=plotter,orient=False,scale=scale,scale_data=scale_data,
             cmap=cmap,glyph_factor=glyph_factor,glyph_tolerance=glyph_tolerance,
@@ -828,7 +926,7 @@ class NodalSkeleton:
             surf_color=surf_color,surf_opacity=surf_opacity,
             surf_decimation=surf_decimation,surf_kwargs=surf_kwargs,
         )
-    
+
 
     def plot_berry_curvature(
             self,
@@ -844,7 +942,44 @@ class NodalSkeleton:
             surf_decimation: float = 0.2,
             surf_kwargs: Dict = {},
         ) -> pv.Plotter:
-        """Plots the Berry curvature vector field in 3D k-space."""
+        """
+        Plots the Berry curvature vector field in 3D k-space.
+
+        This is a specialized plotting method that visualizes the Berry
+        curvature inside the exceptional surface. It calls `plot_vector_field`
+        with appropriate defaults for orientation ('berry') and scaling
+        ('log10(|berry|+1)').
+
+        Parameters
+        ----------
+        plotter : pv.Plotter, optional
+            An existing PyVista plotter. If None, a new one is created.
+        cmap : str, optional
+            The colormap for the glyphs. Defaults to 'coolwarm'.
+        glyph_factor : float, optional
+            A scaling factor for the glyphs. Defaults to 0.1.
+        glyph_tolerance : float, optional
+            Controls the density of the glyphs. Defaults to 0.025.
+        glyph_geom : pv.PolyData, optional
+            The geometry to use for the glyphs. If None, PyVista's default is used.
+        glyph_kwargs : Dict, optional
+            Additional keyword arguments for the glyphs.
+        show_surf : bool, optional
+            If True, displays the translucent exceptional surface. Defaults to True.
+        surf_color : Any, optional
+            Color of the exceptional surface. Defaults to 'gray'.
+        surf_opacity : float, optional
+            Opacity of the exceptional surface. Defaults to 0.05.
+        surf_decimation : float, optional
+            Decimation factor for the surface mesh. Defaults to 0.2.
+        surf_kwargs : Dict, optional
+            Additional keyword arguments for the surface mesh.
+
+        Returns
+        -------
+        pv.Plotter
+            The PyVista plotter object with the Berry curvature field added.
+        """
         return self.plot_vector_field(
             plotter=plotter,orient='berry',scale='log10(|berry|+1)',
             cmap=cmap,glyph_factor=glyph_factor,glyph_tolerance=glyph_tolerance,
@@ -852,7 +987,7 @@ class NodalSkeleton:
             surf_color=surf_color,surf_opacity=surf_opacity,
             surf_decimation=surf_decimation,surf_kwargs=surf_kwargs,
         )
-    
+
 
     def plot_interior_dispersion(
             self,
@@ -868,7 +1003,44 @@ class NodalSkeleton:
             surf_decimation: float = 0.2,
             surf_kwargs: Dict = {},
         ) -> pv.Plotter:
-        """Plots the energy dispersion field within the exceptional surface."""
+        """
+        Plots the energy dispersion field within the exceptional surface.
+
+        This method visualizes the gradient of the imaginary part of the energy
+        (dispersion) inside the exceptional surface. It calls `plot_vector_field`
+        with orientation set to 'imag_dispersion' and scaling to
+        '|imag_dispersion|'.
+
+        Parameters
+        ----------
+        plotter : pv.Plotter, optional
+            An existing PyVista plotter. If None, a new one is created.
+        cmap : str, optional
+            The colormap for the glyphs. Defaults to 'coolwarm'.
+        glyph_factor : float, optional
+            A scaling factor for the glyphs. Defaults to 0.05.
+        glyph_tolerance : float, optional
+            Controls the density of the glyphs. Defaults to 0.025.
+        glyph_geom : pv.PolyData, optional
+            The geometry to use for the glyphs. If None, PyVista's default is used.
+        glyph_kwargs : Dict, optional
+            Additional keyword arguments for the glyphs.
+        show_surf : bool, optional
+            If True, displays the translucent exceptional surface. Defaults to True.
+        surf_color : Any, optional
+            Color of the exceptional surface. Defaults to 'gray'.
+        surf_opacity : float, optional
+            Opacity of the exceptional surface. Defaults to 0.05.
+        surf_decimation : float, optional
+            Decimation factor for the surface mesh. Defaults to 0.2.
+        surf_kwargs : Dict, optional
+            Additional keyword arguments for the surface mesh.
+
+        Returns
+        -------
+        pv.Plotter
+            The PyVista plotter object with the dispersion field added.
+        """
         return self.plot_vector_field(
             plotter=plotter,orient='imag_dispersion',scale='|imag_dispersion|',
             cmap=cmap,glyph_factor=glyph_factor,glyph_tolerance=glyph_tolerance,
@@ -879,9 +1051,9 @@ class NodalSkeleton:
 
 
     def yamada_polynomial(
-        self, 
-        variable: sp.Symbol, 
-        normalize: bool = True, 
+        self,
+        variable: sp.Symbol,
+        normalize: bool = True,
         n_jobs: int = -1,
         *,
         num_rotations: int = 10,
@@ -918,33 +1090,33 @@ class NodalSkeleton:
         """
         if not self.skeleton_graph_cache:
             self.skeleton_graph()
-        
+
         if self.is_graph_trivalent:
             logging.info(
                 f"The skeleton graph is trivalent, running {num_rotations} different"
                 " rotations to compute the Yamada polynomial safely."
             )
             return compute_yamada_safely(
-                self.skeleton_graph_cache, variable, 
-                normalize=normalize, n_jobs=n_jobs, 
+                self.skeleton_graph_cache, variable,
+                normalize=normalize, n_jobs=n_jobs,
                 num_rotations=num_rotations
             )
         else:
             logging.warning(
                 "The skeleton graph is not trivalent. "
-               f"Calculating the rotation angles {rotation_angles} "
-               f"in {rotation_order} order."
+                f"Calculating the rotation angles {rotation_angles} "
+                f"in {rotation_order} order."
             )
             return compute_yamada_polynomial(
-                self.skeleton_graph_cache, variable, 
+                self.skeleton_graph_cache, variable,
                 normalize=normalize, n_jobs=n_jobs,
                 rotation_angles=rotation_angles,
                 rotation_order=rotation_order
             )
-    
+
 
     def graph_summary(
-            self, 
+            self,
             G: Optional[nx.Graph | nx.MultiGraph] = None
         ) -> None:
         """
@@ -978,23 +1150,23 @@ class NodalSkeleton:
             data.append(["Connected", connected])
             data.append(["# Connected components", num_components])
             # Component sizes
-            components = sorted(nx.connected_components(G), 
-                                key=len, 
+            components = sorted(nx.connected_components(G),
+                                key=len,
                                 reverse=True)
             for i, comp in enumerate(components, 1):
                 data.append([f"Component {i} size", len(comp)])
-        print(tabulate(data, 
-                       headers=["Property", "Value"], 
+        print(tabulate(data,
+                       headers=["Property", "Value"],
                        tablefmt="github"))
 
         # Degree distribution
         degree_hist = nx.degree_histogram(G)
-        degree_dist = [(deg, count) for deg, count in 
+        degree_dist = [(deg, count) for deg, count in
                        enumerate(degree_hist) if count > 0]
         if degree_dist:
             print("\nDegree distribution:")
-            print(tabulate(degree_dist, 
-                           headers=["Degree", "Frequency"], 
+            print(tabulate(degree_dist,
+                           headers=["Degree", "Frequency"],
                            tablefmt="github"))
 
 
@@ -1025,10 +1197,10 @@ class NodalSkeleton:
         """
         if host_graph is None:
             host_graph = self.skeleton_graph_cache
-        
+
         # Attempt to find an embedding of minor_graph in host_graph.
         embedding = minorminer.find_embedding(minor_graph, host_graph)
-        
+
         if embedding:
             print("The given graph contains the minor graph.")
             return embedding
@@ -1061,11 +1233,11 @@ class NodalSkeleton:
         if not prereqs['valid']:
             raise NotImplementedError("Berry curvature is only defined for Bloch vectors "
                                       "with two real and one imaginary component.")
-        
+
         gamma = prereqs['gamma']
         p, q, r = prereqs['d1_idx'], prereqs['d2_idx'], prereqs['gamma_idx']
         perm_sign = sp.LeviCivita(p, q, r)
-        
+
         d1_expr = self.bloch_vec[p]
         d2_expr = self.bloch_vec[q]
 
@@ -1075,7 +1247,7 @@ class NodalSkeleton:
         numerator_vec = perm_sign * grad_d2.cross(grad_d1)
         eps_sq = gamma**2 - d1_expr**2 - d2_expr**2
         denominator = 2 * eps_sq**sp.Rational(3, 2)
-        
+
         return (gamma/denominator) * numerator_vec
 
 
