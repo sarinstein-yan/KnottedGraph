@@ -15,6 +15,7 @@ from knotted_graph.util import (
     remove_leaf_nodes,
     simplify_edges,
     smooth_edges,
+    get_all_edge_pts,
     total_edge_pts,
     is_PT_symmetric,
     is_trivalent,
@@ -28,7 +29,6 @@ from numpy.typing import NDArray, ArrayLike
 
 # TODO:
 # - Graph edges as shapely.LineString for planar analysis
-# - [] Berry Curvature function and field plotted by pv's glyphs
 # - [] Orthogonal slices of the spectrum.imag + edge_points
 # - pd code: 
     # - [] from_graph_to_pd_code, from_pd_code_to_yamada, from_graph_to_yamada, 
@@ -72,6 +72,17 @@ class NodalSkeleton:
         The 2x2 SymPy matrix of the Hamiltonian.
     bloch_vec : tuple[sp.Expr, sp.Expr, sp.Expr]
         The components of the Bloch vector (dx, dy, dz).
+    spectrum_expr : sp.Expr
+        The expression for the k-space spectrum, defined as
+        \( + \sqrt{ \vec{d} \cdot \vec{d} } \).
+    band_gap_expr : sp.Expr
+        The expression for the k-space band gap, defined as
+        \( \Delta = 2 \lVert \vec{d} \rVert \).
+    dispersion_expr : tuple[sp.Expr, sp.Expr, sp.Expr]
+        The expressions for the k-space dispersion relation
+        \( \frac{dE}{dk} \) for each component (dx, dy, dz).
+    berry_curvature_expr : tuple[sp.Expr, sp.Expr, sp.Expr]
+        The expressions for the Berry curvature vector field
     k_symbols : tuple[sp.Symbol, sp.Symbol, sp.Symbol]
         The symbols for the momentum components (kx, ky, kz).
     span : np.ndarray
@@ -80,6 +91,36 @@ class NodalSkeleton:
         The resolution of the k-space grid.
     kx_grid, ky_grid, kz_grid : np.ndarray
         The meshgrid arrays for the k-space coordinates.
+    kx_span, ky_span, kz_span : tuple[float, float]
+        The spans for kx, ky, and kz.
+    kx_vals, ky_vals, kz_vals : np.ndarray
+        The values for kx, ky, and kz at the grid points.
+    is_Hermitian : bool
+        Whether the Hamiltonian is Hermitian.
+    is_PT_symmetric : bool
+        Whether the Hamiltonian is PT-symmetric.
+    bloch_vec_funcs : tuple[callable, callable, callable]
+        The lambdified functions for the Bloch vector components.
+    spectrum : (N, N, N) complex
+        The k-space spectrum (upper band) calculated from the Bloch vector.
+    band_gap : (N, N, N) float
+        The k-space band gap, defined as \( \Delta = 2 \lVert \vec{d} \rVert \).
+    dispersion : (N, N, N, 3) complex
+        The k-space dispersion relation \( \frac{dE}{dk} \).
+    berry_curvature : (N, N, N, 3) float
+        The Berry curvature vector field on the k-space grid.
+    interior_mask : (N, N, N) bool
+        A binary mask of the filled interior of the exceptional surface,
+        where the energy is purely imaginary.
+    skeleton_coords : (M, 3) float
+        The k-space coordinates of the points on the skeleton of the
+        exceptional surface, where M is the number of skeleton points.
+    skeleton_graph_cache : Optional[nx.MultiGraph]
+        Cached graph representation of the skeleton of the exceptional surface.
+    total_edge_pts : int
+        The total number of points constituting the edges of the skeleton graph.
+    fields_pv : pv.ImageData
+        A PyVista grid object containing the k-space field data
     """
 
     pauli_x = sp.ImmutableDenseMatrix([[0, 1], [1, 0]])
@@ -160,6 +201,17 @@ class NodalSkeleton:
 
 
     @cached_property
+    def _bloch_vec_grid(self) -> np.ndarray:
+        """The Bloch vector components evaluated on the k-space grid."""
+        k_grids = (self.kx_grid, self.ky_grid, self.kz_grid)
+        return np.asarray([
+            func(*k_grids).astype(np.complex128)
+            if expr.free_symbols
+            else np.full_like(self.kx_grid, complex(expr), dtype=np.complex128)
+            for expr, func in zip(self.bloch_vec, self.bloch_vec_funcs)
+        ])
+
+    @cached_property
     def spectrum(self) -> NDArray:
         r"""The k-space spectrum ('upper'/'positive' band).
 
@@ -168,34 +220,109 @@ class NodalSkeleton:
         NDArray
             The spectrum of the upper band, calculated as:
             \[
-            + \sqrt{\lvert \vec{d} \rvert^2}
+            + \sqrt{ \vec{d} \cdot \vec{d} }
             \]
             where \(\vec{d}\) represents the Bloch vector components.
             I.e., the half of the energy band gap.
         """
-        d_grid = np.asarray([
-            func(self.kx_grid, self.ky_grid, self.kz_grid).astype(np.complex128)
-            if expr.free_symbols
-            else np.full_like(self.kx_grid, expr, dtype=np.complex128)
-            for (expr, func) in zip(self.bloch_vec, self.bloch_vec_funcs)
-        ])
-        return np.sqrt(np.sum(d_grid**2, axis=0))
+        return np.sqrt(np.sum(self._bloch_vec_grid**2, axis=0))
     
 
     @cached_property
     def band_gap(self) -> NDArray:
-        r"""The k-space band gap.
+        r"""The k-space band gap \( \Delta = 2 \lVert \vec{d} \rVert \).
 
         Returns
         -------
         NDArray
             The band gap, calculated as:
             \[
-            \Delta = 2 \lvert \vec{d} \rvert
+            \Delta = 2 \lVert \vec{d} \rVert
             \]
         """
         return 2 * np.abs(self.spectrum)
+
+
+    @cached_property
+    def dispersion(self) -> NDArray:
+        r"""The k-space dispersion relation \( \frac{dE}{dk} \).
+
+        Returns
+        -------
+        NDArray
+            The dispersion relation, \( \frac{dE}{dk} \)
+        """
+        grad = np.gradient(self.spectrum, *self.spacing)
+        return np.stack(grad, axis=-1)
+
+
+    @staticmethod
+    def check_berry_curvature_prerequisites(
+        bloch_vec: Sequence[sp.Expr],
+    ) -> Dict[str, Any]:
+        """Helper to check validity and get indices for Berry curvature."""
+        real_indices = []
+        imag_info = {}
+        for i, d_i in enumerate(bloch_vec):
+            if d_i.is_real:
+                real_indices.append(i)
+            elif d_i.is_imaginary and not d_i.free_symbols:
+                if 'idx' in imag_info: return {'valid': False}
+                imag_info = {'idx': i, 'gamma': sp.im(d_i)}
+
+        if len(real_indices) == 2 and 'idx' in imag_info:
+            return {
+                'valid': True,
+                'gamma': imag_info['gamma'],
+                'gamma_idx': imag_info['idx'],
+                'd1_idx': real_indices[0],
+                'd2_idx': real_indices[1],
+            }
+        return {'valid': False}
     
+    @cached_property
+    def _berry_prerequisites(self) -> Dict[str, Any]:
+        """Checks prerequisites for Berry curvature calculation."""
+        return NodalSkeleton.check_berry_curvature_prerequisites(self.bloch_vec)
+
+    @cached_property
+    def berry_curvature(self) -> NDArray:
+        """The Berry curvature vector field on the k-space grid."""
+        prereqs = self._berry_prerequisites
+        if not prereqs['valid']:
+            raise NotImplementedError("Berry curvature is only defined for Bloch vectors "
+                                      "with two real and one imaginary component.")
+        
+        gamma = float(prereqs['gamma'])
+        d1_grid = self._bloch_vec_grid[prereqs['d1_idx']].real
+        d2_grid = self._bloch_vec_grid[prereqs['d2_idx']].real
+        p, q, r = prereqs['d1_idx'], prereqs['d2_idx'], prereqs['gamma_idx']
+        perm_sign = int(sp.LeviCivita(p, q, r))
+
+        grad_d1 = np.gradient(d1_grid, *self.spacing)
+        grad_d2 = np.gradient(d2_grid, *self.spacing)
+
+        curl = np.stack([
+            grad_d2[1]*grad_d1[2] - grad_d2[2]*grad_d1[1],
+            grad_d2[2]*grad_d1[0] - grad_d2[0]*grad_d1[2],
+            grad_d2[0]*grad_d1[1] - grad_d2[1]*grad_d1[0]
+        ], axis=0)
+        
+        eps_sq = gamma**2 - d1_grid**2 - d2_grid**2
+        # Mask for regions outside ES or on the singularity
+        PT_mask = eps_sq <= 0
+        
+        # Use np.divide to handle division by zero gracefully
+        with np.errstate(divide='ignore', invalid='ignore'):
+            denominator = 2 * eps_sq**1.5
+            prefactor = gamma / denominator
+
+        F = np.zeros_like(curl)
+        F[:, ~PT_mask] = perm_sign * prefactor[None, ~PT_mask] * curl[:, ~PT_mask]
+        F = np.nan_to_num(F, nan=0.0, posinf=0.0, neginf=0.0)
+
+        return np.stack(F, axis=-1)
+
 
     @property
     def _interior_mask(self) -> NDArray:
@@ -312,9 +439,9 @@ class NodalSkeleton:
 
 
     @cached_property
-    def spectrum_volume_pv(self) -> pv.PolyData:
+    def fields_pv(self) -> pv.PolyData:
         """
-        A PyVista grid object containing the complex spectrum data over k-space.
+        A PyVista grid object containing the k-space field data.
 
         This grid stores the real and imaginary parts of the energy spectrum,
         the band gap, and a helper scalar field for isosurfacing the
@@ -327,18 +454,37 @@ class NodalSkeleton:
             'gap', and 'ES_helper'.
         """
         engy = self.spectrum
-        volume = pv.ImageData(
+        vol = pv.ImageData(
             dimensions=engy.shape,
             spacing=self.spacing,
             origin=self.origin
         )
-        volume.point_data['imag'] = engy.imag.ravel(order='F')
-        volume.point_data['real'] = engy.real.ravel(order='F')
-        volume.point_data['gap'] = self.band_gap.ravel(order='F')
-        helper = np.abs(engy.real) - np.abs(engy.imag)
-        volume.point_data['ES_helper'] = helper.ravel(order='F')
-        return volume
 
+        # scaler fields
+        vol.point_data['imag'] = engy.imag.ravel(order='F')
+        vol.point_data['real'] = engy.real.ravel(order='F')
+        vol.point_data['gap'] = self.band_gap.ravel(order='F')
+        helper = np.abs(engy.real) - np.abs(engy.imag)
+        vol.point_data['ES_helper'] = helper.ravel(order='F')
+
+        # vector fields
+        disp_imag = np.stack(
+            np.gradient(engy.imag, *self.spacing, edge_order=2), axis=-1
+        )
+        disp_imag[~self._interior_mask] = 0.
+        disp_imag = disp_imag.reshape(-1, 3, order='F')
+        vol.point_data['imag_dispersion'] = disp_imag
+        vol.point_data['|imag_dispersion|'] = np.linalg.norm(disp_imag, axis=-1)
+
+        berry = self.berry_curvature.copy()
+        berry = berry.reshape(-1, 3, order='F')
+        berry_norm = np.linalg.norm(berry, axis=-1)
+        vol.point_data['berry'] = berry
+        vol.point_data['|berry|'] = berry_norm
+        vol.point_data['log10(|berry|+1)'] = np.log10(vol.point_data['|berry|'] + 1)
+
+        return vol
+    
 
     @cached_property
     def exceptional_surface_pv(self) -> pv.PolyData:
@@ -353,7 +499,7 @@ class NodalSkeleton:
         pv.PolyData
             A PyVista mesh (`PolyData`) representing the exceptional surface.
         """
-        return self.spectrum_volume_pv.contour(
+        return self.fields_pv.contour(
             isosurfaces=[0.], scalars='ES_helper'
         )
     
@@ -598,6 +744,140 @@ class NodalSkeleton:
         return plotter
     
 
+    def plot_vector_field(
+            self,
+            plotter: Optional[pv.Plotter] = None,
+            orient: Optional[str | False] = None,
+            scale: Optional[str | False] = None,
+            cmap: str = 'coolwarm',
+            glyph_factor: float = 0.1,
+            glyph_tolerance: float = 0.01,
+            glyph_geom: Optional[pv.PolyData] = None,
+            glyph_kwargs: Dict = {},
+            orient_data: Optional[NDArray] = None,
+            scale_data: Optional[NDArray] = None,
+            show_surf: bool = True,
+            surf_color: Any = 'gray',
+            surf_opacity: float = 0.05,
+            surf_decimation: float = 0.2,
+            surf_kwargs: Dict = {},
+        ) -> pv.Plotter:
+        
+        if plotter is None:
+            plotter = pv.Plotter()
+        
+        vol = self.fields_pv.copy()
+        mask = np.where(vol.point_data['imag'] != 0)[0]
+        if orient_data:
+            if not isinstance(orient, str): orient = 'orient'
+            vol.point_data[orient] = orient_data
+        if scale_data:
+            if not isinstance(scale, str): scale = 'scale'
+            vol.point_data[scale] = scale_data
+
+        interior = vol.extract_points(mask)
+        glyph = interior.glyph(
+            orient=orient,
+            scale=scale,
+            factor=glyph_factor,
+            tolerance=glyph_tolerance,
+            geom=glyph_geom
+        )
+
+        glyph_kwargs = {"cmap": cmap,
+                        "show_scalar_bar": True,
+                        **glyph_kwargs}
+        plotter.add_mesh(glyph, name='field', **glyph_kwargs)
+
+        if show_surf:
+            ES = self.exceptional_surface_pv
+            ES_deci = ES.decimate_pro(
+                surf_decimation, preserve_topology=True
+            )
+            surf_kwargs = {
+                "color": surf_color,
+                "opacity": surf_opacity,
+                "label": "Exceptional Surface",
+                **surf_kwargs
+            }
+            plotter.add_mesh(ES_deci, name='exceptional_surface', **surf_kwargs)
+        
+        return plotter
+    
+
+    def plot_scalar_field(
+            self,
+            plotter: Optional[pv.Plotter] = None,
+            scale: Optional[str | False] = None,
+            cmap: str = 'coolwarm',
+            glyph_factor: float = 0.01,
+            glyph_tolerance: float = 0.01,
+            glyph_geom: Optional[pv.PolyData] = pv.Sphere(),
+            glyph_kwargs: Dict = {},
+            scale_data: Optional[NDArray] = None,
+            show_surf: bool = True,
+            surf_color: Any = 'gray',
+            surf_opacity: float = 0.05,
+            surf_decimation: float = 0.2,
+            surf_kwargs: Dict = {},
+        ) -> pv.Plotter:
+        return self.plot_vector_field(
+            plotter=plotter,orient=False,scale=scale,scale_data=scale_data,
+            cmap=cmap,glyph_factor=glyph_factor,glyph_tolerance=glyph_tolerance,
+            glyph_geom=glyph_geom,glyph_kwargs=glyph_kwargs,show_surf=show_surf,
+            surf_color=surf_color,surf_opacity=surf_opacity,
+            surf_decimation=surf_decimation,surf_kwargs=surf_kwargs,
+        )
+    
+
+    def plot_berry_curvature(
+            self,
+            plotter: Optional[pv.Plotter] = None,
+            cmap: str = 'coolwarm',
+            glyph_factor: float = 0.1,
+            glyph_tolerance: float = 0.025,
+            glyph_geom: Optional[pv.PolyData] = None,
+            glyph_kwargs: Dict = {},
+            show_surf: bool = True,
+            surf_color: Any = 'gray',
+            surf_opacity: float = 0.05,
+            surf_decimation: float = 0.2,
+            surf_kwargs: Dict = {},
+        ) -> pv.Plotter:
+        """Plots the Berry curvature vector field in 3D k-space."""
+        return self.plot_vector_field(
+            plotter=plotter,orient='berry',scale='log10(|berry|+1)',
+            cmap=cmap,glyph_factor=glyph_factor,glyph_tolerance=glyph_tolerance,
+            glyph_geom=glyph_geom,glyph_kwargs=glyph_kwargs,show_surf=show_surf,
+            surf_color=surf_color,surf_opacity=surf_opacity,
+            surf_decimation=surf_decimation,surf_kwargs=surf_kwargs,
+        )
+    
+
+    def plot_interior_dispersion(
+            self,
+            plotter: Optional[pv.Plotter] = None,
+            cmap: str = 'coolwarm',
+            glyph_factor: float = 0.05,
+            glyph_tolerance: float = 0.025,
+            glyph_geom: Optional[pv.PolyData] = None,
+            glyph_kwargs: Dict = {},
+            show_surf: bool = True,
+            surf_color: Any = 'gray',
+            surf_opacity: float = 0.05,
+            surf_decimation: float = 0.2,
+            surf_kwargs: Dict = {},
+        ) -> pv.Plotter:
+        """Plots the energy dispersion field within the exceptional surface."""
+        return self.plot_vector_field(
+            plotter=plotter,orient='imag_dispersion',scale='|imag_dispersion|',
+            cmap=cmap,glyph_factor=glyph_factor,glyph_tolerance=glyph_tolerance,
+            glyph_geom=glyph_geom,glyph_kwargs=glyph_kwargs,show_surf=show_surf,
+            surf_color=surf_color,surf_opacity=surf_opacity,
+            surf_decimation=surf_decimation,surf_kwargs=surf_kwargs,
+        )
+
+
     def yamada_polynomial(
         self, 
         variable: sp.Symbol, 
@@ -755,6 +1035,48 @@ class NodalSkeleton:
         else:
             print("The given graph DOES NOT contain the minor graph.")
             return None
+
+    # --- symbolic expressions properties (for theoretical inspection) ---
+    @cached_property
+    def spectrum_expr(self) -> sp.Expr:
+        """Symbolic expression for the complex energy spectrum."""
+        return sp.sqrt(sum(b**2 for b in self.bloch_vec))
+
+    @cached_property
+    def band_gap_expr(self) -> sp.Expr:
+        """Symbolic expression for the band gap."""
+        return 2 * sp.Abs(self.spectrum_expr)
+
+    @cached_property
+    def dispersion_expr(self) -> sp.Matrix:
+        """Symbolic expression for the group velocity vector."""
+        # Group velocity is the gradient of the real part of the energy
+        re_E = sp.re(self.spectrum_expr)
+        return sp.Matrix([sp.diff(re_E, k) for k in self.k_symbols])
+
+    @cached_property
+    def berry_curvature_expr(self) -> sp.Matrix:
+        """Symbolic expression for the Berry curvature vector."""
+        prereqs = self._berry_prerequisites
+        if not prereqs['valid']:
+            raise NotImplementedError("Berry curvature is only defined for Bloch vectors "
+                                      "with two real and one imaginary component.")
+        
+        gamma = prereqs['gamma']
+        p, q, r = prereqs['d1_idx'], prereqs['d2_idx'], prereqs['gamma_idx']
+        perm_sign = sp.LeviCivita(p, q, r)
+        
+        d1_expr = self.bloch_vec[p]
+        d2_expr = self.bloch_vec[q]
+
+        grad_d1 = sp.Matrix([sp.diff(d1_expr, k) for k in self.k_symbols])
+        grad_d2 = sp.Matrix([sp.diff(d2_expr, k) for k in self.k_symbols])
+
+        numerator_vec = perm_sign * grad_d2.cross(grad_d1)
+        eps_sq = gamma**2 - d1_expr**2 - d2_expr**2
+        denominator = 2 * eps_sq**sp.Rational(3, 2)
+        
+        return (gamma/denominator) * numerator_vec
 
 
 
