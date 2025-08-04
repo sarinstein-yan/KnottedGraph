@@ -468,20 +468,22 @@ class NodalSkeleton:
         vol.point_data['ES_helper'] = helper.ravel(order='F')
 
         # vector fields
-        disp_imag = np.stack(
+        im_disp = np.stack(
             np.gradient(engy.imag, *self.spacing, edge_order=2), axis=-1
         )
-        disp_imag[~self._interior_mask] = 0.
-        disp_imag = disp_imag.reshape(-1, 3, order='F')
-        vol.point_data['imag_dispersion'] = disp_imag
-        vol.point_data['|imag_dispersion|'] = np.linalg.norm(disp_imag, axis=-1)
+        im_disp[~self._interior_mask] = 0.
+        im_disp = im_disp.reshape(-1, 3, order='F')
+        im_disp_norm = np.linalg.norm(im_disp, axis=-1)
+        vol.point_data['im_disp'] = im_disp
+        vol.point_data['|im_disp|'] = im_disp_norm
+        vol.point_data['log10(|im_disp|+1)'] = np.log10(im_disp_norm + 1)
 
         berry = self.berry_curvature.copy()
         berry = berry.reshape(-1, 3, order='F')
         berry_norm = np.linalg.norm(berry, axis=-1)
         vol.point_data['berry'] = berry
         vol.point_data['|berry|'] = berry_norm
-        vol.point_data['log10(|berry|+1)'] = np.log10(vol.point_data['|berry|'] + 1)
+        vol.point_data['log10(|berry|+1)'] = np.log10(berry_norm + 1)
 
         return vol
 
@@ -605,11 +607,60 @@ class NodalSkeleton:
             self,
             node_radius: float = 0.08,
             tube_radius: float = 0.04,
-    ) -> Tuple[pv.MultiBlock, pv.PolyData]:
-        """Prepares the spatial graph data as PyVista objects for plotting."""
-        args = (tube_radius, node_radius)
+            add_edge_field: bool = False,
+            *,
+            orient: str | bool = None,
+            scale: str | bool = None,
+            glyph_factor: float = 0.1,
+            glyph_tolerance: float = 0.01,
+            glyph_interval: int = 1,
+            glyph_geom: Optional[pv.PolyData] = None,
+    ) -> Tuple[pv.MultiBlock, pv.PolyData, Optional[pv.PolyData]]:
+        """
+        Prepares the spatial graph and optional edge vector field as PyVista objects.
+
+        This internal method generates the visual components of the skeleton graph:
+        spheres for nodes, tubes for edges, and optionally glyphs for a vector
+        field sampled along the edges.
+
+        Parameters
+        ----------
+        node_radius : float
+            Radius of the spheres for nodes.
+        tube_radius : float
+            Radius of the tubes for edges.
+        add_edge_field : bool
+            If True, computes glyphs for the edge vector field.
+            Defaults to False.
+        orient : str | bool, optional
+            Name of the vector field to orient glyphs on edges. Defaults to None.
+        scale : str | bool, optional
+            Name of the scalar/vector field to scale glyphs on edges. Defaults to None.
+        glyph_factor : float, optional
+            Scaling factor for the edge glyphs. Defaults to 0.1.
+        glyph_tolerance : float, optional
+            Tolerance for the glyphs. Defaults to 0.01.
+        glyph_interval : int, optional
+            The sampling stride for placing glyphs on edge points. A smaller
+            number means denser glyphs. Defaults to 1.
+        glyph_geom : Optional[pv.PolyData], optional
+            The geometry to use for the glyphs (e.g., `pv.Arrow()`).
+
+        Returns
+        -------
+        Tuple[pv.MultiBlock, pv.PolyData, Optional[pv.PolyData]]
+            A tuple containing:
+            - node_glyphs: PyVista object for the graph nodes.
+            - edge_tubes: PyVista object for the graph edges.
+            - edge_field_glyphs: PyVista object for the edge vector field, or
+              None if not computed.
+        """
+        args = (node_radius, tube_radius, orient, scale, 
+                glyph_interval, glyph_factor, id(glyph_geom))
+
         if self._pv_data_args == args:
-            return self.node_glyphs_pv, self.edge_tubes_pv
+            return (self.node_glyphs_pv, self.edge_tubes_pv, 
+                    getattr(self, 'edge_field_glyphs_pv', None))
 
         G = self.skeleton_graph_cache or self.skeleton_graph()
 
@@ -629,13 +680,39 @@ class NodalSkeleton:
             e.tube(radius=tube_radius) for e in edge_data
         ])
 
+        # Generate edge field glyphs if requested
+        edge_field_glyphs = None
+        if add_edge_field:
+            all_edge_points = []
+            for spline in edge_data:
+                points = spline.points
+                if len(points) > 0:
+                    # Sample points from the spline using the interval stride
+                    all_edge_points.append(points[::glyph_interval])
+
+            if all_edge_points:
+                sampled_points = np.vstack(all_edge_points)
+                sampled_poly = pv.PolyData(sampled_points)
+                # sampled_poly = sampled_poly.interpolate(self.fields_pv)
+                sampled_poly = sampled_poly.sample(self.fields_pv)
+                if scale is False and glyph_geom is None:
+                    glyph_geom = pv.Sphere()
+                edge_field_glyphs = sampled_poly.glyph(
+                    orient=orient,
+                    scale=scale,
+                    factor=glyph_factor,
+                    tolerance=glyph_tolerance,
+                    geom=glyph_geom,
+                )
+        
         self.node_data_pv = node_data
         self.node_glyphs_pv = node_glyphs
         self.edge_data_pv = edge_data
         self.edge_tubes_pv = edge_tubes
-        # Update the cache key
-        self._pv_data_args = args
-        return node_glyphs, edge_tubes
+        self.edge_field_glyphs_pv = edge_field_glyphs
+        self._pv_data_args = args # Update the cache key
+
+        return node_glyphs, edge_tubes, edge_field_glyphs
 
 
     def plot_skeleton_graph(
@@ -649,6 +726,17 @@ class NodalSkeleton:
             edge_color: Any = '#348ABD',
             node_kwargs: Dict = {},
             edge_kwargs: Dict = {},
+            # --- Field plotting args ---
+            add_edge_field: bool = False,
+            orient: str | bool = None,
+            scale: str | bool = None,
+            glyph_factor: float = 0.1,
+            glyph_tolerance: float = 0.01,
+            glyph_interval: int = 1,
+            glyph_geom: Optional[pv.PolyData] = None,
+            field_cmap: str = 'viridis',
+            field_kwargs: Dict = {},
+            # --- Silhouette args ---
             add_silhouettes: bool = False,
             silh_color: Any = 'gray',
             silh_origins: Optional[ArrayLike | str] = None,
@@ -696,6 +784,15 @@ class NodalSkeleton:
         if plotter is None:
             plotter = pv.Plotter()
 
+        node_glyphs, edge_tubes, edge_field_glyphs = self._pyvista_graph_data(
+            node_radius, tube_radius, add_edge_field,
+            orient=orient, scale=scale,
+            glyph_factor=glyph_factor,
+            glyph_tolerance=glyph_tolerance,
+            glyph_interval=glyph_interval,
+            glyph_geom=glyph_geom,
+        )
+
         comm = {
             "opacity": 1.,
             "smooth_shading": True,
@@ -704,20 +801,31 @@ class NodalSkeleton:
             "metallic": 1.,
         }
 
-        node_glyphs, edge_tubes = \
-            self._pyvista_graph_data(node_radius, tube_radius)
-
+        if add_edge_field and edge_field_glyphs:
+            edge_kwargs = {'opacity': .1, **edge_kwargs}
+            field_kwargs = {
+                'scalars': scale,
+                'cmap': field_cmap,
+                'name': 'edge_field',
+                'label': f"Edge Field ({str(scale or orient)})",
+                'show_scalar_bar': bool(scale), 
+                **field_kwargs
+            }
+            plotter.add_mesh(edge_field_glyphs, **field_kwargs)
+        
         if add_edges:
             edge_kwargs = {'color': edge_color,
+                           'name': 'edge',
                            'label': 'Graph Edge',
                            **comm, **edge_kwargs}
-            plotter.add_mesh(edge_tubes, name='edge', **edge_kwargs)
+            plotter.add_mesh(edge_tubes, **edge_kwargs)
 
         if add_nodes:
             node_kwargs = {'color': node_color,
+                           'name': 'node',
                            'label': 'Graph Node',
                            **comm, **node_kwargs}
-            plotter.add_mesh(node_glyphs, name='node', **node_kwargs)
+            plotter.add_mesh(node_glyphs, **node_kwargs)
 
         if add_silhouettes:
             if isinstance(silh_origins, str):
@@ -933,7 +1041,7 @@ class NodalSkeleton:
             plotter: Optional[pv.Plotter] = None,
             cmap: str = 'coolwarm',
             glyph_factor: float = 0.1,
-            glyph_tolerance: float = 0.025,
+            glyph_tolerance: float = 0.01,
             glyph_geom: Optional[pv.PolyData] = None,
             glyph_kwargs: Dict = {},
             show_surf: bool = True,
@@ -993,8 +1101,8 @@ class NodalSkeleton:
             self,
             plotter: Optional[pv.Plotter] = None,
             cmap: str = 'coolwarm',
-            glyph_factor: float = 0.05,
-            glyph_tolerance: float = 0.025,
+            glyph_factor: float = 0.1,
+            glyph_tolerance: float = 0.01,
             glyph_geom: Optional[pv.PolyData] = None,
             glyph_kwargs: Dict = {},
             show_surf: bool = True,
@@ -1008,8 +1116,8 @@ class NodalSkeleton:
 
         This method visualizes the gradient of the imaginary part of the energy
         (dispersion) inside the exceptional surface. It calls `plot_vector_field`
-        with orientation set to 'imag_dispersion' and scaling to
-        '|imag_dispersion|'.
+        with orientation set to 'im_disp' and scaling to
+        'log10(|im_disp|+1)'.
 
         Parameters
         ----------
@@ -1042,7 +1150,7 @@ class NodalSkeleton:
             The PyVista plotter object with the dispersion field added.
         """
         return self.plot_vector_field(
-            plotter=plotter,orient='imag_dispersion',scale='|imag_dispersion|',
+            plotter=plotter,orient='im_disp',scale='log10(|im_disp|+1)',
             cmap=cmap,glyph_factor=glyph_factor,glyph_tolerance=glyph_tolerance,
             glyph_geom=glyph_geom,glyph_kwargs=glyph_kwargs,show_surf=show_surf,
             surf_color=surf_color,surf_opacity=surf_opacity,
