@@ -28,7 +28,6 @@ from numpy.typing import NDArray, ArrayLike
 
 
 # TODO:
-# - Graph edges as shapely.LineString for planar analysis
 # - [] Orthogonal slices of the spectrum.imag + edge_points
 # - pd code: 
     # - [] from_graph_to_pd_code, from_pd_code_to_yamada, from_graph_to_yamada, 
@@ -655,7 +654,7 @@ class NodalSkeleton:
             - edge_field_glyphs: PyVista object for the edge vector field, or
               None if not computed.
         """
-        args = (node_radius, tube_radius, orient, scale, 
+        args = (node_radius, tube_radius, add_edge_field, orient, scale, 
                 glyph_interval, glyph_factor, id(glyph_geom))
 
         if self._pv_data_args == args:
@@ -695,7 +694,7 @@ class NodalSkeleton:
                 sampled_poly = pv.PolyData(sampled_points)
                 # sampled_poly = sampled_poly.interpolate(self.fields_pv)
                 sampled_poly = sampled_poly.sample(self.fields_pv)
-                if scale is False and glyph_geom is None:
+                if orient is False and glyph_geom is None:
                     glyph_geom = pv.Sphere()
                 edge_field_glyphs = sampled_poly.glyph(
                     orient=orient,

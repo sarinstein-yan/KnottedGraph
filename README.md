@@ -94,22 +94,13 @@ from knotted_graph import NodalSkeleton
 # Define momentum symbols
 kx, ky, kz = sp.symbols('k_x k_y k_z', real=True)
 
-# Define a non-Hermitian Bloch vector that can form a Hopf link
-def hopf_bloch_vector(gamma, k_symbols=(kx, ky, kz)):
-    """Returns the Bloch vector components for a Hopf link."""
-    kx, ky, kz = k_symbols
-    z = sp.cos(2*kz) + sp.Rational(1, 2) \
-        + sp.I*(sp.cos(kx) + sp.cos(ky) + sp.cos(kz) - 2)
-    w = sp.sin(kx) + sp.I*sp.sin(ky)
-    f = z**2 - w**2 
-    cx = sp.simplify(sp.re(f))
-    cz = sp.simplify(sp.im(f))
-    return (cx, gamma * sp.I, cz)
+# Use a non-Hermitian Bloch vector that can form a Hopf link
+from knotted_graph.examples import hopf_link_bloch_vector
 
-gamma = 0.8  # Non-Hermitian strength
-d_x, d_y, d_z = hopf_bloch_vector(gamma)
+gamma = 0.1  # Non-Hermitian strength
+d_x, d_y, d_z = hopf_link_bloch_vector(gamma)
 
-# Initialize the `NodalSkeleton` with the Hamioltonian characteristic
+# Initialize the `NodalSkeleton` with the Hamiltonian characteristic
 ske = NodalSkeleton(
     char = (d_x, d_y, d_z),
     # k_symbols = (kx, ky, kz), # optional, we have named them *conventionally*
@@ -585,7 +576,7 @@ planar diagram code: V[0,2];V[3,5];X[4,1,3,2];X[4,0,5,1]
 $$A^{6} + 2 A^{5} + 3 A^{4} + 3 A^{3} + 3 A^{2} + 2 A + 1$$
 
 
-Or from a thin wrapper function:
+Or from a thinly wrapped function:
 > [!Warning]
 > This is not guaranteed to be correct because a view is to be input manually
 
