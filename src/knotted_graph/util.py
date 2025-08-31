@@ -1,7 +1,7 @@
 import numpy as np
 import sympy as sp
 import networkx as nx
-from rdp import rdp, pldist
+import fastrdp
 
 import logging
 from typing import List, Tuple, Iterable, Set, Optional, Any, Sequence, TypeVar
@@ -184,9 +184,6 @@ def total_edge_pts(
 def smooth_edges(
     G: nx.MultiGraph,
     epsilon: float = 0.,
-    dist: Any = pldist,
-    algo: str = "iter",
-    return_mask: bool = False,
     copy: bool = True,
 ) -> (Any | NDArray):
     """Smooth the edge points of a directed graph.
@@ -197,28 +194,25 @@ def smooth_edges(
         The input directed graph.
     epsilon : float, optional
         The RDP simplification tolerance, by default 0.
-    dist : Any, optional
-        The distance function to use, by default pldist.
-    algo : str, optional
-        The algorithm to use for RDP, by default "iter".
-    return_mask : bool, optional
-        Whether to return a mask of the simplified points, by default False.
     copy : bool, optional
         Whether to return a copy of the graph, by default True.
-        
+
     Returns
     -------
     nx.MultiGraph
         The graph with smoothed edge points.
     """
-    G = G.copy() if copy else G
-    for u, v, key, pts in G.edges(keys=True, data='pts'):
-        if pts is None or len(pts) < 3:
+    H = G.copy() if copy else G
+    for u, v, key, pts in H.edges(keys=True, data="pts"):
+        if pts is None:
             continue
-        G[u][v][key]['pts'] = rdp(
-            pts, epsilon=epsilon, dist=dist, algo=algo, return_mask=return_mask
-        )
-    return G
+        pts_arr = np.asarray(pts)
+        if pts_arr.ndim != 2 or pts_arr.shape[0] < 3:
+            continue
+
+        simplified = fastrdp.rdpN(pts_arr, epsilon)
+        H[u][v][key]["pts"] = simplified
+    return H
 
 
 def remove_leaf_nodes(
