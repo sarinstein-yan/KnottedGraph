@@ -94,22 +94,13 @@ from knotted_graph import NodalSkeleton
 # Define momentum symbols
 kx, ky, kz = sp.symbols('k_x k_y k_z', real=True)
 
-# Define a non-Hermitian Bloch vector that can form a Hopf link
-def hopf_bloch_vector(gamma, k_symbols=(kx, ky, kz)):
-    """Returns the Bloch vector components for a Hopf link."""
-    kx, ky, kz = k_symbols
-    z = sp.cos(2*kz) + sp.Rational(1, 2) \
-        + sp.I*(sp.cos(kx) + sp.cos(ky) + sp.cos(kz) - 2)
-    w = sp.sin(kx) + sp.I*sp.sin(ky)
-    f = z**2 - w**2 
-    cx = sp.simplify(sp.re(f))
-    cz = sp.simplify(sp.im(f))
-    return (cx, gamma * sp.I, cz)
+# Use a non-Hermitian Bloch vector that can form a Hopf link
+from knotted_graph.examples import hopf_link_bloch_vector
 
-gamma = 0.8  # Non-Hermitian strength
-d_x, d_y, d_z = hopf_bloch_vector(gamma)
+gamma = 0.1  # Non-Hermitian strength
+d_x, d_y, d_z = hopf_link_bloch_vector(gamma)
 
-# Initialize the `NodalSkeleton` with the Hamioltonian characteristic
+# Initialize the `NodalSkeleton` with the Hamiltonian characteristic
 ske = NodalSkeleton(
     char = (d_x, d_y, d_z),
     # k_symbols = (kx, ky, kz), # optional, we have named them *conventionally*
@@ -585,7 +576,7 @@ planar diagram code: V[0,2];V[3,5];X[4,1,3,2];X[4,0,5,1]
 $$A^{6} + 2 A^{5} + 3 A^{4} + 3 A^{3} + 3 A^{2} + 2 A + 1$$
 
 
-Or from a thin wrapper function:
+Or from a thinly wrapped function:
 > [!Warning]
 > This is not guaranteed to be correct because a view is to be input manually
 
@@ -633,9 +624,111 @@ pd_code: V[0,2];V[3,5];X[5,1,4,0];X[1,3,2,4]
 
 
 
+### Physical Fields Visualization
+
+One can plot physical vector / scalar fields within the Exceptional Surface or on the Skeleton Graph edges.
+
+Fields data are stored in the property `NodalSkeleton.fields_pv` as a `pyvista.ImageData`
+
+```python
+bvec = kg.hopf_link_bloch_vector(.4, (kx, ky, kz))
+ske = kg.NodalSkeleton(bvec)
+
+ske.fields_pv
+```
+
+
+#### Energy Dispersion $\nabla_{\vec{k}}\text{Im}(E)$
+
+```python
+pl = pv.Plotter(shape=(1, 2), window_size=[1200, 600])
+pl.subplot(0, 0)
+pl = ske.plot_interior_dispersion(pl, glyph_factor=0.1, glyph_tolerance=0.015)
+pl.subplot(0, 1)
+pl = ske.plot_skeleton_graph(pl, add_edge_field=True, 
+                             orient='im_disp', scale='log10(|im_disp|+1)',
+                             field_cmap='BuPu', glyph_factor=1.2)
+pl.link_views()
+pl.camera_position = [[-0.75, -7.62, 3.67], [0.14, -0.08, 0.96], [0.01, 0.34, 0.94]]
+if EXPORT_FIGS:
+    pl.screenshot("./assets/field_dispersion.png")
+pl.show()
+```
+
+<p align="center">
+    <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/field_dispersion.png" 
+    width="1200" alt="Energy Dispersion Visualization"/>
+</p>
+
+
+#### Berry Curvature $\vec{\Omega} := \nabla_{\vec{k}} \times \vec{A}$
+
+$\vec{A} := \text{Re}(i \left< \phi^L | \nabla_{\vec{k}} | \phi^R \right> )$ is the Berry connection.
+
+```python
+pl = pv.Plotter(shape=(1, 2), window_size=[1200, 600])
+pl.subplot(0, 0)
+pl = ske.plot_berry_curvature(pl, glyph_factor=0.03, glyph_tolerance=0.015)
+pl.subplot(0, 1)
+pl = ske.plot_skeleton_graph(pl, add_edge_field=True, 
+                             orient='berry', scale='log10(|berry|+1)',
+                             field_cmap='BuPu', glyph_factor=.3)
+pl.link_views()
+pl.camera_position = [[-0.75, -7.62, 3.67], [0.14, -0.08, 0.96], [0.01, 0.34, 0.94]]
+if EXPORT_FIGS:
+    pl.screenshot("./assets/field_berry.png")
+pl.show()
+```
+
+<p align="center">
+    <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/field_berry.png" 
+    width="1200" alt="Berry Curvature Visualization"/>
+</p>
+
+
+#### Custom Visualization
+
+One can add custom vector / scalar field data.
+
+E.g. here we add the gradient of the Im(E) and the gradient of Berry curvature magnitude.
+
+```python
+vol = ske.fields_pv.copy()
+# add extra fields
+vol = vol.compute_derivative(scalars='|berry|', gradient='∇|berry|')
+vol.point_data['log10(|∇|berry||+1)'] = - np.log10( np.linalg.norm(vol.point_data['∇|berry|'], axis=-1) +1)
+vol = vol.compute_derivative(scalars='|im_disp|', gradient='∇|im_disp|')
+vol.point_data['log10(|∇|im_disp||+1)'] = - np.log10( np.linalg.norm(vol.point_data['∇|im_disp|'], axis=-1) +1)
+
+vol
+```
+
+Visualizing the iso-surfaces of scalar fields with `pyvista` interactive widgets.
+
+```python
+scalars = ['imag', 
+           'log10(|berry|+1)', 'log10(|im_disp|+1)', 
+           '|berry|', '|im_disp|', 
+           'log10(|∇|berry||+1)', 'log10(|∇|im_disp||+1)']
+
+# null out the exterior points
+mask = np.where(vol.point_data['imag'] == 0)
+for s in scalars:
+    vol.point_data[s][mask] = np.nan
+
+pv.set_jupyter_backend('trame')
+pl2 = pv.Plotter(window_size=(800, 600))
+ske.plot_exceptional_surface(pl2, surf_opacity=0.05, surf_color='gray')
+pl2.add_mesh_isovalue(vol, scalars=scalars[0], opacity=0.5, cmap='BuPu')
+pl2.add_legend()
+pl2.add_bounding_box()
+pl2.show()
+```
+
+
+
 ## TODO:
 - [ ] Documentation website
-- [ ] Berry Curvature calculation and vector field visualization
 - [ ] Graph diagram visualization with parallel projection
 - [ ] Batched processing. Move the spectrum calculation batch to GPU.
 - [ ] Multi-band Hamiltonians support
