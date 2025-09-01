@@ -1,6 +1,7 @@
 import numpy as np
 import sympy as sp
 import networkx as nx
+import matplotlib.pyplot as plt
 import skimage.morphology as morph
 from poly2graph import skeleton2graph
 from functools import cached_property, lru_cache
@@ -21,7 +22,7 @@ from knotted_graph.util import (
     is_trivalent,
     idx_to_coord,
 )
-from knotted_graph.yamada import compute_yamada_polynomial
+from knotted_graph.yamada import PDCode, compute_yamada_polynomial
 
 from typing import Tuple, Union, Optional, Any, Dict, Sequence
 from numpy.typing import NDArray, ArrayLike
@@ -1155,6 +1156,68 @@ class NodalSkeleton:
             surf_color=surf_color,surf_opacity=surf_opacity,
             surf_decimation=surf_decimation,surf_kwargs=surf_kwargs,
         )
+
+
+    @cached_property
+    def PDCode(self) -> PDCode:
+        """Construct a PDCode object from the skeleton graph.
+
+        Returns
+        -------
+        PDCode
+            The Planar Diagram as a `PDCode` object.
+        """        
+        if not self.skeleton_graph_cache:
+            self.skeleton_graph()
+        return PDCode(self.skeleton_graph_cache)
+
+
+    def plot_planar_diagram(self,
+            rotation_angles: Optional[tuple[float]] = None,
+            rotation_order: str = 'ZYX',
+            ax: Optional[plt.Axes] = None,
+            vertex_kwargs: Dict = {},
+            crossing_kwargs: Dict = {},
+            edge_kwargs: Dict = {},
+        ) -> plt.Axes:
+        """Plot the planar diagram.
+
+        Parameters
+        ----------
+        rotation_angles : tuple[float], optional
+            The angles for the rotations in radians. Defaults to (0., 0., 0.).
+            See `NodalSkeleton.util.get_rotation_matrix` for details.
+        rotation_order : str, optional
+            The order of rotations to apply. Defaults to 'ZYX'.
+            See `NodalSkeleton.util.get_rotation_matrix` for details.
+        ax : plt.Axes, optional
+            The axes to plot on. If None, a new figure and axes are created.
+        vertex_kwargs : Dict, optional
+            Additional keyword arguments for the vertex glyphs.
+        crossing_kwargs : Dict, optional
+            Additional keyword arguments for the crossing glyphs.
+        edge_kwargs : Dict, optional
+            Additional keyword arguments for the edge glyphs.
+
+        Returns
+        -------
+        plt.Axes
+            The axes with the planar diagram plotted.
+        """
+        pd = self.PDCode
+        pd.compute(rotation_angles, rotation_order)
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(3,3))
+        for arc in pd.arcs.values():
+            pts = np.asarray(arc.line.coords[:])
+            ax.plot(pts[:,0], pts[:,1], color='tab:blue', zorder=-1)
+        for v in pd.vertices.values():
+            pos = v.point.coords[0]
+            ax.scatter(pos[0], pos[1], s=15, color='tab:red')
+        for x in pd.crossings.values():
+            pos = x.point.coords[0]
+            ax.scatter(pos[0], pos[1], s=15, marker='x', color='k')
+        return ax
 
 
     def yamada_polynomial(
