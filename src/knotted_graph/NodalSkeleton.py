@@ -1210,13 +1210,13 @@ class NodalSkeleton:
             fig, ax = plt.subplots(figsize=(3,3))
         for arc in pd.arcs.values():
             pts = np.asarray(arc.line.coords[:])
-            ax.plot(pts[:,0], pts[:,1], color='tab:blue', zorder=-1)
+            ax.plot(pts[:,0], pts[:,1], color='tab:blue', zorder=-1, **edge_kwargs)
         for v in pd.vertices.values():
             pos = v.point.coords[0]
-            ax.scatter(pos[0], pos[1], s=15, color='tab:red')
+            ax.scatter(pos[0], pos[1], s=15, color='tab:red', **vertex_kwargs)
         for x in pd.crossings.values():
             pos = x.point.coords[0]
-            ax.scatter(pos[0], pos[1], s=15, marker='x', color='k')
+            ax.scatter(pos[0], pos[1], s=15, marker='x', color='k', **crossing_kwargs)
         return ax
 
 
