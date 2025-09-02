@@ -64,7 +64,7 @@ print(kg.__version__)
 
 ### Initializing the `NodalSkeleton` Class
 
-1. First, one needs to define a 2-band non-Hermitian Hamiltonian in terms of the momentum vector $\vec{k} = (k_x, k_y, k_z)$.
+1. First, one needs to define a (non-interacting) 2-band non-Hermitian Hamiltonian in terms of the momentum vector $\vec{k} = (k_x, k_y, k_z)$.
 
 The class accepts the Hamiltonian "`Characteristic`" in two forms:
 
@@ -521,10 +521,10 @@ Y
 
 ```
 Is the skeleton graph trivalent? True
-Computing Yamada polynomial:  20%|██        | 2/10 [00:00<00:00, 13.35it/s]
+Computing Yamada polynomial:  10%|█         | 1/10 [00:00<00:01,  5.72it/s]
 ```
 
-$$A^{6} + 2 A^{5} + 3 A^{4} + 3 A^{3} + 3 A^{2} + 2 A + 1$$
+$$- A^{7} - A^{6} - A^{5} + A^{3} + 2 A^{2} + 2 A + 1$$
 
 
 There a few ways to compute the Yamada polynomial apart from the `NodalSkeleton.yamada_polynomial()` method. \
@@ -543,16 +543,13 @@ kg.compute_yamada_safely(
 <span style="color:#d73a49;font-weight:bold">>>></span>
 
 ```
-Is the skeleton graph trivalent? True
-Computing Yamada polynomial:  20%|██        | 2/10 [00:00<00:00, 13.35it/s]
+Computing Yamada polynomial:  10%|█         | 1/10 [00:00<00:01,  5.72it/s]
 ```
 
-$$A^{6} + 2 A^{5} + 3 A^{4} + 3 A^{3} + 3 A^{2} + 2 A + 1$$
+$$- A^{7} - A^{6} - A^{5} + A^{3} + 2 A^{2} + 2 A + 1$$
 
 
 Or from the planar diagram code:
-> [!Warning]
-> This is not guaranteed to be correct because a view is to be input manually
 
 ```python
 pd = kg.PDCode(skeleton_graph=hopf_link)
@@ -573,13 +570,10 @@ pd.compute_yamada(A, normalize=True)
 planar diagram code: V[0,2];V[3,5];X[4,1,3,2];X[4,0,5,1]
 ```
 
-$$A^{6} + 2 A^{5} + 3 A^{4} + 3 A^{3} + 3 A^{2} + 2 A + 1$$
+$$- A^{7} - A^{6} - A^{5} + A^{3} + 2 A^{2} + 2 A + 1$$
 
 
 Or from a thinly wrapped function:
-> [!Warning]
-> This is not guaranteed to be correct because a view is to be input manually
-
 
 ```python
 kg.compute_yamada_polynomial(hopf_link, A, (137.5, 81.4, 0.))
@@ -587,7 +581,7 @@ kg.compute_yamada_polynomial(hopf_link, A, (137.5, 81.4, 0.))
 
 <span style="color:#d73a49;font-weight:bold">>>></span>
 
-$$A^{6} + 2 A^{5} + 3 A^{4} + 3 A^{3} + 3 A^{2} + 2 A + 1$$
+$$- A^{7} - A^{6} - A^{5} + A^{3} + 2 A^{2} + 2 A + 1$$
 
 
 ---
@@ -619,9 +613,35 @@ kg.compute_yamada_polynomial(hopf_link, A, best_proj['angles'])
 Keys of a projection: dict_keys(['num_crossings', 'vertices', 'crossings', 'arcs', 'angles', 'pd_code'])
 Number of crossings: 2
 Angles: [0.0, 87.13401601740115, 0.0]
-pd_code: V[0,2];V[3,5];X[5,1,4,0];X[1,3,2,4]
+pd_code: V[0,2];V[3,5];X[2,4,1,3];X[4,0,5,1]
 ```
 
+#### Visualization of the planar diagram
+
+`NodalSkeleton.plot_planar_diagram` can be used to visualize the planar diagram of a given rotation angle for projection.
+
+```python
+import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots(figsize=(3,3))
+ax = ske.plot_planar_diagram(
+    ax = ax,
+    rotation_angles = projections[0]['angles'], 
+    # rotation_order = 'ZYX',
+    # undercrossing_offset = 5.
+    # mark_crossings = False
+)
+ax.set_aspect('equal')
+ax.axis('off')
+if EXPORT_FIGS:
+    plt.savefig("./assets/planar_diagram.png", bbox_inches='tight')
+plt.show()
+```
+
+<p align="center">
+    <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/planar_diagram.png" 
+    width="300" alt="Planar Diagram Visualization"/>
+</p>
 
 
 ### Physical Fields Visualization
@@ -729,7 +749,7 @@ pl2.show()
 
 ## TODO:
 - [ ] Documentation website
-- [ ] Graph diagram visualization with parallel projection
+- [x] Graph diagram visualization with parallel projection
 - [ ] Batched processing. Move the spectrum calculation batch to GPU.
 - [ ] Multi-band Hamiltonians support
 

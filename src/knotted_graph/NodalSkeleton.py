@@ -1176,9 +1176,11 @@ class NodalSkeleton:
             rotation_angles: Optional[tuple[float]] = None,
             rotation_order: str = 'ZYX',
             ax: Optional[plt.Axes] = None,
-            vertex_kwargs: Dict = {},
-            crossing_kwargs: Dict = {},
             edge_kwargs: Dict = {},
+            vertex_kwargs: Dict = {},
+            undercrossing_offset: float = 5.,
+            mark_crossings: bool = False,
+            crossing_kwargs: Dict = {},
         ) -> plt.Axes:
         """Plot the planar diagram.
 
@@ -1192,31 +1194,64 @@ class NodalSkeleton:
             See `NodalSkeleton.util.get_rotation_matrix` for details.
         ax : plt.Axes, optional
             The axes to plot on. If None, a new figure and axes are created.
-        vertex_kwargs : Dict, optional
-            Additional keyword arguments for the vertex glyphs.
-        crossing_kwargs : Dict, optional
-            Additional keyword arguments for the crossing glyphs.
         edge_kwargs : Dict, optional
             Additional keyword arguments for the edge glyphs.
+        vertex_kwargs : Dict, optional
+            Additional keyword arguments for the vertex glyphs.
+        undercrossing_offset : float, optional
+            The offset for undercrossing arcs. Unit in pixels. Defaults to 5.
+        mark_crossings : bool, optional
+            Whether to mark the crossings. Defaults to False.
+        crossing_kwargs : Dict, optional
+            Additional keyword arguments for the crossing glyphs.
 
         Returns
         -------
         plt.Axes
             The axes with the planar diagram plotted.
         """
+        from collections import defaultdict
+        from shapely.ops import substring
+
         pd = self.PDCode
         pd.compute(rotation_angles, rotation_order)
         if ax is None:
             fig, ax = plt.subplots(figsize=(3,3))
-        for arc in pd.arcs.values():
-            pts = np.asarray(arc.line.coords[:])
-            ax.plot(pts[:,0], pts[:,1], color='tab:blue', zorder=-1, **edge_kwargs)
-        for v in pd.vertices.values():
-            pos = v.point.coords[0]
-            ax.scatter(pos[0], pos[1], s=15, color='tab:red', **vertex_kwargs)
+        
+        under_arcs = defaultdict(lambda: [False, False])
         for x in pd.crossings.values():
-            pos = x.point.coords[0]
-            ax.scatter(pos[0], pos[1], s=15, marker='x', color='k', **crossing_kwargs)
+            for uid in [x.ccw_ordered_arcs[i] for i in (0,2)]:
+                arc = pd.arcs[uid]
+                if arc.start_type == 'x' and arc.start_id == x.id:
+                    under_arcs[uid][0] = True
+                if arc.end_type == 'x' and arc.end_id == x.id:
+                    under_arcs[uid][1] = True
+
+        for arc in pd.arcs.values():
+            line = arc.line
+            t = undercrossing_offset
+            L = line.length
+            if under_arcs[arc.id][0] and under_arcs[arc.id][1]:
+                line = substring(line, t, L - t)
+            elif under_arcs[arc.id][0]:
+                line = substring(line, t, L)
+            elif under_arcs[arc.id][1]:
+                line = substring(line, 0., L - t)
+            edge_kwargs = {'color': 'tab:blue', 'zorder': -1, 
+                           **edge_kwargs}
+            ax.plot(*line.xy, **edge_kwargs)
+        
+        for v in pd.vertices.values():
+            vertex_kwargs = {'s': 15, 'marker': 'o', 'color': 'tab:red', 
+                             **vertex_kwargs}
+            ax.scatter(*v.point.xy, **vertex_kwargs)
+
+        if mark_crossings:
+            for x in pd.crossings.values():
+                crossing_kwargs = {'s': 30, 'marker': 'x', 'color': 'k', 
+                                   **crossing_kwargs}
+            ax.scatter(*x.point.xy, **crossing_kwargs)
+        
         return ax
 
 

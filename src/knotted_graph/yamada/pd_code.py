@@ -72,6 +72,9 @@ class PDCode:
         # Process each edge and split at crossings
         self._process_edges(edge_lines)
 
+        # Determine crossing types (Over/Under)
+        self._determine_crossing_types()
+
         self._cache[args] = self._generate_pd_code()
         return self._cache[args]
 
@@ -280,6 +283,29 @@ class PDCode:
             )
             self.crossings[arc.end_id].add_incident_arc(arc.id, angle)
     
+
+    def _determine_crossing_types(self):
+        """Determine over/under strands for each crossing using Z-coordinates."""
+        
+        def _get_z_at_crossing(arc, xid):
+            if arc.start_type == 'x' and arc.start_id == xid:
+                coords = arc.line.coords[0]
+            elif arc.end_type == 'x' and arc.end_id == xid:
+                coords = arc.line.coords[-1]
+            else:
+                raise RuntimeError(f"Arc {arc.id} not properly connected to crossing {xid}.")
+            return coords[2]
+        
+        for xid, x in self.crossings.items():
+            raw_arc_ids = x._raw_ccw_ordered_arcs
+            if not raw_arc_ids:
+                continue # Skip trivial self-crossings
+            a, b, _, _ = [self.arcs[i] for i in raw_arc_ids]
+            z_a = _get_z_at_crossing(a, xid)
+            z_b = _get_z_at_crossing(b, xid)
+            # TODO: why is (left-lower, right-upper) undercrossing?
+            x._correctly_overstrand = z_a < z_b
+
 
     def _generate_pd_code(self) -> str:
         """Generate the PD code string."""

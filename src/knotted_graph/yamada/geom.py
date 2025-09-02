@@ -36,13 +36,14 @@ class Crossing:
     id: int
     point: Point
     incident_arcs: List[Tuple[int, float]] = field(default_factory=list)
+    _correctly_overstrand: bool = field(default=None, init=False, repr=False)
     
     def add_incident_arc(self, arc_id: int, angle: float):
         """Add an incident arc with its angle."""
         self.incident_arcs.append((arc_id, angle))
     
     @cached_property
-    def ccw_ordered_arcs(self) -> List[int]:
+    def _raw_ccw_ordered_arcs(self) -> List[int]:
         """Return the incident arcs ordered counter-clockwise by angle."""
         assert len(self.incident_arcs) == 4, \
             "Crossing must have exactly 4 incidences."
@@ -54,7 +55,20 @@ class Crossing:
         # Sort by angle for counter-clockwise order
         ccw_idx = np.argsort(angles)
         return [arc_ids[i] for i in ccw_idx]
-    
+
+    @cached_property
+    def ccw_ordered_arcs(self) -> List[int]:
+        # Rotate if the overstranding is incorrect
+        raw_order = self._raw_ccw_ordered_arcs
+        if not raw_order:
+            return [] # Trivial self-crossing
+
+        assert self._correctly_overstrand is not None, \
+            "Overstranding information is not set."
+        if not self._correctly_overstrand:
+            raw_order = raw_order[1:] + raw_order[:1]
+        return raw_order
+
     @cached_property
     def pd_code(self) -> str:
         """Return the crossing as PD code."""

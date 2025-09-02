@@ -34,10 +34,10 @@ def generate_isotopy_projections(
     from knotted_graph import PDCode, generate_isotopy_angles
 
     isotopy_samples = generate_isotopy_angles(num_rotations, order='ZYX')
-    processor = PDCode(skeleton_graph)
     
     projection = []
     for angles in isotopy_samples:
+        processor = PDCode(skeleton_graph)
         angles = angles.tolist()
         pd_code = processor.compute(angles)
         num_crossings = len(processor.crossings)
