@@ -640,7 +640,7 @@ plt.show()
 
 <p align="center">
     <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/planar_diagram.png" 
-    width="300" alt="Planar Diagram Visualization"/>
+    width="200" alt="Planar Diagram Visualization"/>
 </p>
 
 
