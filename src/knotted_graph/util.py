@@ -2,8 +2,8 @@ import numpy as np
 import sympy as sp
 import networkx as nx
 import fastrdp
-
 import logging
+from collections import defaultdict
 from typing import List, Tuple, Iterable, Set, Optional, Any, Sequence, TypeVar
 from numpy.typing import NDArray, ArrayLike
 kSymbols = TypeVar('kSymbols', bound=Tuple[sp.Symbol, sp.Symbol, sp.Symbol])
@@ -57,35 +57,92 @@ def generate_isotopy_projections(
 
 
 def compute_yamada_safely(
-        skeleton_graph: nx.MultiGraph,
-        variable: sp.Symbol,
-        num_rotations: int = 10,
-        normalize: bool = True,
-        n_jobs: int = -1
-    ) -> sp.Expr | Tuple[List[dict], List[sp.Expr]]:
-    """Process graph with multiple rotations and rank by crossing count."""
+    skeleton_graph: nx.MultiGraph,
+    variable: sp.Symbol,
+    normalize: bool = True,
+    n_jobs: int = -1,
+    num_rotations: int = 10,
+    num_overlaps: int = 1,
+) -> sp.Expr:
+    """
+    Process graph with multiple rotations and return a Yamada polynomial.
+
+    Policy:
+      • If num_overlaps <= 1: return the Yamada polynomial from the first *valid* projection.
+      • Else: iterate projections until any polynomial appears `num_overlaps` times
+        (up to SymPy equivalence). Return that agreed polynomial immediately.
+      • If none reaches `num_overlaps`: raise RuntimeError.
+
+    Raises
+    ------
+    RuntimeError
+        If no projection succeeds (num_overlaps <= 1 case) or no agreement is found
+        after exhausting projections (num_overlaps > 1 case).
+    """
     from knotted_graph import Yamada
     from tqdm import tqdm
 
-    projection = generate_isotopy_projections(skeleton_graph, num_rotations)
-    yamada = []
-    for p in tqdm(projection, desc="Computing Yamada polynomial"):
+    def _equiv(a: sp.Expr, b: sp.Expr) -> bool:
+        # Robust equality check up to algebraic simplification
         try:
-            y = Yamada(
-                    p['vertices'], p['crossings'], p['arcs']
-                ).compute(
-                    variable, normalize=normalize, n_jobs=n_jobs
+            return sp.simplify(a - b) == 0
+        except Exception:
+            # Fallback: expand+cancel then compare
+            return sp.simplify(sp.together(sp.expand(a - b))) == 0
+
+    projections = generate_isotopy_projections(skeleton_graph, num_rotations)
+
+    # Fast path: only need the first valid result
+    if num_overlaps <= 1:
+        for p in projections:
+            try:
+                return (
+                    Yamada(p["vertices"], p["crossings"], p["arcs"])
+                    .compute(variable, normalize=normalize, n_jobs=n_jobs)
                 )
+            except Exception as e:
+                logging.error(f"Error computing Yamada polynomial: {e}")
+                continue
+        raise RuntimeError("All projections failed; no Yamada polynomial could be computed.")
+
+    # Consensus path: need agreement across projections
+    polys: List[sp.Expr] = []                 # store unique representative polys
+    counts: defaultdict[int, int] = defaultdict(int)  # index -> count
+
+    for p in tqdm(projections, desc="Computing Yamada polynomial"):
+        try:
+            y = Yamada(p["vertices"], p["crossings"], p["arcs"]).compute(
+                variable, normalize=normalize, n_jobs=n_jobs
+            )
         except Exception as e:
             logging.error(f"Error computing Yamada polynomial: {e}")
             continue
-        for _y in yamada:
-            if sp.simplify(y - _y) == 0:
-                return y
-        yamada.append(y)
 
-    print(f"No agreement found in {len(yamada)} projections.")
-    return projection, yamada
+        # Try to match against existing representatives
+        matched_idx = None
+        for idx, rep in enumerate(polys):
+            if _equiv(y, rep):
+                matched_idx = idx
+                break
+
+        if matched_idx is None:
+            # New representative
+            polys.append(y)
+            matched_idx = len(polys) - 1
+            counts[matched_idx] = 1
+        else:
+            counts[matched_idx] += 1
+
+        if counts[matched_idx] >= num_overlaps:
+            # Return the canonical representative for the agreed class
+            return polys[matched_idx]
+
+    # No agreement reached
+    summary = ", ".join(f"class{idx}: {cnt}×" for idx, cnt in counts.items()) or "none"
+    raise RuntimeError(
+        f"No agreement of {num_overlaps} matching Yamada polynomials found "
+        f"across {len(projections)} projections (tallies: {summary})."
+    )
 
 
 # PT-operator

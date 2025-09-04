@@ -485,22 +485,23 @@ Degree distribution:
 
 ### Planar Diagram and Yamada Polynomial
 
-If a skeleton graph is trivalent (all node degrees <= 3), the *Yamada polynomial* is an isotopic invariant of the spatial graph.
-
-If not trivalent, the Yamada polynomial is still well-defined, but it is not an isotopic invariant, but rather a *rigid isotopy invariant* --- it depends on how one projects the 3D skeleton graph onto a 2D plane.
+> [!NOTE] 
+> **If a skeleton graph is trivalent (all node degrees <= 3), the *Yamada polynomial* is an isotopic invariant of the spatial graph.**
+> 
+> If not trivalent, the Yamada polynomial is still well-defined, but it is not an isotopic invariant, but rather a *rigid isotopy invariant* --- it depends on how one projects the 3D skeleton graph onto a 2D plane.
 
 ---
 For a trivalent skeleton graph, `NodalSkeleton.yamada_polynomial(variable)` by default will sample `num_rotations=10` different projections that quotient out the rotational symmetry that produces the same planar diagram, and start from the planar diagram with the *least* number of crossings.
 
-If it finds two Yamada polynomials agree, which usually happens right after computing from the best two projections, it will return the agreed Yamada polynomial.
+If it finds `num_overlaps` (if set to > 1) Yamada polynomials agree, it will return the agreed Yamada polynomial.
 
-If after `num_rotations` computations, no two Yamada polynomials agree, it will return the projection data and the corresponding Yamada polynomials.
+If after `num_rotations` computations, no Yamada polynomial appears at least `num_overlaps` times, it will return the projection data and the corresponding Yamada polynomials.
 
 ```python
 # define the variable of the Yamada polynomial
 A = sp.symbols('A')
 
-_ = ske.skeleton_graph() # Ensure the skeleton graph is computed and cached
+hopf_link = ske.skeleton_graph() # Ensure the skeleton graph is computed and cached
 print("Is the skeleton graph trivalent?", ske.is_graph_trivalent)
 
 # Compute the Yamada polynomial for the Hopf Link
@@ -509,7 +510,8 @@ Y = ske.yamada_polynomial(
     # normalize=True, # Normalize the Yamada polynomial
     # n_jobs=-1, # Use all available cores for one view
 
-    num_rotations=10, # ONLY for trivalent graphs
+    # num_rotations=10, # ONLY for trivalent graphs
+    # num_overlaps=1, # ONLY for trivalent graphs
     
     # rotation_angles=(0., 0., 0.), # ONLY for non-trivalent graphs
     # rotation_order='ZYX' # ONLY for non-trivalent graphs
@@ -521,19 +523,20 @@ Y
 
 ```
 Is the skeleton graph trivalent? True
-Computing Yamada polynomial:  10%|█         | 1/10 [00:00<00:01,  5.72it/s]
 ```
 
-$$- A^{7} - A^{6} - A^{5} + A^{3} + 2 A^{2} + 2 A + 1$$
+$$- A^{7} - 2 A^{6} - 2 A^{5} - A^{4} + A^{2} + A + 1$$
 
 
-There a few ways to compute the Yamada polynomial apart from the `NodalSkeleton.yamada_polynomial()` method. \
+There a few ways to compute the Yamada polynomial apart from the `NodalSkeleton.yamada_polynomial()` method.
+
 E.g., by a function call:
 
 ```python
 kg.compute_yamada_safely(
     skeleton_graph=hopf_link,
     variable=A,
+    num_overlaps=2, # default is 1
     # num_rotations=10,
     # normalize=True,
     # n_jobs=-1
@@ -546,7 +549,7 @@ kg.compute_yamada_safely(
 Computing Yamada polynomial:  10%|█         | 1/10 [00:00<00:01,  5.72it/s]
 ```
 
-$$- A^{7} - A^{6} - A^{5} + A^{3} + 2 A^{2} + 2 A + 1$$
+$$- A^{7} - 2 A^{6} - 2 A^{5} - A^{4} + A^{2} + A + 1$$
 
 
 Or from the planar diagram code:
@@ -567,10 +570,10 @@ pd.compute_yamada(A, normalize=True)
 <span style="color:#d73a49;font-weight:bold">>>></span>
 
 ```
-planar diagram code: V[0,2];V[3,5];X[4,1,3,2];X[4,0,5,1]
+planar diagram code: V[0,2];V[3,5];X[1,4,0,5];X[3,2,4,1]
 ```
 
-$$- A^{7} - A^{6} - A^{5} + A^{3} + 2 A^{2} + 2 A + 1$$
+$$- A^{7} - 2 A^{6} - 2 A^{5} - A^{4} + A^{2} + A + 1$$
 
 
 Or from a thinly wrapped function:
@@ -581,7 +584,7 @@ kg.compute_yamada_polynomial(hopf_link, A, (137.5, 81.4, 0.))
 
 <span style="color:#d73a49;font-weight:bold">>>></span>
 
-$$- A^{7} - A^{6} - A^{5} + A^{3} + 2 A^{2} + 2 A + 1$$
+$$- A^{7} - 2 A^{6} - 2 A^{5} - A^{4} + A^{2} + A + 1$$
 
 
 ---
@@ -613,8 +616,11 @@ kg.compute_yamada_polynomial(hopf_link, A, best_proj['angles'])
 Keys of a projection: dict_keys(['num_crossings', 'vertices', 'crossings', 'arcs', 'angles', 'pd_code'])
 Number of crossings: 2
 Angles: [0.0, 87.13401601740115, 0.0]
-pd_code: V[0,2];V[3,5];X[2,4,1,3];X[4,0,5,1]
+pd_code: V[0,2];V[3,5];X[4,1,3,2];X[0,5,1,4]
 ```
+
+$$- A^{7} - 2 A^{6} - 2 A^{5} - A^{4} + A^{2} + A + 1$$
+
 
 #### Visualization of the planar diagram
 

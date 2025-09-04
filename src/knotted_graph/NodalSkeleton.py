@@ -1220,7 +1220,7 @@ class NodalSkeleton:
         
         under_arcs = defaultdict(lambda: [False, False])
         for x in pd.crossings.values():
-            for uid in [x.ccw_ordered_arcs[i] for i in (0,2)]:
+            for uid in [x.ccw_ordered_arcs[i] for i in (1,3)]:
                 arc = pd.arcs[uid]
                 if arc.start_type == 'x' and arc.start_id == x.id:
                     under_arcs[uid][0] = True
@@ -1261,9 +1261,10 @@ class NodalSkeleton:
         normalize: bool = True,
         n_jobs: int = -1,
         *,
-        num_rotations: int = 10,
         rotation_angles: tuple[float] = (0.,0.,0.),
-        rotation_order: str = 'ZYX'
+        rotation_order: str = 'ZYX',
+        num_rotations: int = 10,
+        num_overlaps: int = 1,
     ) -> sp.Expr:
         """
         Computes the Yamada polynomial for the skeleton graph.
@@ -1276,9 +1277,6 @@ class NodalSkeleton:
             Whether to normalize the polynomial. Defaults to True.
         n_jobs : int, optional
             The number of jobs to run in parallel. Defaults to -1.
-        num_rotations: int, optional
-            ONLY if the skeleton graph is trivalent.
-            The number of different rotations to sample. Defaults to 10.
         rotation_angles : tuple[float], optional
             ONLY if the skeleton graph is NOT trivalent.
             The angles for the rotations in radians. Defaults to (0., 0., 0.).
@@ -1287,6 +1285,13 @@ class NodalSkeleton:
             ONLY if the skeleton graph is NOT trivalent.
             The order of rotations to apply. Defaults to 'ZYX'.
             See `NodalSkeleton.util.get_rotation_matrix` for details.
+        num_rotations: int, optional
+            ONLY if the skeleton graph is trivalent.
+            The number of different rotations to sample. Defaults to 10.
+        num_overlaps: int, optional
+            ONLY if the skeleton graph is trivalent.
+            Only return the polynomial if it appears at least this many times
+            in the sampled rotations. Defaults to 1.
 
         Returns
         -------
@@ -1304,7 +1309,8 @@ class NodalSkeleton:
             return compute_yamada_safely(
                 self.skeleton_graph_cache, variable,
                 normalize=normalize, n_jobs=n_jobs,
-                num_rotations=num_rotations
+                num_rotations=num_rotations,
+                num_overlaps=num_overlaps
             )
         else:
             logging.warning(

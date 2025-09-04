@@ -304,7 +304,7 @@ class PDCode:
             z_a = _get_z_at_crossing(a, xid)
             z_b = _get_z_at_crossing(b, xid)
             # TODO: why is (left-lower, right-upper) undercrossing?
-            x._correctly_overstrand = z_a < z_b
+            x._correctly_overstrand = z_a > z_b
 
 
     def _generate_pd_code(self) -> str:

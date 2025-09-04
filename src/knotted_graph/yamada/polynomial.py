@@ -135,6 +135,15 @@ class Yamada():
     crossings: list[Crossing]
     arcs: list[Arc]
 
+    @classmethod
+    def from_PDCode(cls, PDCode: "PDCode") -> "Yamada":
+        """
+        Create a Yamada polynomial calculator from a PD code string.
+        """
+        return cls(list(PDCode.vertices.values()),
+                   list(PDCode.crossings.values()),
+                   list(PDCode.arcs.values()))
+
     @cached_property
     def _state_graph_base(self):
         G = nx.MultiGraph()
@@ -176,8 +185,8 @@ class Yamada():
                     G.add_edge(nbrs[1], nbrs[2])
                     G.remove_node(x_node)
                 elif spin == 1:
-                    G.add_edge(nbrs[0], nbrs[2])
-                    G.add_edge(nbrs[1], nbrs[3])
+                    G.add_edge(nbrs[0], nbrs[1])
+                    G.add_edge(nbrs[2], nbrs[3])
                     G.remove_node(x_node)
                 elif spin == 2:
                     G.nodes[x_node]['type'] = 'x'
