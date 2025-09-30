@@ -1,20 +1,20 @@
 # `knotted_graph`: Analyzing Non-Hermitian Topological Nodal Structures
 
-<a target="_blank" href="https://colab.research.google.com/github/sarinstein-yan/Nodal-Knot/blob/main/getting_started.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
+<a target="_blank" href="https://colab.research.google.com/github/sarinstein-yan/KnottedGraph/blob/main/getting_started.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
 ![pre-alpha](https://img.shields.io/badge/status-pre--alpha-red?style=flat-square)
 [![PyPI](https://img.shields.io/pypi/v/knotted_graph)](https://pypi.org/project/knotted_graph/)
 
 <div align="center" style="display: flex; flex-direction: row; justify-content: center; gap: 20px;">
     <div>
-        <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/threelink_gamma=0.1.svg" 
+        <img src="https://raw.githubusercontent.com/sarinstein-yan/KnottedGraph/main/assets/threelink_gamma=0.1.svg" 
         width="600" alt="Exceptional Surface at γ=0.1"/>
         <br>
-        <a href="https://htmlpreview.github.io/?https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/threelink_gamma=0.1.html" 
+        <a href="https://htmlpreview.github.io/?https://raw.githubusercontent.com/sarinstein-yan/KnottedGraph/main/assets/threelink_gamma=0.1.html" 
         target="_blank" style="text-decoration:underline;">
         Click here to view the interactive 3D plot</a>
     </div>
     <div>
-        <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/threelink_gamma=0.1.gif" 
+        <img src="https://raw.githubusercontent.com/sarinstein-yan/KnottedGraph/main/assets/threelink_gamma=0.1.gif" 
         width="600" alt="Exceptional Surface Animation at γ=0.1"/>
     </div>
 </div>
@@ -47,8 +47,8 @@ $ pip install knotted_graph
 or clone the repository and install it manually:
 
 ```bash
-$ git clone https://github.com/sarinstein-yan/Nodal-Knot.git
-$ cd Nodal-Knot
+$ git clone https://github.com/sarinstein-yan/KnottedGraph.git
+$ cd KnottedGraph
 $ pip install -e .
 ```
 
@@ -332,10 +332,10 @@ if EXPORT_FIGS:
 ```
 
 <p align="center">
-    <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/ES_gamma=0.1.svg" 
+    <img src="https://raw.githubusercontent.com/sarinstein-yan/KnottedGraph/main/assets/ES_gamma=0.1.svg" 
     width="600" alt="Exceptional Surface at γ=0.1"/>
     <br>
-    <a href="https://htmlpreview.github.io/?https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/ES_gamma=0.1.html" 
+    <a href="https://htmlpreview.github.io/?https://raw.githubusercontent.com/sarinstein-yan/KnottedGraph/main/assets/ES_gamma=0.1.html" 
     target="_blank" style="text-decoration:underline;">
     Click here to view the interactive 3D plot</a>
 </p>
@@ -360,10 +360,10 @@ if EXPORT_FIGS:
 ```
 
 <p align="center">
-    <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/ES_gamma=0.1_silhouettes.svg" 
+    <img src="https://raw.githubusercontent.com/sarinstein-yan/KnottedGraph/main/assets/ES_gamma=0.1_silhouettes.svg" 
     width="600" alt="Exceptional Surface with Silhouettes at γ=0.1"/>
     <br>
-    <a href="https://htmlpreview.github.io/?https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/ES_gamma=0.1_silhouettes.html" 
+    <a href="https://htmlpreview.github.io/?https://raw.githubusercontent.com/sarinstein-yan/KnottedGraph/main/assets/ES_gamma=0.1_silhouettes.html" 
     target="_blank" style="text-decoration:underline;">
     Click here to view the interactive 3D plot</a>
 </p>
@@ -391,10 +391,10 @@ if EXPORT_FIGS:
 ```
 
 <p align="center">
-    <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/SG_gamma=0.1_silhouettes.svg" 
+    <img src="https://raw.githubusercontent.com/sarinstein-yan/KnottedGraph/main/assets/SG_gamma=0.1_silhouettes.svg" 
     width="600" alt="Exceptional Skeleton Graph at γ=0.1"/>
     <br>
-    <a href="https://htmlpreview.github.io/?https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/SG_gamma=0.1_silhouettes.html" 
+    <a href="https://htmlpreview.github.io/?https://raw.githubusercontent.com/sarinstein-yan/KnottedGraph/main/assets/SG_gamma=0.1_silhouettes.html" 
     target="_blank" style="text-decoration:underline;">
     Click here to view the interactive 3D plot</a>
 </p>
@@ -448,10 +448,10 @@ Degree distribution:
 ```
 
 <p align="center">
-    <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/ES_SG_gamma=0.2.svg" 
+    <img src="https://raw.githubusercontent.com/sarinstein-yan/KnottedGraph/main/assets/ES_SG_gamma=0.2.svg" 
     width="600" alt="Exceptional Surface and Skeleton Graph at γ=0.2"/>
     <br>
-    <a href="https://htmlpreview.github.io/?https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/ES_SG_gamma=0.2.html" 
+    <a href="https://htmlpreview.github.io/?https://raw.githubusercontent.com/sarinstein-yan/KnottedGraph/main/assets/ES_SG_gamma=0.2.html" 
     target="_blank" style="text-decoration:underline;">
     Click here to view the interactive 3D plot</a>
 </p>
@@ -474,10 +474,10 @@ Degree distribution:
 ```
 
 <p align="center">
-    <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/ES_SG_gamma=0.5.svg" 
+    <img src="https://raw.githubusercontent.com/sarinstein-yan/KnottedGraph/main/assets/ES_SG_gamma=0.5.svg" 
     width="600" alt="Exceptional Surface and Skeleton Graph at γ=0.5"/>
     <br>
-    <a href="https://htmlpreview.github.io/?https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/ES_SG_gamma=0.5.html" 
+    <a href="https://htmlpreview.github.io/?https://raw.githubusercontent.com/sarinstein-yan/KnottedGraph/main/assets/ES_SG_gamma=0.5.html" 
     target="_blank" style="text-decoration:underline;">
     Click here to view the interactive 3D plot</a>
 </p>
@@ -645,7 +645,7 @@ plt.show()
 ```
 
 <p align="center">
-    <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/planar_diagram.png" 
+    <img src="https://raw.githubusercontent.com/sarinstein-yan/KnottedGraph/main/assets/planar_diagram.png" 
     width="200" alt="Planar Diagram Visualization"/>
 </p>
 
@@ -682,7 +682,7 @@ pl.show()
 ```
 
 <p align="center">
-    <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/field_dispersion.png" 
+    <img src="https://raw.githubusercontent.com/sarinstein-yan/KnottedGraph/main/assets/field_dispersion.png" 
     width="1200" alt="Energy Dispersion Visualization"/>
 </p>
 
@@ -707,7 +707,7 @@ pl.show()
 ```
 
 <p align="center">
-    <img src="https://raw.githubusercontent.com/sarinstein-yan/Nodal-Knot/main/assets/field_berry.png" 
+    <img src="https://raw.githubusercontent.com/sarinstein-yan/KnottedGraph/main/assets/field_berry.png" 
     width="1200" alt="Berry Curvature Visualization"/>
 </p>
 
