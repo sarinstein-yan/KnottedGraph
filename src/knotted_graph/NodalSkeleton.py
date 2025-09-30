@@ -30,9 +30,7 @@ from numpy.typing import NDArray, ArrayLike
 
 # TODO:
 # - [] Orthogonal slices of the spectrum.imag + edge_points
-# - pd code: 
-    # - [] from_graph_to_pd_code, from_pd_code_to_yamada, from_graph_to_yamada, 
-    # - [] self.pd_code, self.yamada, self.graph_diagram_pv (parallel projection, and if possible color the undercrossing in transparent)
+# - [] from_graph_to_pd_code, from_pd_code_to_yamada, from_graph_to_yamada
 
 
 class NodalSkeleton:

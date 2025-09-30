@@ -21,6 +21,8 @@ __all__ = [
 ]
 
 
+# TODO: add the six generalized Reidemeister moves (in terms of PD codes), and use
+# them to simplify the PD code before computing the Yamada polynomial.
 class PDCode:
     """Process a knotted graph to generate PD codes."""
     def __init__(self, skeleton_graph: nx.MultiGraph, tolerance: float = 1e-8):
@@ -316,8 +318,31 @@ class PDCode:
             return ""
         
         return ";".join(v_parts + x_parts)
+
+
+    @property
+    def vertex_coords(self) -> List[Tuple[float, float]]:
+        """Get a list of vertex 2D coordinates."""
+        return [v.point.coords[0][:2] for v in self.vertices.values()]
     
+    @property
+    def crossing_coords(self) -> List[Tuple[float, float]]:
+        """Get a list of crossing 2D coordinates."""
+        return [c.point.coords[0][:2] for c in self.crossings.values()]
     
+    @property
+    def vertex_xy(self) -> Tuple[List[float], List[float]]:
+        """Get separate lists of vertex x and y coordinates."""
+        pts = np.array(self.vertex_coords)
+        return pts[:,0].tolist(), pts[:,1].tolist()
+
+    @property
+    def crossing_xy(self) -> Tuple[List[float], List[float]]:
+        """Get separate lists of crossing x and y coordinates."""
+        pts = np.array(self.crossing_coords)
+        return pts[:,0].tolist(), pts[:,1].tolist()
+
+
     def compute_yamada(
             self, 
             variable: sp.Symbol,

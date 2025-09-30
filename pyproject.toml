@@ -53,8 +53,8 @@ all = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/sarinstein-yan/Nodal-Knot"
-Repository = "https://github.com/sarinstein-yan/Nodal-Knot"
+Homepage = "https://github.com/sarinstein-yan/KnottedGraph"
+Repository = "https://github.com/sarinstein-yan/KnottedGraph"
 PyPI = "https://pypi.org/project/knotted_graph/"
 
 [tool.hatch.version]
