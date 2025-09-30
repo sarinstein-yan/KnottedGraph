@@ -21,6 +21,8 @@ __all__ = [
 ]
 
 
+# TODO: add the six generalized Reidemeister moves (in terms of PD codes), and use
+# them to simplify the PD code before computing the Yamada polynomial.
 class PDCode:
     """Process a knotted graph to generate PD codes."""
     def __init__(self, skeleton_graph: nx.MultiGraph, tolerance: float = 1e-8):
