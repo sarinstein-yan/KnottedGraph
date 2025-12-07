@@ -200,8 +200,7 @@ class PDCode:
                     end_id=end_vertex_id
                 )
                 self.arcs[arc.id] = arc
-                self.vertices[start_vertex_id].add_incident_arc(arc.id)
-                self.vertices[end_vertex_id].add_incident_arc(arc.id)
+                self._update_incidences(arc)
             else:
                 # Split edge at crossings
                 self._split_edge_at_crossings(
@@ -259,30 +258,35 @@ class PDCode:
 
     def _update_incidences(self, arc: Arc):
         """Update vertex and crossing incidences for an arc."""
+        def _angle_from(base_point, other_coords):
+            dx = other_coords[0] - base_point.x
+            dy = other_coords[1] - base_point.y
+            return np.arctan2(dy, dx)
+
         # Update start point
         if arc.start_type == 'v':
-            self.vertices[arc.start_id].add_incident_arc(arc.id)
+            vertex_pt = self.vertices[arc.start_id].point
+            next_coords = arc.line.coords[1]
+            angle = _angle_from(vertex_pt, next_coords)
+            self.vertices[arc.start_id].add_incident_arc(arc.id, angle)
         else:  # crossing
             # Calculate angle from crossing to arc
             crossing_pt = self.crossings[arc.start_id].point
-            next_pt = Point(arc.line.coords[1])
-            angle = np.arctan2(
-                next_pt.y - crossing_pt.y,
-                next_pt.x - crossing_pt.x
-            )
+            next_coords = arc.line.coords[1]
+            angle = _angle_from(crossing_pt, next_coords)
             self.crossings[arc.start_id].add_incident_arc(arc.id, angle)
         
         # Update end point
         if arc.end_type == 'v':
-            self.vertices[arc.end_id].add_incident_arc(arc.id)
+            vertex_pt = self.vertices[arc.end_id].point
+            prev_coords = arc.line.coords[-2]
+            angle = _angle_from(vertex_pt, prev_coords)
+            self.vertices[arc.end_id].add_incident_arc(arc.id, angle)
         else:  # crossing
             # Calculate angle from arc to crossing
             crossing_pt = self.crossings[arc.end_id].point
-            prev_pt = Point(arc.line.coords[-2])
-            angle = np.arctan2(
-                prev_pt.y - crossing_pt.y,
-                prev_pt.x - crossing_pt.x
-            )
+            prev_coords = arc.line.coords[-2]
+            angle = _angle_from(crossing_pt, prev_coords)
             self.crossings[arc.end_id].add_incident_arc(arc.id, angle)
     
 

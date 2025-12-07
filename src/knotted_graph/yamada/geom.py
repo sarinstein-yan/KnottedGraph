@@ -18,16 +18,26 @@ class Vertex:
     id: int
     key: Any # Optional key from node
     point: Point
-    incident_arcs: List[int] = field(default_factory=list)
+    incident_arcs: List[Tuple[int, float]] = field(default_factory=list)
     
-    def add_incident_arc(self, arc_id: int):
-        """Add an incident arc to this vertex."""
-        self.incident_arcs.append(arc_id)
+    def add_incident_arc(self, arc_id: int, angle: float):
+        """Add an incident arc with its angle."""
+        self.incident_arcs.append((arc_id, angle))
     
-    @property
+    @cached_property
+    def ccw_ordered_arcs(self) -> List[int]:
+        """Return the incident arcs ordered counter-clockwise by angle."""
+        if not self.incident_arcs:
+            return []
+        arc_ids, angles = zip(*self.incident_arcs)
+        ccw_idx = np.argsort(angles)
+        return [arc_ids[i] for i in ccw_idx]
+    
+    @cached_property
     def pd_code(self) -> str:
         """Return the vertex as PD code."""
-        return f"V[{','.join(map(str, self.incident_arcs))}]"
+        # This is different from crossings. Isolated vertices are meaningful.
+        return f"V[{','.join(map(str, self.ccw_ordered_arcs))}]"
 
 
 @dataclass
