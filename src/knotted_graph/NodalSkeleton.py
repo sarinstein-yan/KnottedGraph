@@ -136,6 +136,7 @@ class NodalSkeleton:
                                             (-np.pi, np.pi),
                                             (0,      np.pi)),
         dimension: int = 200,
+        axis_scale: Tuple[float, float, float] = (1.0, 1.0, 2.0),
         # dimension_enhancement: Optional[int] = 1,
         # ^ TODO: auto span detection
     ):
@@ -178,6 +179,7 @@ class NodalSkeleton:
         self.span = np.asarray(span)
         self.dimension = dimension
         self.spacing = np.diff(self.span, axis=1).squeeze() / (dimension-1)
+        self.axis_scale = np.asarray(axis_scale, dtype=float)
         self.origin = self.span[:, 0]
 
         # set k-space spans and coordinates
@@ -454,7 +456,7 @@ class NodalSkeleton:
         engy = self.spectrum
         vol = pv.ImageData(
             dimensions=engy.shape,
-            spacing=self.spacing,
+            spacing=self.spacing*self.axis_scale,
             origin=self.origin
         )
 
@@ -598,7 +600,9 @@ class NodalSkeleton:
 
     def _idx_to_coord(self, indices: ArrayLike) -> NDArray:
         """Converts grid indices to k-space coordinates."""
-        return idx_to_coord(indices, self.spacing, self.origin)
+        return idx_to_coord(indices, 
+                            self.spacing * self.axis_scale, 
+                            self.origin)
 
 
     def _pyvista_graph_data(

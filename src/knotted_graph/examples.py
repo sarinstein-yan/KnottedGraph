@@ -172,6 +172,8 @@ def solomon_bloch_vector(
 def threelink_bloch_vector(
     gamma: sp.Symbol, 
     k_symbols: kSymbols = sp.symbols('k_x k_y k_z', real=True),
+    c: float = 0.333,
+    m: float = 2.0,
 ) -> tuple[sp.Expr, sp.Expr, sp.Expr]:
     """Computes the Bloch vector components for the three-link.
 
