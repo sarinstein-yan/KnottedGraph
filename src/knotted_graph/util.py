@@ -294,11 +294,18 @@ def remove_leaf_nodes(
         A new graph with all leaf nodes (and their incident edges) removed.
     """
     H = G.copy()
-    while True:
+    while True:          
         # Identify all leaf nodes (nodes with degree exactly 1)
         leaf_nodes = [node for node, degree in H.degree() if degree == 1]
+        # Exit when there are no leaf nodes left.
         if not leaf_nodes:
-            break  # Exit when there are no leaf nodes left.
+            break
+        # Exit if it's a single edge
+        if len(leaf_nodes) == H.number_of_nodes():
+            random_node = leaf_nodes[0]
+            return nx.MultiGraph().add_node(
+                random_node, **H.nodes[random_node]
+            )
         for node in leaf_nodes:
             H.remove_node(node)
     return H
