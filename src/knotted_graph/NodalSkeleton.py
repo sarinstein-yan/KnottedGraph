@@ -677,7 +677,7 @@ class NodalSkeleton:
         )
 
         edges_pts = [self._idx_to_coord(e['pts']) for e in G.edges.values()]
-        edge_data = [pv.Spline(e, 2*len(e)) for e in edges_pts]
+        edge_data = [pv.Spline(e, max(10, 2*len(e))) for e in edges_pts]
         edge_tubes = pv.MultiBlock([
             e.tube(radius=tube_radius) for e in edge_data
         ])
