@@ -13,7 +13,9 @@ __all__ = [
 ]
 
 def _k2zw(
-    k_symbols: kSymbols
+    k_symbols: kSymbols,
+    c: float = 0.5,
+    m: float = 2.0,
     ) -> tuple[sp.Expr, sp.Expr]:
     """Converts k-space symbols to z and w complex variables.
 
@@ -28,7 +30,7 @@ def _k2zw(
     Complex variables z and w.
     """
     kx, ky, kz = k_symbols
-    z = sp.cos(2 * kz) + sp.Rational(1, 3) + sp.I * (sp.cos(kx) + sp.cos(ky) + sp.cos(kz) - 2)
+    z = sp.cos(2 * kz) + sp.nsimplify(c) + sp.I * (sp.cos(kx) + sp.cos(ky) + sp.cos(kz) - sp.nsimplify(m))
     w = sp.sin(kx) + sp.I * sp.sin(ky)
     return z, w
 
@@ -58,7 +60,9 @@ def pq_torus_knot_bloch_vector(
         p: int,
         q: int,
         gamma: float,
-        k_symbols: kSymbols = sp.symbols('k_x k_y k_z', real=True)
+        k_symbols: kSymbols = sp.symbols('k_x k_y k_z', real=True),
+        c: float = 0.5,
+        m: float = 2.0,
     ) -> tuple[sp.Expr, sp.Expr, sp.Expr]:
     """Computes the Bloch vector components for a pq-torus knot.
 
@@ -80,12 +84,12 @@ def pq_torus_knot_bloch_vector(
     tuple[sp.Expr, sp.Expr, sp.Expr]
         Bloch vector components.
     """
-    z, w = _k2zw(k_symbols)
+    z, w = _k2zw(k_symbols, c, m)
     return _zw2d(z**p - w**q, gamma)
 
 def unknot_bloch_vector(
     gamma: sp.Symbol, 
-    k_symbols: kSymbols = sp.symbols('k_x k_y k_z', real=True)
+    k_symbols: kSymbols = sp.symbols('k_x k_y k_z', real=True),
 ) -> tuple[sp.Expr, sp.Expr, sp.Expr]:
     """Computes the Bloch vector components for the unknot.
 
@@ -105,7 +109,7 @@ def unknot_bloch_vector(
 
 def hopf_link_bloch_vector(
     gamma: sp.Symbol, 
-    k_symbols: kSymbols = sp.symbols('k_x k_y k_z', real=True)
+    k_symbols: kSymbols = sp.symbols('k_x k_y k_z', real=True),
 ) -> tuple[sp.Expr, sp.Expr, sp.Expr]:
     """Computes the Bloch vector components for the Hopf link.
 
@@ -125,7 +129,7 @@ def hopf_link_bloch_vector(
 
 def trefoil_bloch_vector(
     gamma: sp.Symbol, 
-    k_symbols: kSymbols = sp.symbols('k_x k_y k_z', real=True)
+    k_symbols: kSymbols = sp.symbols('k_x k_y k_z', real=True),
 ) -> tuple[sp.Expr, sp.Expr, sp.Expr]:
     """Computes the Bloch vector components for the trefoil knot.
 
@@ -145,7 +149,9 @@ def trefoil_bloch_vector(
 
 def solomon_bloch_vector(
     gamma: sp.Symbol, 
-    k_symbols: kSymbols = sp.symbols('k_x k_y k_z', real=True)
+    k_symbols: kSymbols = sp.symbols('k_x k_y k_z', real=True),
+    c: float = 0.333,
+    m: float = 2.0,
 ) -> tuple[sp.Expr, sp.Expr, sp.Expr]:
     """Computes the Bloch vector components for the Solomon knot.
 
@@ -161,10 +167,11 @@ def solomon_bloch_vector(
     tuple[sp.Expr, sp.Expr, sp.Expr]
     Bloch vector components.
     """
-    return pq_torus_knot_bloch_vector(2, 4, gamma, k_symbols)
+    return pq_torus_knot_bloch_vector(2, 4, gamma, k_symbols, c, m)
 
 def threelink_bloch_vector(
-    gamma: sp.Symbol, k_symbols: kSymbols = sp.symbols('k_x k_y k_z', real=True)
+    gamma: sp.Symbol, 
+    k_symbols: kSymbols = sp.symbols('k_x k_y k_z', real=True),
 ) -> tuple[sp.Expr, sp.Expr, sp.Expr]:
     """Computes the Bloch vector components for the three-link.
 
@@ -184,7 +191,10 @@ def threelink_bloch_vector(
     return _zw2d((z**2 - w**2) * z, gamma)
 
 def awesome_bloch_vector(
-    gamma: sp.Symbol, k_symbols: kSymbols = sp.symbols('k_x k_y k_z', real=True)
+    gamma: sp.Symbol, 
+    k_symbols: kSymbols = sp.symbols('k_x k_y k_z', real=True),
+    c: float = 0.333,
+    m: float = 2.0,
 ) -> tuple[sp.Expr, sp.Expr, sp.Expr]:
     """Computes the Bloch vector components for an awesome knot.
 
@@ -200,5 +210,5 @@ def awesome_bloch_vector(
     tuple[sp.Expr, sp.Expr, sp.Expr]
     Bloch vector components.
     """
-    z, w = _k2zw(k_symbols)
+    z, w = _k2zw(k_symbols, c, m)
     return _zw2d(z * (z**2 - w**4 + w), gamma)
