@@ -1251,6 +1251,48 @@ class NodalSkeleton:
             ax.scatter(*x.point.xy, **crossing_kwargs)
         
         return ax
+    
+
+    def plot_pretty_planar_diagram(self,
+            rotation_angles: Optional[tuple[float]] = None,
+            rotation_order: str = 'ZYX',
+            ax: Optional[plt.Axes] = None,
+            spring_constant: float = 0.08,
+            nodes_repulsion: float = 0.12,
+            control_points_per_edge: int = 3,
+            tangent_repulsion: float = 0.08,
+            max_iter: int = 200,
+            step_size: float = 2.0,
+            undercrossing_offset: float = 5.,
+            mark_crossings: bool = False,
+            bezier_samples: int = 50,
+            edge_kwargs: Dict = {},
+            vertex_kwargs: Dict = {},
+            crossing_kwargs: Dict = {},
+        ) -> plt.Axes:
+        """Plot a prettier version of the planar diagram."""
+        from knotted_graph.yamada import PlanarDiagram
+        from copy import deepcopy
+
+        pd = deepcopy(self.PDCode)
+        pd.compute(rotation_angles, rotation_order)
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(3,3))
+        
+        plotter = PlanarDiagram(pd, 
+                               spring_constant=spring_constant,
+                               nodes_repulsion=nodes_repulsion,
+                               control_points_per_edge=control_points_per_edge,
+                               tangent_repulsion=tangent_repulsion)
+        plotter.layout(max_iter=max_iter, step=step_size)
+        plotter.plot(ax=ax,
+                     undercrossing_offset=undercrossing_offset,
+                     mark_crossings=mark_crossings,
+                     bezier_samples=bezier_samples,
+                     edge_kwargs=edge_kwargs,
+                     vertex_kwargs=vertex_kwargs,
+                     crossing_kwargs=crossing_kwargs)
+        return ax
 
 
     def yamada_polynomial(

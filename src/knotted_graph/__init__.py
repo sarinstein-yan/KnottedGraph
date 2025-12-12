@@ -1,4 +1,4 @@
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 __description__ = "A package for studying non-Hermitian nodal knotted graph."
 
