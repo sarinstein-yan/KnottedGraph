@@ -515,7 +515,7 @@ class NodalSkeleton:
         surf_kwargs: Dict = {},
         add_silhouettes: bool = False,
         silh_color: Any = 'gray',
-        silh_opacity: float = 0.2,
+        silh_opacity: float = 0.1,
         silh_origins: Optional[ArrayLike | str] = None,
         silh_decimation: float = 0.2,
         silh_kwargs: Dict = {},
