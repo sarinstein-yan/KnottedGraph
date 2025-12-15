@@ -591,9 +591,10 @@ class NodalSkeleton:
             "specular": 0.5,
             "specular_power": 20,
             "metallic": 1.,
+            "name": 'exceptional_surface',
             **surf_kwargs
         }
-        plotter.add_mesh(ES_deci, name='exceptional_surface', **surf_kwargs)
+        plotter.add_mesh(ES_deci, **surf_kwargs)
 
         return plotter
 
@@ -677,7 +678,7 @@ class NodalSkeleton:
         )
 
         edges_pts = [self._idx_to_coord(e['pts']) for e in G.edges.values()]
-        edge_data = [pv.Spline(e, max(10, 2*len(e))) for e in edges_pts]
+        edge_data = [pv.Spline(e, max(5, 2*len(e))) for e in edges_pts]
         edge_tubes = pv.MultiBlock([
             e.tube(radius=tube_radius) for e in edge_data
         ])
@@ -847,9 +848,11 @@ class NodalSkeleton:
 
             if add_edges:
                 for e in edge_tubes:
-                    _add_silhouette(e, silh_origins, opacity=.2, **silh_kwargs)
+                    tube_silh_kwargs = {'opacity': .2, **silh_kwargs}
+                    _add_silhouette(e, silh_origins, **tube_silh_kwargs)
             if add_nodes:
-                _add_silhouette(node_glyphs, silh_origins, opacity=1., **silh_kwargs)
+                node_silh_kwargs = {'opacity': 1., **silh_kwargs}
+                _add_silhouette(node_glyphs, silh_origins, **node_silh_kwargs)
 
         return plotter
 
@@ -952,8 +955,9 @@ class NodalSkeleton:
 
         glyph_kwargs = {"cmap": cmap,
                         "show_scalar_bar": True,
+                        "name": 'field',
                         **glyph_kwargs}
-        plotter.add_mesh(glyph, name='field', **glyph_kwargs)
+        plotter.add_mesh(glyph, **glyph_kwargs)
 
         if show_surf:
             ES = self.exceptional_surface_pv
@@ -964,9 +968,10 @@ class NodalSkeleton:
                 "color": surf_color,
                 "opacity": surf_opacity,
                 "label": "Exceptional Surface",
+                "name": 'exceptional_surface',
                 **surf_kwargs
             }
-            plotter.add_mesh(ES_deci, name='exceptional_surface', **surf_kwargs)
+            plotter.add_mesh(ES_deci, **surf_kwargs)
 
         return plotter
 
