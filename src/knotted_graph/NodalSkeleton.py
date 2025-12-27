@@ -59,7 +59,7 @@ class NodalSkeleton:
                  (float, float)], optional
         The plotting range for (kx, ky, kz) as ((kx_min, kx_max),
         (ky_min, ky_max), (kz_min, kz_max)). Defaults to
-        ((-np.pi, np.pi), (-np.pi, np.pi), (0, np.pi)).
+        ((-np.pi, np.pi), (-np.pi, np.pi), (-np.pi, np.pi)).
     dimension : int, optional
         The number of points to use for each dimension of the k-space grid.
         Defaults to 200.
@@ -134,9 +134,9 @@ class NodalSkeleton:
                     Tuple[float, float],
                     Tuple[float, float]] = ((-np.pi, np.pi),
                                             (-np.pi, np.pi),
-                                            (0,      np.pi)),
+                                            (-np.pi, np.pi)),
         dimension: int = 200,
-        axis_scale: Tuple[float, float, float] = (1.0, 1.0, 2.0),
+        axis_scale: Tuple[float, float, float] = (1.0, 1.0, 1.0),
         # dimension_enhancement: Optional[int] = 1,
         # ^ TODO: auto span detection
     ):
