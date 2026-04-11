@@ -1,0 +1,100 @@
+Things to not forget about:
+
+- Change format for permutation callback, DynamicElement can't update efficiently right now
+
+- #defines to manage safety checks. Docs mention NGC_SAFETY_CHECKS.
+
+- Seems to be no reason we can't re-use deleted elements for future allocations. This will reduce sparsification (though invalidate the property that iteration works through insertion) 
+
+- resurrect mesh_embedded_curve.h
+
+- many geometry functions are only defined for triangular meshes, but could possibly have definitions on polygonal surfaces
+
+- more quantities:
+  - surface area (and test to check dual area and face area sum to surface area)
+  - many intrinsic quantities should probably be computed from halfedge vectors in face
+
+- delete discrete_operators
+
+- vector2/3 clamp methods
+
+- probably get rid of canonicalize
+
+Test to write:
+
+- Make sure iterators work in empty case where possible. In particular, face.adjacentFaces() for single face
+
+- add linear algebra tests to operators (is symmetric, etc)
+
+# WTF to do with boundary loops?
+
+Boundary loops at back of face index space
+  - addition invalidates boundary loop pointers, which is different from all other invalidation rules
+
+Boundary loops intermingled in face index space
+  - memory & time cost of extra marker array
+  - face index space does not stay dense, even if only insertions are being performed
+
+Boundary loops in separate index space
+  - no weird invalidation rules
+  - switches in face indexing code
+  - he.face().index() could easily be mistaken for face index
+
+
+---> Combination of back of face space and separate index space
+  - internally in data structure, index at back of space: [ ... faces ...     ... empty ...   ... boundary loops ...]
+  - Define BoundaryLoopPtr, which actually enumerates from [0, nBL)
+    - MeshData<BoundaryLoopPtr> can now work out of the box
+    - BoundaryLoopPtrs don't get invalidated weirdly
+  - Only weirdness: exteriorHe.face() yields a face which should really be a boundary loop. User must do BoundaryLoopPtr(exteriorHe.face()) 
+  
+
+# Geometry
+
+- Intrinsic
+  
+  // Lengths and angles 
+  - edge length
+  - face area
+  - vertex dual area
+  - corner angles
+  - corner scaled angles
+  - vertex angle sum
+  - vertex gaussian curvature
+  - face gaussian curvature
+  - halfedge cotan weights
+  - edge cotan weights
+
+  // Vectors and transport
+  - halfedgeVectorInFaceBasis
+  - halfedgeVectorInVertexBasis
+  - transportAcrossHalfedge
+  - tansportAlongHalfedge
+
+  // Indices
+  - vertex indices
+  - interior vertex indices
+  - halfedge indices
+  - corner indices
+  - edge indices
+  - face indices
+  - boundary loop indices
+ 
+  // DEC
+  - hodge 012
+  - hodge inv 012
+  - d 01
+  - dT 01
+  - L
+  - connection D
+  - connection L
+
+- Extrinsic
+  - dihedral angles
+  - mean curvatures
+
+- Embedded
+   - face normal
+   - vertex normal
+   - face basis
+   - vertex basis
