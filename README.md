@@ -52,6 +52,44 @@ $ cd KnottedGraph
 $ pip install -e .
 ```
 
+### One-command setup for the repulsive-curves workflow
+
+If you want to run the vendored `repulsive-curves` integration under
+`external/repulsive-curves`, use the bootstrap script from the repository root:
+
+```bash
+$ python -m venv .venv
+$ .venv\Scripts\activate   # Windows
+# source .venv/bin/activate  # Linux / macOS
+$ python scripts/bootstrap_repulsion.py
+```
+
+This does two things:
+
+1. installs the Python dependencies needed by `KnottedGraph`, the protein notebook,
+   and the `repulsive-curves` Python wrappers;
+2. configures and builds the C++ targets `rcurves_headless` and `rcurves_shared`.
+
+System prerequisites for the bootstrap script:
+
+- `Python >= 3.11`
+- `git`
+- `cmake`
+- one working C++ toolchain supported by CMake
+  - Windows: MSVC Build Tools, MinGW, or Ninja + a compiler
+  - Linux: GCC or Clang
+  - macOS: Apple Clang
+
+Useful bootstrap options:
+
+```bash
+$ python scripts/bootstrap_repulsion.py --skip-build
+$ python scripts/bootstrap_repulsion.py --generator Ninja
+$ python scripts/bootstrap_repulsion.py --config Debug
+```
+
+The build products are written under `external/repulsive-curves/build/`.
+
 This module is tested on `Python >= 3.11`.
 Check the installation:
 

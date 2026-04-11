@@ -36,6 +36,10 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
+    "numpy",
+    "sympy",
+    "networkx",
+    "matplotlib",
     "poly2graph",
     "shapely",
     "jupyterlab",
@@ -48,8 +52,17 @@ dependencies = [
 
 [project.optional-dependencies]
 all = [
+    "biopython",
     "plotly",
     "igraph",
+    "kaleido",
+    "torch",
+]
+repulsion = [
+    "biopython",
+    "plotly",
+    "kaleido",
+    "torch",
 ]
 
 [project.urls]
