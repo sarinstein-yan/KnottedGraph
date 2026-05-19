@@ -52,43 +52,105 @@ $ cd KnottedGraph
 $ pip install -e .
 ```
 
-### One-command setup for the repulsive-curves workflow
+### Repulsor safe-step spatial graph layout
 
-If you want to run the vendored `repulsive-curves` integration under
-`external/repulsive-curves`, use the bootstrap script from the repository root:
+The current spatial graph layout workflow uses the Repulsor C++ library through
+`knotted_graph.repulsive_layout`. This is the supported path for protein-derived
+theta graph examples because it uses Repulsor's `MaximumSafeStepSize` collision
+guard during optimization.
 
-```bash
-$ python -m venv .venv
-$ .venv\Scripts\activate   # Windows
-# source .venv/bin/activate  # Linux / macOS
-$ python scripts/bootstrap_repulsion.py
-```
-
-This does two things:
-
-1. installs the Python dependencies needed by `KnottedGraph`, the protein notebook,
-   and the `repulsive-curves` Python wrappers;
-2. configures and builds the C++ targets `rcurves_headless` and `rcurves_shared`.
-
-System prerequisites for the bootstrap script:
-
-- `Python >= 3.11`
-- `git`
-- `cmake`
-- one working C++ toolchain supported by CMake
-  - Windows: MSVC Build Tools, MinGW, or Ninja + a compiler
-  - Linux: GCC or Clang
-  - macOS: Apple Clang
-
-Useful bootstrap options:
+Install the Python package and optional rendering / protein dependencies:
 
 ```bash
-$ python scripts/bootstrap_repulsion.py --skip-build
-$ python scripts/bootstrap_repulsion.py --generator Ninja
-$ python scripts/bootstrap_repulsion.py --config Debug
+$ pip install -e ".[repulsion]"
 ```
 
-The build products are written under `external/repulsive-curves/build/`.
+Install the C++ dependencies. On Windows, run these commands inside WSL Ubuntu:
+
+```bash
+$ sudo apt update
+$ sudo apt install -y build-essential g++ libopenblas-dev liblapack-dev \
+    liblapacke-dev libfmt-dev libsuitesparse-dev
+```
+
+Repulsor is vendored under `knotted_graph.repulsive_layout`, so no separate
+Repulsor clone is required. Advanced users can override the vendored copy by
+pointing `REPULSOR_ROOT` to an external checkout:
+
+```bash
+$ export REPULSOR_ROOT=/path/to/Repulsor
+```
+
+On PowerShell:
+
+```powershell
+$env:REPULSOR_ROOT="E:\Github\Repulsor"
+```
+
+Run a built-in protein example:
+
+```bash
+$ python -m knotted_graph.repulsive_layout examples --sample 1aoc --steps 100
+$ python -m knotted_graph.repulsive_layout examples --sample 3ulk --steps 100
+$ python -m knotted_graph.repulsive_layout examples --sample 5osq --steps 100
+```
+
+The first run compiles the packaged C++ driver into `build/repulsor_driver/`;
+later runs reuse that binary unless `--force-build` is passed.
+
+Equivalent console script:
+
+```bash
+$ kg-repulsive-layout examples --sample 1aoc --steps 100
+```
+
+For the `1AOC` example, the two theta graph endpoints can be pulled apart before
+optimization and then held fixed:
+
+```bash
+$ python -m knotted_graph.repulsive_layout examples \
+    --sample 1aoc \
+    --steps 100 \
+    --target-node-distance 18 \
+    --out build/repulsive_layout/1aoc_nodes18
+```
+
+The output directory contains:
+
+- `initial.obj` and `final.obj`
+- `initial_tubes.html` and `final_tubes.html`
+- `initial_layout.json` and `final_layout.json`
+- `repulsor_history.csv`
+- `metadata.json`
+- `clearance_report.json`
+- `certified_steps/`, unless `--no-save-steps` is used
+
+Python API:
+
+```python
+from pathlib import Path
+from knotted_graph.repulsive_layout import SolverOptions, run_protein_example
+
+result = run_protein_example(
+    sample="1aoc",
+    workspace=Path("build/repulsive_layout/1aoc"),
+    solver_options=SolverOptions(steps=100),
+    target_node_distance=18,
+)
+
+print(result.final_html)
+print(result.metadata["certificate"])
+```
+
+Topology note: the safe-step certificate guarantees that the optimized curve
+network remains collision-free relative to the constructed initial embedding. It
+does not prove that the protein-to-theta abstraction or the artificial closure
+choice is unique.
+
+The older vendored `external/repulsive-curves` experiments are kept as legacy
+development material, but they are not the supported user-facing entry point.
+Repulsor and its header-only dependencies are vendored under MIT-compatible
+terms; see `THIRD_PARTY_NOTICES.md`.
 
 This module is tested on `Python >= 3.11`.
 Check the installation:

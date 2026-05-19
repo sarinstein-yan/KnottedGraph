@@ -1,0 +1,1 @@
+- Remove copy instructions from fixed_dot_mm_vec.
