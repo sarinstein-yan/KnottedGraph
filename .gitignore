@@ -179,3 +179,26 @@ dev/
 assets/*.pdf
 # assets/*.html
 .vscode/
+
+# Task 2 generated example artifacts
+examples/**/data/
+examples/**/figures/
+examples/**/*.pbs
+examples/**/*.out
+examples/**/*.err
+examples/**/*.html
+examples/**/*.png
+examples/**/*.svg
+examples/**/*.pdf
+examples/**/*.npy
+examples/**/*.npz
+examples/**/*.pdb
+examples/**/*.cif
+examples/**/*.vtp
+examples/**/*.vtk
+examples/**/*.ply
+examples/**/*.stl
+examples/**/*.obj
+examples/**/*.off
+examples/**/*.gro
+examples/**/*.dump
