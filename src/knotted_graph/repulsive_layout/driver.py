@@ -32,6 +32,15 @@ class SolverOptions:
     max_backtracks: int = 12
     max_iter: int = 60
     tolerance: float = 1e-4
+    repulsion_weight: float = 1.0
+    length_weight: float = 0.0
+    curve_length_floor_weight: float = 0.0
+    bend_weight: float = 0.0
+    tube_radius: float = 0.0
+    tube_gap: float = 0.0
+    tube_weight: float = 0.0
+    topology_check: bool = True
+    topology_tolerance: float = 1e-7
     free_special_vertices: bool = False
 
 
@@ -129,6 +138,8 @@ def run_driver(
     options: SolverOptions,
     config: DriverConfig,
     save_steps_dir: Path | None = None,
+    pinned_vertices: Path | None = None,
+    curve_length_floors: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     driver_binary = config.driver_binary.resolve()
     use_wsl = should_use_wsl(config.use_wsl)
@@ -157,11 +168,33 @@ def run_driver(
         str(options.max_iter),
         "--tolerance",
         str(options.tolerance),
+        "--repulsion-weight",
+        str(options.repulsion_weight),
+        "--length-weight",
+        str(options.length_weight),
+        "--curve-length-floor-weight",
+        str(options.curve_length_floor_weight),
+        "--bend-weight",
+        str(options.bend_weight),
+        "--tube-radius",
+        str(options.tube_radius),
+        "--tube-gap",
+        str(options.tube_gap),
+        "--tube-weight",
+        str(options.tube_weight),
+        "--topology-tolerance",
+        str(options.topology_tolerance),
         "--history",
         solver_path(history_csv, use_wsl),
     ]
+    if not options.topology_check:
+        command.append("--no-topology-check")
     if save_steps_dir is not None:
         command.extend(["--save-steps-dir", solver_path(save_steps_dir, use_wsl)])
+    if pinned_vertices is not None:
+        command.extend(["--pinned-vertices", solver_path(pinned_vertices, use_wsl)])
+    if curve_length_floors is not None:
+        command.extend(["--curve-length-floors", solver_path(curve_length_floors, use_wsl)])
     if options.free_special_vertices:
         command.append("--free-special-vertices")
     if use_wsl:

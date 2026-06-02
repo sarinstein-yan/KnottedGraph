@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import networkx as nx
 import numpy as np
 
 
@@ -36,6 +37,19 @@ class RepulsiveLayoutResult:
     @property
     def final_html(self) -> Path:
         return Path(self.metadata["final_html"])
+
+    @property
+    def final_obj(self) -> Path:
+        return Path(self.metadata["final_obj"])
+
+
+@dataclass
+class GraphLayoutResult:
+    """A relaxed NetworkX spatial graph and files produced by one layout run."""
+
+    graph: nx.MultiGraph
+    workspace: Path
+    metadata: dict[str, Any]
 
     @property
     def final_obj(self) -> Path:

@@ -98,6 +98,40 @@ $ python -m knotted_graph.repulsive_layout examples --sample 5osq --steps 100
 The first run compiles the packaged C++ driver into `build/repulsor_driver/`;
 later runs reuse that binary unless `--force-build` is passed.
 
+Use `--length-weight` to keep long relaxations compact. Use `--tube-radius`,
+`--tube-gap`, and `--tube-weight` to add a soft visual-clearance penalty between
+non-adjacent curve segments:
+
+```bash
+$ python -m knotted_graph.repulsive_layout examples \
+    --sample 3ulk \
+    --steps 2000 \
+    --length-weight 0.01 \
+    --tube-radius 0.8 \
+    --tube-gap 0.2 \
+    --tube-weight 3
+```
+
+Use `--resample-points-per-edge` to give every curve edge the same number of
+optimization samples, or `--resample-target-segment-length` to sample by a
+roughly uniform segment length before Repulsor runs:
+
+```bash
+$ python -m knotted_graph.repulsive_layout examples \
+    --sample 3ulk \
+    --steps 2000 \
+    --length-weight 0.01 \
+    --tube-radius 0.8 \
+    --tube-gap 0.2 \
+    --tube-weight 3 \
+    --resample-points-per-edge 32
+```
+
+By default, resampling only densifies existing polylines. It does not downsample,
+because replacing a detailed polyline by longer chords can change the embedding
+topology before Repulsor sees it. Use topology-safe decimation after relaxation
+when fewer display points are needed.
+
 Equivalent console script:
 
 ```bash
@@ -331,6 +365,28 @@ graph
 ```
 <networkx.classes.multigraph.MultiGraph at 0x26d8b529b80>
 ```
+
+The Repulsor safe-step layout module can relax this same spatial graph format
+while preserving the graph topology during the optimization steps:
+
+```python
+from knotted_graph.repulsive_layout import SolverOptions, relax_spatial_graph
+
+result = relax_spatial_graph(
+    graph,
+    workspace="./build/repulsive_layout/skeleton_graph",
+    solver_options=SolverOptions(steps=100),
+)
+
+relaxed_graph = result.graph
+print(result.metadata["certificate"])
+```
+
+The input and output are both `networkx.MultiGraph` objects with node `pos`
+attributes and edge `pts` polylines. By default, original graph nodes are
+explicitly pinned, Repulsor safe steps move only edge-interior sample points,
+and a conservative decimation pass removes shortcut-safe internal points. Set
+`simplify_after_layout=False` to keep every Repulsor output sample point.
 
 
 - Check if the graph is trivalent

@@ -23,13 +23,40 @@ def point_segment_distance(point: np.ndarray, a: np.ndarray, b: np.ndarray) -> f
 
 
 def segment_segment_distance(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray) -> float:
-    # Static sanity metric only. Repulsor's MaximumSafeStepSize is the continuous check.
-    return min(
-        point_segment_distance(a, c, d),
-        point_segment_distance(b, c, d),
-        point_segment_distance(c, a, b),
-        point_segment_distance(d, a, b),
-    )
+    # Static sanity metric only. The C++ driver performs the per-step swept topology check.
+    u = b - a
+    v = d - c
+    w = a - c
+    uu = float(np.dot(u, u))
+    vv = float(np.dot(v, v))
+    uv = float(np.dot(u, v))
+    uw = float(np.dot(u, w))
+    vw = float(np.dot(v, w))
+
+    if uu <= 1e-20 and vv <= 1e-20:
+        return float(np.linalg.norm(a - c))
+    if uu <= 1e-20:
+        return point_segment_distance(a, c, d)
+    if vv <= 1e-20:
+        return point_segment_distance(c, a, b)
+
+    denom = uu * vv - uv * uv
+    if denom > 1e-20:
+        s = float(np.clip((uv * vw - vv * uw) / denom, 0.0, 1.0))
+    else:
+        s = 0.0
+
+    t = (uv * s + vw) / vv
+    if t < 0.0:
+        t = 0.0
+        s = float(np.clip(-uw / uu, 0.0, 1.0))
+    elif t > 1.0:
+        t = 1.0
+        s = float(np.clip((uv - uw) / uu, 0.0, 1.0))
+
+    closest_left = a + s * u
+    closest_right = c + t * v
+    return float(np.linalg.norm(closest_left - closest_right))
 
 
 def clearance_report(
@@ -96,12 +123,24 @@ def read_certificate(history_csv: Path) -> dict[str, Any]:
         if float(row["safe_t"]) > 0
     ]
     valid = all(float(row["step_size"]) < float(row["safe_t"]) for row in accepted)
+    topology_rows = [row for row in accepted if row.get("topology_enabled") == "1"]
+    topology_valid = all(row.get("topology_safe") == "1" for row in topology_rows)
+    topology_min_distances = [
+        float(row["topology_min_distance"])
+        for row in topology_rows
+        if row.get("topology_min_distance") not in (None, "", "-1")
+    ]
+    topology_rejections = sum(int(row.get("topology_rejections", "0")) for row in rows)
     return {
-        "valid": valid,
+        "valid": valid and topology_valid,
+        "repulsor_safe_step_valid": valid,
+        "swept_topology_valid": topology_valid,
         "accepted_steps": len(accepted),
         "rows": len(rows),
         "min_margin": min(margins) if margins else None,
         "max_step_to_safe_ratio": max(safe_ratios) if safe_ratios else None,
+        "min_swept_topology_sample_distance": min(topology_min_distances) if topology_min_distances else None,
+        "topology_rejections": topology_rejections,
     }
 
 
@@ -115,4 +154,5 @@ def read_history_summary(history_csv: Path) -> dict[str, Any]:
         "rows": len(rows),
         "energy_initial": float(accepted[0]["energy_before"]) if accepted else None,
         "energy_final": float(accepted[-1]["energy_after"]) if accepted else None,
+        "topology_rejections": sum(int(row.get("topology_rejections", "0")) for row in rows),
     }

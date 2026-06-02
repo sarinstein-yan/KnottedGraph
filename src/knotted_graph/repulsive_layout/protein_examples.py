@@ -8,6 +8,7 @@ from urllib.request import urlretrieve
 import numpy as np
 
 from .models import CurveNetwork
+from .resampling import resample_polyline_to_count
 
 
 ARC_COLORS = {
@@ -149,29 +150,7 @@ def concat_polylines(parts: list[np.ndarray]) -> np.ndarray:
 
 
 def resample_polyline(points: np.ndarray, n_points: int) -> np.ndarray:
-    pts = np.asarray(points, dtype=float)
-    if len(pts) <= n_points:
-        return pts.copy()
-    seg = np.linalg.norm(np.diff(pts, axis=0), axis=1)
-    cumulative = np.concatenate([[0.0], np.cumsum(seg)])
-    total = cumulative[-1]
-    if total < 1e-12:
-        return np.repeat(pts[:1], n_points, axis=0)
-
-    targets = np.linspace(0.0, total, n_points)
-    out = []
-    j = 0
-    for t in targets:
-        while j + 1 < len(cumulative) and cumulative[j + 1] < t:
-            j += 1
-        if j + 1 >= len(cumulative):
-            out.append(pts[-1])
-            continue
-        a = cumulative[j]
-        b = cumulative[j + 1]
-        alpha = 0.0 if b - a < 1e-12 else (t - a) / (b - a)
-        out.append((1.0 - alpha) * pts[j] + alpha * pts[j + 1])
-    return np.asarray(out, dtype=float)
+    return resample_polyline_to_count(points, n_points)
 
 
 def allocate_arc_points(
