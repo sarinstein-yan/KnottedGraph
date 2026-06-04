@@ -134,3 +134,52 @@ def test_relax_spatial_graph_preserves_skeleton_graph_api(monkeypatch, tmp_path)
     np.testing.assert_allclose(graph.edges["u", "v", "upper"]["pts"][1], [1.0, 1.0, 0.0])
     assert result.metadata["parameters"]["pin_graph_nodes"] is True
     assert result.metadata["certificate"]["valid"] is True
+
+
+def test_relax_spatial_graph_fast_defaults_keep_driver_topology_check(monkeypatch, tmp_path):
+    graph = nx.MultiGraph()
+    graph.add_node("u", pos=np.array([0.0, 0.0, 0.0]))
+    graph.add_node("v", pos=np.array([2.0, 0.0, 0.0]))
+    graph.add_edge(
+        "u",
+        "v",
+        pts=np.array([[0.0, 0.0, 0.0], [1.0, 1.0, 0.0], [2.0, 0.0, 0.0]]),
+    )
+
+    captured = {}
+
+    def fake_build_driver(config, force=False):
+        return tmp_path / "fake_driver"
+
+    def fake_run_driver(
+        input_curve,
+        output_obj,
+        history_csv,
+        options,
+        config,
+        save_steps_dir=None,
+        pinned_vertices=None,
+    ):
+        captured["topology_check"] = options.topology_check
+        captured["save_steps_dir"] = save_steps_dir
+        vertices, edges = _read_curve(input_curve)
+        _write_obj(output_obj, vertices, edges)
+        _write_history(history_csv)
+        return subprocess.CompletedProcess(["fake"], 0, "fake driver\n", "")
+
+    monkeypatch.setattr(pipeline, "build_driver", fake_build_driver)
+    monkeypatch.setattr(pipeline, "run_driver", fake_run_driver)
+
+    result = pipeline.relax_spatial_graph(
+        graph,
+        tmp_path / "layout",
+        solver_options=pipeline.SolverOptions(steps=1),
+        driver_config=pipeline.DriverConfig(driver_binary=tmp_path / "fake_driver", verbose=False),
+        simplify_after_layout=False,
+    )
+
+    assert captured["topology_check"] is True
+    assert captured["save_steps_dir"] is None
+    assert result.metadata["parameters"]["verify_topology"] is False
+    assert result.metadata["steps_dir"] is None
+    assert result.metadata["topology_verification"] is None

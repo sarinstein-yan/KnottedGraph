@@ -63,12 +63,33 @@ def build_parser() -> argparse.ArgumentParser:
     examples.add_argument("--driver-binary", type=Path, default=DEFAULT_DRIVER_BINARY)
     examples.add_argument("--force-build", action="store_true")
     examples.add_argument("--keep-workspace", action="store_true")
-    examples.add_argument("--no-save-steps", action="store_true")
-    examples.add_argument("--no-verify-topology", action="store_true")
+    examples.add_argument(
+        "--save-steps",
+        action="store_true",
+        help="Save accepted-step OBJ files under certified_steps/ for later independent verification.",
+    )
+    examples.add_argument(
+        "--no-save-steps",
+        action="store_false",
+        dest="save_steps",
+        help=argparse.SUPPRESS,
+    )
+    examples.add_argument(
+        "--verify-topology",
+        action="store_true",
+        help="Run the independent Python swept-step verifier after optimization. Implies --save-steps.",
+    )
+    examples.add_argument(
+        "--no-verify-topology",
+        action="store_false",
+        dest="verify_topology",
+        help=argparse.SUPPRESS,
+    )
     examples.add_argument("--no-render", action="store_true")
     examples.add_argument("--no-simplify", action="store_true")
     examples.add_argument("--use-wsl", action=argparse.BooleanOptionalAction, default=None)
     examples.add_argument("--quiet", action="store_true")
+    examples.set_defaults(save_steps=False, verify_topology=False)
 
     verify = subparsers.add_parser("verify-steps", help="Verify swept topology over saved step OBJ files.")
     verify.add_argument("--steps-dir", type=Path, required=True)
@@ -139,11 +160,11 @@ def run_examples(args: argparse.Namespace) -> int:
         ),
         force_build=args.force_build,
         keep_workspace=args.keep_workspace,
-        save_steps=not args.no_save_steps,
+        save_steps=args.save_steps or args.verify_topology,
         render_html=not args.no_render,
         simplify_after_layout=not args.no_simplify,
         pin_node_collar_points=args.pin_node_collar_points,
-        verify_topology=not args.no_verify_topology,
+        verify_topology=args.verify_topology,
     )
 
     summary = {

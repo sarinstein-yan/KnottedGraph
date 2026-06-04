@@ -110,12 +110,12 @@ def relax_spatial_graph(
     driver_config: DriverConfig | None = None,
     force_build: bool = False,
     keep_workspace: bool = False,
-    save_steps: bool = True,
+    save_steps: bool = False,
     pin_graph_nodes: bool = True,
     pin_node_collar_points: int = 0,
     simplify_after_layout: bool = True,
     resampling_options: ResamplingOptions | None = None,
-    verify_topology: bool = True,
+    verify_topology: bool = False,
 ) -> GraphLayoutResult:
     """Relax a KnottedGraph spatial MultiGraph with Repulsor safe steps.
 
@@ -337,12 +337,12 @@ def run_protein_example(
     driver_config: DriverConfig | None = None,
     force_build: bool = False,
     keep_workspace: bool = False,
-    save_steps: bool = True,
+    save_steps: bool = False,
     render_html: bool = True,
     simplify_after_layout: bool = True,
     pin_node_collar_points: int = 0,
     resampling_options: ResamplingOptions | None = None,
-    verify_topology: bool = True,
+    verify_topology: bool = False,
 ) -> RepulsiveLayoutResult:
     workspace = workspace.resolve()
     if workspace.exists() and not keep_workspace:

@@ -157,7 +157,7 @@ The output directory contains:
 - `repulsor_history.csv`
 - `metadata.json`
 - `clearance_report.json`
-- `certified_steps/`, unless `--no-save-steps` is used
+- `certified_steps/`, only when `--save-steps` or `--verify-topology` is used
 
 Python API:
 
@@ -179,7 +179,10 @@ print(result.metadata["certificate"])
 Topology note: the safe-step certificate guarantees that the optimized curve
 network remains collision-free relative to the constructed initial embedding. It
 does not prove that the protein-to-theta abstraction or the artificial closure
-choice is unique.
+choice is unique. The C++ driver's swept topology check is enabled by default.
+The slower independent Python verifier is opt-in; pass `--verify-topology`, or
+use `save_steps=True, verify_topology=True` in Python, when you want a separate
+post-run check over saved step OBJ files.
 
 The older vendored `external/repulsive-curves` experiments are kept as legacy
 development material, but they are not the supported user-facing entry point.
