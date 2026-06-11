@@ -7,8 +7,8 @@ workflow without needing to understand the low-level internal conventions first.
 Phase 1 of this design implemented the most general adapters: coordinate
 chains, spatial graph CSV files, and surface meshes. Phase 2 migrated the
 protein, DNA/RNA, mmCIF, and polymer snapshot adapters into the core package.
-The remaining volume and Fermi-surface examples are still examples-level
-prototypes.
+The remaining scalar-volume, vector-flow, and Fermi-surface examples are still
+examples-level prototypes.
 
 ## Goal
 
@@ -21,7 +21,7 @@ domain file -> input adapter -> internal geometric object -> plotting / downstre
 
 The input layer should be useful across domains such as proteins, DNA/RNA,
 polymers, coordinate chains, spatial engineering networks, surface meshes,
-volumetric scalar fields, and Fermi-surface-style data.
+volumetric scalar fields, vector-flow volumes, and Fermi-surface-style data.
 
 ## Internal Object Targets
 
@@ -84,8 +84,8 @@ from knotted_graph.inputs import from_lammps_dump
 from knotted_graph.inputs import from_gromacs_gro
 ```
 
-Volumetric fields and Fermi-surface examples remain in `examples/` until their
-user-facing schemas are clearer.
+Scalar-volume, vector-flow, and Fermi-surface examples remain in `examples/`
+until their user-facing schemas are clearer.
 
 ## Result Containers
 
@@ -553,6 +553,7 @@ The examples currently cover:
 | Electric circuits | JSON spatial network | example prototype |
 | Surface meshes | `.obj`, `.off`, `.ply`, `.stl`, `.vtk`, `.vtp` | strong Phase 1 candidate |
 | Volumetric fields | `.npy`, `.npz` scalar fields | example prototype |
+| Vector-flow volumes | `.npz` vector fields | example prototype |
 | Fermi surfaces | `.vtp` meshes | example prototype |
 
 ## What This API Does Not Promise Yet

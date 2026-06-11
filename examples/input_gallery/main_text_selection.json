@@ -1,0 +1,231 @@
+{
+  "figure_goal": "Main-text Task 2 input figure with each input type shown exactly once.",
+  "scope_clarification": {
+    "main_text": "Prioritize input-format diversity: each main 3x3 panel represents a distinct user-facing file/input type.",
+    "appendix": "Prioritize broader domain diversity: each appendix figure may show multiple examples within the same input family."
+  },
+  "advisor_follow_up": [
+    "The Task 2 gallery should show as many possible user-facing input types as practical.",
+    "Surface meshes, scalar volumes, vector-flow volumes, and Fermi-surface-style geometry are valid input types and should remain in appendix/workflow figures even though they are not in the graph-only main 3x3 figure.",
+    "Keep surface, volume, flow, and Fermi examples organized in Appendix S4, with prototype skeleton/spatial-graph or oriented-graph results shown under the source geometry."
+  ],
+  "selection_rules": [
+    "One representative example per input format.",
+    "Repeated examples of the same file format move to appendix figures.",
+    "Main panel shows the converted KnottedGraph-compatible object.",
+    "Side/source panel shows the original domain data when available.",
+    "Spatial Graph CSV examples should render embedded curved edge paths, such as points_json, rather than only straight source-target segments.",
+    "Main panels should display graph-producing inputs as explicit 3D node/edge objects, not visualization-only surfaces.",
+    "Surface, volume, vector-flow, and Fermi examples move to appendix/workflow figures where their extracted or prototype skeleton/spatial graph is shown; they remain valid Task 2 input types.",
+    "Yamada polynomial labels are appendix-only until downstream support is audited."
+  ],
+  "hamiltonian_note": {
+    "status": "Not selected as a separate main-text input-format panel in the current 3x3 gallery.",
+    "rationale": "The revised main gallery is organized around user-facing file/input formats whose main panels are explicit 3D node/edge graphs. Hamiltonian-derived Fermi/VTP geometry can be covered in a workflow or appendix figure where the extracted graph is also displayed.",
+    "possible_replacement": "If Hakan wants Hamiltonian input explicitly included in this gallery, add an appendix physics panel showing Hamiltonian parameters -> computed Fermi/nodal geometry -> extracted KnottedGraph-compatible spatial graph."
+  },
+  "panels": [
+    {
+      "panel": "a",
+      "input_type": "PDB",
+      "selected_example": "Protein Backbone (\\texttt{PDB})",
+      "display_title": "Protein Backbone (\\texttt{PDB})",
+      "domain": "protein",
+      "source_format": ".pdb",
+      "preferred_source": "examples/input_gallery/data/proteins/1J85.pdb",
+      "reason": "1J85 is the current topology-relevant and visually complex protein-backbone candidate.",
+      "naming_note": "Use the conservative title Protein Backbone PDB unless the knotted-protein claim is documented from a reliable database or paper.",
+      "main_panel_output": {
+        "kind": "converted coordinate trace / MultiGraph(pos/pts)",
+        "downstream_status": "visualized as a directly closed protein backbone; PD/Yamada not claimed here"
+      },
+      "next_rendering_notes": [
+        "Add residue-segment or chain-aware color coding if metadata are available.",
+        "Keep direct closure visually explicit if used."
+      ]
+    },
+    {
+      "panel": "b",
+      "input_type": "mmCIF",
+      "selected_example": "tRNA (\\texttt{mmCIF})",
+      "domain": "RNA",
+      "source_format": ".cif",
+      "preferred_source": "examples/input_gallery/data/mmcif/1EHZ.cif",
+      "reason": "Classic RNA example and the strongest non-PDB biomolecular representative.",
+      "main_panel_output": {
+        "kind": "converted coordinate trace / MultiGraph(pos/pts)",
+        "downstream_status": "visualized as a directly closed RNA backbone; PD/Yamada not claimed here"
+      },
+      "next_rendering_notes": [
+        "Color by chain or residue segment where possible."
+      ]
+    },
+    {
+      "panel": "c",
+      "input_type": "GRO",
+      "selected_example": "Ring Polymer (\\texttt{GRO})",
+      "domain": "polymer",
+      "source_format": ".gro",
+      "preferred_source": "examples/input_gallery/data/gallery_sets/set3_engineering_polymers/ring_polymer.gro",
+      "reason": "Represents GROMACS-style polymer snapshots and is visually distinct from LAMMPS.",
+      "main_panel_output": {
+        "kind": "converted closed polymer coordinate curve",
+        "downstream_status": "suitable for later downstream topology steps if graph/PD conversion is supported"
+      }
+    },
+    {
+      "panel": "d",
+      "input_type": "LAMMPS dump",
+      "selected_example": "Polymer (\\texttt{LAMMPS})",
+      "domain": "polymer",
+      "source_format": "LAMMPS dump",
+      "preferred_source": "examples/input_gallery/data/gallery_sets/set3_engineering_polymers/polymer_lammps.dump",
+      "reason": "Simulation-derived polymer conformation, rendered with a shape distinct from the cinquefoil coordinate-knot panel.",
+      "main_panel_output": {
+        "kind": "converted closed polymer coordinate curve",
+        "downstream_status": "suitable for later downstream topology steps if graph/PD conversion is supported"
+      }
+    },
+    {
+      "panel": "e",
+      "input_type": "XYZ coordinate chain",
+      "selected_example": "Cinquefoil Knot (\\texttt{XYZ})",
+      "domain": "coordinate knot",
+      "source_format": ".xyz",
+      "preferred_source": "examples/input_gallery/data/coordinate_chains/cinquefoil_coordinate_chain.xyz",
+      "reason": "Clean closed coordinate knot and a strong generic coordinate-chain representative.",
+      "main_panel_output": {
+        "kind": "converted closed coordinate curve",
+        "downstream_status": "good candidate for downstream knot/topology pipeline after audit"
+      }
+    },
+    {
+      "panel": "f",
+      "input_type": "Spatial Graph CSV",
+      "selected_example": "Engineering Network (\\texttt{CSV})",
+      "domain": "engineering spatial network",
+      "source_format": "node/edge CSV",
+      "preferred_source": [
+        "examples/input_gallery/data/spatial_graphs/engineering_network_nodes.csv",
+        "examples/input_gallery/data/spatial_graphs/engineering_network_edges.csv"
+      ],
+      "reason": "Best single representative for circuits, pipe systems, cooling systems, and component-interconnect networks.",
+      "main_panel_output": {
+        "kind": "converted networkx.MultiGraph(pos/pts)",
+        "downstream_status": "spatial graph object; PD/Yamada should be audited before displaying invariants"
+      },
+      "next_rendering_notes": [
+        "Use curved edge path points via points_json / edge point lists.",
+        "Avoid rendering only straight source-target edges because that hides spatial topology."
+      ]
+    },
+    {
+      "panel": "g",
+      "input_type": "Spatial Graph JSON",
+      "selected_example": "Spatial Graph (\\texttt{JSON})",
+      "domain": "abstract spatial graph",
+      "source_format": ".json",
+      "preferred_source": "examples/input_gallery/data/main_text/theta_spatial_graph.json",
+      "reason": "Friendly JSON schema for an abstract embedded graph; shows explicit graph nodes and routed 3D edges.",
+      "main_panel_output": {
+        "kind": "converted networkx.MultiGraph(pos/pts)",
+        "downstream_status": "spatial graph object; PD/Yamada should be audited before displaying invariants"
+      },
+      "next_rendering_notes": [
+        "Render red nodes and blue embedded edge paths.",
+        "Use curved JSON edge point lists to make spatial routing visible."
+      ]
+    },
+    {
+      "panel": "h",
+      "input_type": "Neuron Morphology SWC",
+      "selected_example": "Neuron Morphology (\\texttt{SWC})",
+      "domain": "neuroscience morphology",
+      "source_format": ".swc",
+      "preferred_source": "examples/input_gallery/data/main_text/neuron_morphology.swc",
+      "reason": "SWC is a common neuron morphology format and naturally represents a 3D node tree.",
+      "main_panel_output": {
+        "kind": "converted networkx.MultiGraph(pos/pts)",
+        "downstream_status": "spatial graph object; PD/Yamada should be audited before displaying invariants"
+      },
+      "next_rendering_notes": [
+        "Render SWC parent-child links as embedded graph edges.",
+        "Red nodes mark morphology branch points and terminals."
+      ]
+    },
+    {
+      "panel": "i",
+      "input_type": "Spatial Network GraphML",
+      "selected_example": "Spatial Network (\\texttt{GraphML})",
+      "domain": "graph/network exchange",
+      "source_format": ".graphml",
+      "preferred_source": "examples/input_gallery/data/main_text/spatial_network.graphml",
+      "reason": "GraphML is a standard network-exchange format; here it carries 3D node coordinates and embedded edge paths.",
+      "main_panel_output": {
+        "kind": "converted networkx.MultiGraph(pos/pts)",
+        "downstream_status": "spatial graph object; PD/Yamada should be audited before displaying invariants"
+      },
+      "next_rendering_notes": [
+        "Render x/y/z node attributes and points_json edge routes.",
+        "Use a 3D network with crossings/overpasses to show spatial topology."
+      ]
+    }
+  ],
+  "appendix_groups": [
+    {
+      "name": "Biological structure inputs",
+      "examples": [
+        "Crambin PDB",
+        "Ubiquitin PDB",
+        "Protein Backbone PDB (1J85)",
+        "Hemoglobin PDB",
+        "B-DNA Duplex PDB",
+        "tRNA mmCIF",
+        "Ubiquitin mmCIF"
+      ]
+    },
+    {
+      "name": "Polymer and coordinate-chain inputs",
+      "examples": [
+        "Ring Polymer GRO",
+        "Polymer LAMMPS",
+        "Trefoil Polymer LAMMPS",
+        "Bottlebrush Polymer XYZ",
+        "Coiled Cable DAT",
+        "Cinquefoil XYZ",
+        "Figure-Eight XYZ",
+        "Sensor Trace CSV",
+        "Lissajous Loop JSON",
+        "Ribbon Loop NPY",
+        "Meander Path TSV",
+        "Plain Text Cable TXT"
+      ],
+      "coverage_note": "Covers the lightweight coordinate-chain suffixes supported by the core API: .csv, .json, .npy, .tsv, .txt, .dat, and .xyz, plus polymer simulation inputs."
+    },
+    {
+      "name": "Spatial graph and engineering CSV inputs",
+      "examples": [
+        "Engineering Network CSV",
+        "Pipe Manifold CSV",
+        "Circuit Harness CSV",
+        "Cooling Network CSV",
+        "Vascular Branch CSV",
+        "Lattice Truss CSV",
+        "Hopf Link CSV",
+        "Three-Ring Link CSV"
+      ]
+    },
+    {
+      "name": "Surface, volume, flow, and Fermi inputs",
+      "examples": [
+        "Genus-2 Surface PLY",
+        "Torus Surface PLY",
+        "Vector Flow Volume NPZ",
+        "Gyroid Volume NPZ",
+        "Schwarz-P Volume NPZ",
+        "Nodal-Line Fermi VTP"
+      ],
+      "coverage_note": "Surface and scalar-volume panels show prototype skeleton/spatial-graph overlays; the vector-flow panel shows an oriented spatial graph; robust automatic extraction and Yamada evaluation remain downstream work."
+    }
+  ]
+}
