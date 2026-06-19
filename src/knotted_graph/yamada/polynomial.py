@@ -53,7 +53,7 @@ def compute_negami(G: nx.MultiGraph, x: sp.Symbol, y: sp.Symbol) -> sp.Expr:
             # β(G-F) = |E(G-F)| - |V(G-F)| + μ(G-F)
             beta = num_edges - num_vertices + mu
             
-            h_poly += ((-x)**r) * (x**mu) * (y**beta)
+            h_poly += ((-x)**(-r)) * (x**mu) * (y**beta)
     
     return sp.expand(h_poly)
 
