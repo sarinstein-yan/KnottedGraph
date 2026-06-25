@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "knotted_graph"
-version = "0.1.3"
+version = "0.2.0"
 description = "A computational package for spatial graphs and graph polynomial invariants."
 authors = [
     {name = "Xianquan (Sarinstein) Yan", email = "xianquanyan@gmail.com"},
@@ -16,16 +16,15 @@ maintainers  = [
 ]
 keywords = [
     "spatial graph",
-    "Yamada polynomial",
-    "graph invariants",
-    "non-Hermitian topology",
-    "nodal structure",
-    "exceptional surface",
-    "knotted graph",
     "spatial multigraph",
     "skeleton graph",
+    "knotted graph",
+    "Yamada polynomial",
+    "graph invariants",
     "morphological image processing",
-    "medial axis",
+    "skeletonization",
+    "handlebody",
+    "compression body",
 ]
 readme = {"file" = "README.md", "content-type" = "text/markdown"}
 license = {file = "LICENSE"}

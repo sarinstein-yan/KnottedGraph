@@ -12,6 +12,7 @@ from shapely.ops import substring
 from shapely.affinity import affine_transform
 from shapely.strtree import STRtree
 
+from knotted_graph.core.embedding import ensure_embedding
 from knotted_graph.invariants.yamada.polynomial import Yamada
 
 from .geom import Vertex, Crossing, Arc
@@ -68,7 +69,7 @@ class YamadaComputationResult:
 class PDCode:
     """Process a knotted graph to generate PD codes."""
     def __init__(self, skeleton_graph: nx.MultiGraph, tolerance: float = 1e-8):
-        self.skeleton_graph = skeleton_graph
+        self.skeleton_graph = ensure_embedding(skeleton_graph, copy=True, normalize=True)
         self.tolerance = tolerance
         self.vertices: Dict[int, Vertex] = {}
         self.crossings: Dict[int, Crossing] = {}
@@ -471,6 +472,7 @@ def sample_projections(
     """Sample projections and return valid results in sample order."""
     if num_rotation_samples <= 0:
         raise ValueError("num_rotation_samples must be a positive integer.")
+    skeleton_graph = ensure_embedding(skeleton_graph, copy=True, normalize=True)
 
     errors: list[str] = []
     projections: list[ProjectionResult] = []
@@ -499,6 +501,7 @@ def select_projection(
     num_rotation_samples: int = 10,
 ) -> ProjectionResult:
     """Select the explicit projection or the sampled projection with fewest crossings."""
+    skeleton_graph = ensure_embedding(skeleton_graph, copy=True, normalize=True)
     exact_angles = _normalize_rotation_angles(rotation_angles)
     if exact_angles is not None:
         return _compute_projection(skeleton_graph, exact_angles, rotation_order)

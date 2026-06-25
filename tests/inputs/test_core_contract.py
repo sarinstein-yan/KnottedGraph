@@ -3,6 +3,7 @@ import csv
 import networkx as nx
 import numpy as np
 
+from knotted_graph.core.embedding import validate_embedding
 from knotted_graph.inputs import (
     from_coordinate_chain,
     from_lammps_dump,
@@ -13,6 +14,7 @@ from knotted_graph.inputs import (
 
 def _assert_core_graph_contract(graph: nx.MultiGraph) -> None:
     assert isinstance(graph, nx.MultiGraph)
+    assert validate_embedding(graph) == []
     assert graph.number_of_nodes() > 0
     assert graph.number_of_edges() > 0
 

@@ -14,10 +14,10 @@ such as non-Hermitian nodal skeletons, are layered on top of the generic core.
 
 The public source layout follows the architecture diagram:
 
-- `knotted_graph.core` for spatial graph utilities and graph constructors.
+- `knotted_graph.core` for embedded graph validation and graph constructors.
 - `knotted_graph.inputs` for adapters from external coordinate, polymer,
   biomolecular, CSV, and surface-mesh data.
-- `knotted_graph.projection` for rotations, planar diagrams, PD codes, and
+- `knotted_graph.projection` for rotations, PD-code projections, and
   graph-to-Yamada entry points.
 - `knotted_graph.invariants.yamada` for Yamada polynomial evaluation engines.
 - `knotted_graph.layout.repulsive` for optional curve-network relaxation.

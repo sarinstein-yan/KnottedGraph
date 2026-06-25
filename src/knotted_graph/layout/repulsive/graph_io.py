@@ -7,6 +7,8 @@ from typing import Any
 import networkx as nx
 import numpy as np
 
+from knotted_graph.core.embedding import as_point3, ensure_embedding, oriented_edge_polyline
+
 from .resampling import ResamplingOptions, resample_polyline_for_options
 
 
@@ -23,62 +25,6 @@ class GraphCurveMapping:
     resampling_report: dict[str, Any] | None = None
 
 
-def _as_point3(value: Any, label: str) -> np.ndarray:
-    point = np.asarray(value, dtype=float)
-    if point.shape != (3,):
-        raise ValueError(f"{label} must be a 3-vector, got shape {point.shape}")
-    if not np.all(np.isfinite(point)):
-        raise ValueError(f"{label} contains non-finite values")
-    return point
-
-
-def _as_polyline(value: Any, label: str) -> np.ndarray:
-    points = np.asarray(value, dtype=float)
-    if points.ndim != 2 or points.shape[1] != 3:
-        raise ValueError(f"{label} must be an array-like object with shape (N, 3)")
-    if len(points) < 2:
-        raise ValueError(f"{label} must contain at least two points")
-    if not np.all(np.isfinite(points)):
-        raise ValueError(f"{label} contains non-finite values")
-    return points.copy()
-
-
-def _drop_consecutive_duplicates(points: np.ndarray, *, atol: float = 1e-10) -> np.ndarray:
-    keep = [0]
-    for i in range(1, len(points)):
-        if not np.allclose(points[i], points[keep[-1]], atol=atol, rtol=0.0):
-            keep.append(i)
-    return points[np.asarray(keep, dtype=int)]
-
-
-def _oriented_edge_polyline(
-    G: nx.MultiGraph,
-    u: Any,
-    v: Any,
-    key: Any,
-    data: dict[str, Any],
-) -> np.ndarray:
-    start = _as_point3(G.nodes[u].get("pos"), f"node {u!r} 'pos'")
-    end = _as_point3(G.nodes[v].get("pos"), f"node {v!r} 'pos'")
-
-    if data.get("pts") is None:
-        points = np.vstack([start, end])
-    else:
-        points = _as_polyline(data["pts"], f"edge {(u, v, key)!r} 'pts'")
-
-    forward = float(np.linalg.norm(points[0] - start) + np.linalg.norm(points[-1] - end))
-    reverse = float(np.linalg.norm(points[0] - end) + np.linalg.norm(points[-1] - start))
-    if reverse < forward:
-        points = points[::-1].copy()
-
-    points[0] = start
-    points[-1] = end
-    points = _drop_consecutive_duplicates(points)
-    if len(points) < 2:
-        raise ValueError(f"edge {(u, v, key)!r} collapsed to fewer than two distinct points")
-    return points
-
-
 def graph_to_curve_arrays(
     G: nx.MultiGraph,
     *,
@@ -86,20 +32,13 @@ def graph_to_curve_arrays(
 ) -> tuple[np.ndarray, GraphCurveMapping]:
     """Flatten a KnottedGraph spatial MultiGraph into Repulsor vertices/segments."""
 
-    if not isinstance(G, nx.MultiGraph):
-        raise TypeError("relax_spatial_graph expects a networkx.MultiGraph")
-    if G.is_directed():
-        raise TypeError("relax_spatial_graph expects an undirected MultiGraph")
-    if G.number_of_nodes() == 0:
-        raise ValueError("graph must contain at least one node")
-    if G.number_of_edges() == 0:
-        raise ValueError("graph must contain at least one edge")
+    G = ensure_embedding(G, copy=True, normalize=True)
 
     vertices: list[np.ndarray] = []
     node_indices: dict[Any, int] = {}
     for node, data in G.nodes(data=True):
         node_indices[node] = len(vertices)
-        vertices.append(_as_point3(data.get("pos"), f"node {node!r} 'pos'"))
+        vertices.append(as_point3(data.get("pos"), f"node {node!r} 'pos'"))
 
     edge_vertex_indices: dict[str, list[int]] = {}
     edge_refs: dict[str, tuple[Any, Any, Any]] = {}
@@ -109,7 +48,7 @@ def graph_to_curve_arrays(
 
     for edge_index, (u, v, key, data) in enumerate(G.edges(keys=True, data=True)):
         edge_id = f"edge_{edge_index}"
-        points = _oriented_edge_polyline(G, u, v, key, data)
+        points = oriented_edge_polyline(G, u, v, key, data)
         points, resampling_report = resample_polyline_for_options(points, resampling_options)
         indices = [node_indices[u]]
         for point in points[1:-1]:

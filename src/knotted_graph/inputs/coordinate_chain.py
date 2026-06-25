@@ -15,6 +15,8 @@ from typing import Iterable
 import networkx as nx
 import numpy as np
 
+from knotted_graph.core.embedding import validate_embedding
+
 
 SUPPORTED_COORDINATE_SUFFIXES = {".csv", ".dat", ".json", ".npy", ".tsv", ".txt", ".xyz"}
 SUPPORTED_CLOSURES = {None, "direct", "metadata_only"}
@@ -167,32 +169,12 @@ def coordinates_to_multigraph(
 
 def validate_curve_graph(graph: nx.MultiGraph) -> list[str]:
     """Return schema issues for a coordinate-curve graph."""
-    issues: list[str] = []
     if not isinstance(graph, nx.MultiGraph):
-        return ["graph is not a networkx.MultiGraph"]
+        return validate_embedding(graph)
+
+    issues = validate_embedding(graph)
     if graph.number_of_edges() != 1:
         issues.append(f"expected 1 edge, got {graph.number_of_edges()}")
-
-    for node, data in graph.nodes(data=True):
-        pos = data.get("pos")
-        if pos is None:
-            issues.append(f"node {node!r} is missing 'pos'")
-            continue
-        arr = np.asarray(pos)
-        if arr.shape != (3,):
-            issues.append(f"node {node!r} has pos shape {arr.shape}, expected (3,)")
-        elif not np.isfinite(arr.astype(float)).all():
-            issues.append(f"node {node!r} has non-finite coordinates")
-
-    for u, v, key, data in graph.edges(keys=True, data=True):
-        pts = data.get("pts")
-        if pts is None:
-            issues.append(f"edge {(u, v, key)!r} is missing 'pts'")
-            continue
-        try:
-            validate_coords(pts)
-        except ValueError as exc:
-            issues.append(f"edge {(u, v, key)!r}: {exc}")
     return issues
 
 

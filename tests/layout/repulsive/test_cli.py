@@ -1,21 +1,6 @@
 from __future__ import annotations
 
-import sys
-import types
-from pathlib import Path
 from types import SimpleNamespace
-
-
-repo_root = Path(__file__).resolve().parents[1]
-kg_pkg = types.ModuleType("knotted_graph")
-kg_pkg.__path__ = [str(repo_root / "src" / "knotted_graph")]
-sys.modules.setdefault("knotted_graph", kg_pkg)
-layout_pkg = types.ModuleType("knotted_graph.layout")
-layout_pkg.__path__ = [str(repo_root / "src" / "knotted_graph" / "layout")]
-sys.modules.setdefault("knotted_graph.layout", layout_pkg)
-repulsive_pkg = types.ModuleType("knotted_graph.layout.repulsive")
-repulsive_pkg.__path__ = [str(repo_root / "src" / "knotted_graph" / "layout" / "repulsive")]
-sys.modules.setdefault("knotted_graph.layout.repulsive", repulsive_pkg)
 
 from knotted_graph.layout.repulsive import cli
 

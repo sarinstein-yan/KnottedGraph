@@ -14,6 +14,8 @@ from pathlib import Path
 import networkx as nx
 import numpy as np
 
+from knotted_graph.core.embedding import as_polyline, validate_embedding
+
 
 @dataclass
 class SpatialGraphInputResult:
@@ -76,26 +78,6 @@ def _parse_float(value: str | None, *, label: str) -> float:
     return parsed
 
 
-def _validate_point(value, *, label: str) -> np.ndarray:
-    point = np.asarray(value, dtype=float)
-    if point.shape != (3,):
-        raise ValueError(f"{label} must be a 3D point, got shape {point.shape}.")
-    if not np.isfinite(point).all():
-        raise ValueError(f"{label} contains NaN or infinite values.")
-    return point
-
-
-def _validate_points(value, *, label: str) -> np.ndarray:
-    points = np.asarray(value, dtype=float)
-    if points.ndim != 2 or points.shape[1] != 3:
-        raise ValueError(f"{label} must have shape (N, 3), got {points.shape}.")
-    if points.shape[0] < 2:
-        raise ValueError(f"{label} must contain at least two points.")
-    if not np.isfinite(points).all():
-        raise ValueError(f"{label} contains NaN or infinite values.")
-    return points
-
-
 def _optional_attrs(row: dict[str, str], reserved: set[str]) -> dict:
     attrs = {}
     for key, value in row.items():
@@ -118,7 +100,7 @@ def _parse_points_json(
         payload = json.loads(value)
     except json.JSONDecodeError as exc:
         raise ValueError(f"edge {edge_id!r} has invalid points_json.") from exc
-    pts = _validate_points(payload, label=f"edge {edge_id!r} points_json")
+    pts = as_polyline(payload, label=f"edge {edge_id!r} points_json")
     if not np.allclose(pts[0], source_pos):
         raise ValueError(f"edge {edge_id!r} points_json first point does not match source position.")
     if not np.allclose(pts[-1], target_pos):
@@ -128,41 +110,7 @@ def _parse_points_json(
 
 def validate_spatial_graph(graph: nx.MultiGraph) -> list[str]:
     """Return validation issues for a ``MultiGraph(pos/pts)`` object."""
-    issues: list[str] = []
-    if not isinstance(graph, nx.MultiGraph):
-        return ["graph is not a networkx.MultiGraph"]
-    if graph.number_of_nodes() == 0:
-        issues.append("graph has no nodes")
-    if graph.number_of_edges() == 0:
-        issues.append("graph has no edges")
-
-    for node, data in graph.nodes(data=True):
-        if "pos" not in data:
-            issues.append(f"node {node!r} is missing 'pos'")
-            continue
-        try:
-            _validate_point(data["pos"], label=f"node {node!r} pos")
-        except ValueError as exc:
-            issues.append(str(exc))
-
-    for u, v, key, data in graph.edges(keys=True, data=True):
-        if "pts" not in data:
-            issues.append(f"edge {(u, v, key)!r} is missing 'pts'")
-            continue
-        try:
-            pts = _validate_points(data["pts"], label=f"edge {(u, v, key)!r} pts")
-        except ValueError as exc:
-            issues.append(str(exc))
-            continue
-        if "pos" in graph.nodes[u] and "pos" in graph.nodes[v]:
-            u_pos = np.asarray(graph.nodes[u]["pos"], dtype=float)
-            v_pos = np.asarray(graph.nodes[v]["pos"], dtype=float)
-            direct = np.allclose(pts[0], u_pos) and np.allclose(pts[-1], v_pos)
-            reverse = np.allclose(pts[0], v_pos) and np.allclose(pts[-1], u_pos)
-            if not (direct or reverse):
-                issues.append(f"edge {(u, v, key)!r} endpoints do not match node positions")
-
-    return issues
+    return validate_embedding(graph)
 
 
 def from_spatial_graph_csv(

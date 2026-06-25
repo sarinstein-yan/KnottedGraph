@@ -1,4 +1,6 @@
+import networkx as nx
 import numpy as np
+import pytest
 import sympy as sp
 
 from knotted_graph.projection import pd_code
@@ -14,6 +16,14 @@ class _FakeProcessor:
 
     def compute_yamada(self, variable, normalize=True, n_jobs=-1, method="negami"):
         return sp.Integer(self.value)
+
+
+def _embedded_edge() -> nx.MultiGraph:
+    graph = nx.MultiGraph()
+    graph.add_node("u", pos=np.array([0.0, 0.0, 0.0]))
+    graph.add_node("v", pos=np.array([1.0, 0.0, 0.0]))
+    graph.add_edge("u", "v", pts=np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]))
+    return graph
 
 
 def test_yamada_graph_entry_samples_default_ten_and_selects_fewest_crossings(monkeypatch):
@@ -43,7 +53,7 @@ def test_yamada_graph_entry_samples_default_ten_and_selects_fewest_crossings(mon
     monkeypatch.setattr(pd_code, "_compute_projection", fake_compute_projection)
 
     A = sp.Symbol("A")
-    result = compute_yamada_polynomial(object(), A, return_result=True)
+    result = compute_yamada_polynomial(_embedded_edge(), A, return_result=True)
 
     assert captured == {"count": 10, "order": "ZYX"}
     assert result.projection.rotation_angles == (1.0, 0.0, 0.0)
@@ -69,7 +79,7 @@ def test_yamada_graph_entry_explicit_rotation_bypasses_sampling(monkeypatch):
 
     A = sp.Symbol("A")
     result = compute_yamada_polynomial(
-        object(),
+        _embedded_edge(),
         A,
         rotation_angles=(12, 34, 56),
         return_result=True,
@@ -92,12 +102,17 @@ def test_yamada_graph_entry_warns_on_large_selected_diagram(monkeypatch):
     monkeypatch.setattr(pd_code, "_compute_projection", fake_compute_projection)
 
     A = sp.Symbol("A")
-    import pytest
-
     with pytest.warns(RuntimeWarning, match="10 crossings"):
         compute_yamada_polynomial(
-            object(),
+            _embedded_edge(),
             A,
             rotation_angles=(0, 0, 0),
             crossing_warning_threshold=10,
         )
+
+
+def test_yamada_graph_entry_rejects_non_embedded_graph_before_projection():
+    A = sp.Symbol("A")
+
+    with pytest.raises(ValueError, match="graph has no nodes"):
+        compute_yamada_polynomial(nx.MultiGraph(), A, rotation_angles=(0, 0, 0))

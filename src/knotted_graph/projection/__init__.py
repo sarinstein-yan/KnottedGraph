@@ -1,4 +1,4 @@
-"""Projection, planar diagram, and PD-code utilities."""
+"""Projection, PD-code, and rotation utilities."""
 
 from importlib import import_module
 
@@ -18,13 +18,8 @@ _PD_CODE_EXPORTS = {
     "select_projection",
 }
 
-_PLANAR_DIAGRAM_EXPORTS = {
-    "PlanarDiagram",
-}
-
 _LAZY_EXPORTS = {
     **{name: "knotted_graph.projection.pd_code" for name in _PD_CODE_EXPORTS},
-    **{name: "knotted_graph.projection.planar_diagram" for name in _PLANAR_DIAGRAM_EXPORTS},
 }
 
 
@@ -46,5 +41,4 @@ __all__ = [
     "generate_isotopy_angles",
     "get_rotation_matrix",
     *_PD_CODE_EXPORTS,
-    *_PLANAR_DIAGRAM_EXPORTS,
 ]

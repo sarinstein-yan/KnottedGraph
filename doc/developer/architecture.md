@@ -11,13 +11,13 @@ applications layered on top.
 
 ## Submodules
 
-- `knotted_graph.core`: spatial graph utilities, graph constructors, and graph
+- `knotted_graph.core`: embedded graph validation, graph constructors, and graph
   simplification helpers.
 - `knotted_graph.inputs`: adapters that normalize external data into core
   graph or mesh objects.
 - `knotted_graph.extraction`: optional skeleton-image conversion helpers.
-- `knotted_graph.projection`: rotations, projection sampling, PD codes, and
-  planar-diagram utilities.
+- `knotted_graph.projection`: rotations, projection sampling, and PD-code
+  objects.
 - `knotted_graph.invariants.yamada`: Yamada polynomial evaluation for resolved
   graphs and diagrams.
 - `knotted_graph.layout.repulsive`: optional curve-network relaxation.

@@ -1,3 +1,5 @@
+"""Public import and optional-dependency boundary contracts."""
+
 import json
 import subprocess
 import sys
@@ -103,3 +105,17 @@ def test_input_package_import_does_not_load_surface_stack():
         "pyvista": False,
         "knotted_graph.inputs.surface_mesh": False,
     }
+
+
+def test_projection_package_does_not_export_planar_diagram_layout_helper():
+    loaded = _run_python(
+        """
+        import json
+
+        import knotted_graph.projection as projection
+
+        print(json.dumps({"has_planar_diagram": hasattr(projection, "PlanarDiagram")}))
+        """
+    )
+
+    assert loaded == {"has_planar_diagram": False}
