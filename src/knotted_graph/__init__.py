@@ -12,8 +12,8 @@ from poly2graph import (
     hz2hk, 
     expand_hz_as_hop_dict,
 )
-
-from knotted_graph.NodalSkeleton import NodalSkeleton
+from .NodalSkeleton import NodalSkeleton
+from .NodalSkeletonMultiBand import NodalSkeletonMultiBand  
 from knotted_graph.yamada import *
 from knotted_graph.util import *
 from knotted_graph.vis import *
@@ -24,7 +24,7 @@ from knotted_graph.examples import *
 import knotted_graph
 __all__ = [
     "NodalSkeleton",
-
+    "NodalSkeletonMultiBand",
     "kron_batch",
     "eig_batch",
     "skeleton2graph",
