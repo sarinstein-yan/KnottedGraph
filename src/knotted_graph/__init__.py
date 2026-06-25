@@ -13,6 +13,7 @@ from knotted_graph.yamada import geom as _yamada_geom
 from knotted_graph.yamada import pd_code as _yamada_pd_code
 from knotted_graph.yamada import planar_diagram as _yamada_planar_diagram
 from knotted_graph.yamada import polynomial as _yamada_polynomial
+from knotted_graph.yamada import recursive as _yamada_recursive
 from knotted_graph.yamada import util as _yamada_util
 
 from knotted_graph.examples import *
@@ -73,6 +74,7 @@ __all__ = (
     + _yamada_geom.__all__
     + _yamada_util.__all__
     + _yamada_polynomial.__all__
+    + _yamada_recursive.__all__
     + _yamada_pd_code.__all__
     + _yamada_planar_diagram.__all__
     + _util.__all__

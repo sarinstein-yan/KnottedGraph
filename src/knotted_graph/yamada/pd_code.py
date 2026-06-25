@@ -351,7 +351,8 @@ class PDCode:
             self, 
             variable: sp.Symbol,
             normalize: bool = True,
-            n_jobs: int = -1
+            n_jobs: int = -1,
+            method: str = "negami",
     ) -> sp.Expr:
         """
         Compute the Yamada polynomial for the knot diagram.
@@ -363,7 +364,12 @@ class PDCode:
             crossings=list(self.crossings.values()),
             arcs=list(self.arcs.values())
         )
-        return computer.compute(variable, normalize=normalize, n_jobs=n_jobs)
+        return computer.compute(
+            variable,
+            normalize=normalize,
+            n_jobs=n_jobs,
+            method=method,
+        )
 
 
 explode_to_segments = PDCode._explode_to_segments

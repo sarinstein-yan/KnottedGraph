@@ -5,6 +5,7 @@ import math
 from dataclasses import dataclass
 from joblib import Parallel, delayed
 from .geom import Vertex, Crossing, Arc
+from .recursive import compute_yamada_polynomial_recursive
 
 
 __all__ = [
@@ -66,7 +67,8 @@ def compute_yamada_from_states(
     exponents: list[int],
     A: sp.Symbol,
     normalize: bool = True,
-    n_jobs: int = -1
+    n_jobs: int = -1,
+    method: str = "negami",
 ) -> sp.Expr:
     """
     Compute the Yamada polynomial for a spatial graph diagram using its resolved states.
@@ -96,31 +98,46 @@ def compute_yamada_from_states(
         normalize : bool, optional
             Whether to normalize the polynomial so that the lowest exponent of A is 0. Default is True.
         n_jobs : int, optional
-            The number of parallel jobs to use for computing the Negami polynomials. Default is -1 (use all available cores).
+            The number of parallel jobs to use for graph polynomial evaluation. Default is -1 (use all available cores).
+        method : {"negami", "recursive"}, optional
+            Evaluation backend for crossing-free resolved state graphs. The
+            Negami backend uses the state-sum specialization. The recursive
+            backend uses deletion-contraction with memoization.
 
     Returns:
         sp.Expr
             A sympy.Expr representing the Yamada polynomial Y(D; A).
     """
-    x, y = sp.symbols('x y')
-    
-    # 1) launch all computeNegami in parallel threads
-    h_values = Parallel(
-        n_jobs=n_jobs,
-        prefer='threads',
-    )(
-        delayed(compute_negami)(G, x, y)
-        for G in state_graphs
-    )
-    
-    # 2) form the total sum
-    total_poly = sp.Integer(0)
-    for h_val, exp in zip(h_values, exponents):
-        total_poly += (A**exp) * h_val
+    if method not in {"negami", "recursive"}:
+        raise ValueError("method must be either 'negami' or 'recursive'.")
 
-    # 3) substitute and simplify
-    Y = total_poly.xreplace({x: -1, y: -A-2-A**(-1)})
-    Y = sp.expand(sp.simplify(Y))
+    if method == "negami":
+        x, y = sp.symbols('x y')
+        state_values = Parallel(
+            n_jobs=n_jobs,
+            prefer='threads',
+        )(
+            delayed(compute_negami)(G, x, y)
+            for G in state_graphs
+        )
+        state_values = [
+            h_val.xreplace({x: -1, y: -A - 2 - A**(-1)})
+            for h_val in state_values
+        ]
+    else:
+        state_values = Parallel(
+            n_jobs=n_jobs,
+            prefer='threads',
+        )(
+            delayed(compute_yamada_polynomial_recursive)(G, A)
+            for G in state_graphs
+        )
+
+    total_poly = sp.Integer(0)
+    for state_value, exp in zip(state_values, exponents):
+        total_poly += (A**exp) * state_value
+
+    Y = sp.expand(sp.simplify(total_poly))
 
     # 4) optionally normalize
     if normalize:
@@ -346,12 +363,18 @@ class Yamada():
             self, 
             variable: sp.Symbol,
             normalize: bool = True,
-            n_jobs: int = -1
+            n_jobs: int = -1,
+            method: str = "negami",
     ) -> sp.Expr:
         """
         Compute the Yamada polynomial for the knot diagram.
         """
         state_graphs, exponents = self._build_state_graphs()
         return compute_yamada_from_states(
-            state_graphs, exponents, variable, normalize=normalize, n_jobs=n_jobs
+            state_graphs,
+            exponents,
+            variable,
+            normalize=normalize,
+            n_jobs=n_jobs,
+            method=method,
         )
