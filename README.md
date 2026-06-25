@@ -2,6 +2,7 @@
 
 ![pre-alpha](https://img.shields.io/badge/status-pre--alpha-red?style=flat-square)
 [![PyPI](https://img.shields.io/pypi/v/knotted_graph)](https://pypi.org/project/knotted_graph/)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://sarinstein-yan.github.io/KnottedGraph/)
 
 `knotted_graph` is a computational package for embedded spatial graphs,
 planar-diagram construction, and graph polynomial invariants. It provides a
@@ -83,9 +84,12 @@ from knotted_graph.applications.nodal.models import hopf_link_bloch_vector
 
 ## Documentation
 
-The documentation site contains installation notes, generic quick starts,
-application tutorials, API references, and developer architecture notes. Build it
-locally with:
+The public documentation is available at
+<https://sarinstein-yan.github.io/KnottedGraph/>. It contains installation
+notes, generic quick starts, application tutorials, API references, and
+developer architecture notes.
+
+Build it locally with:
 
 ```bash
 uv run --group docs python -m sphinx -b html -W --keep-going doc doc/_build/html

@@ -29,10 +29,12 @@ from knotted_graph.applications.nodal.models import hopf_link_bloch_vector
 kx, ky, kz = sp.symbols("k_x k_y k_z", real=True)
 bloch_vector = hopf_link_bloch_vector(0.1, k_symbols=(kx, ky, kz))
 
+GRID_DIMENSION = 200  # Use 64 for a quick local smoke run.
+
 ske = NodalSkeleton(
     bloch_vector,
     k_symbols=(kx, ky, kz),
-    dimension=64,
+    dimension=GRID_DIMENSION,
 )
 
 graph = ske.skeleton_graph()
