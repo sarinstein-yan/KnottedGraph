@@ -50,6 +50,10 @@ dependencies = [
 all = [
     "plotly",
     "igraph",
+    "pdf2image",
+    "pillow",
+    "pymupdf",
+    "poppler",
 ]
 
 [project.urls]
