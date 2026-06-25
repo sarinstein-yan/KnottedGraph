@@ -1,6 +1,6 @@
-# `knotted_graph`: Analyzing Non-Hermitian Topological Nodal Structures
+# `knotted_graph`: Spatial Graph Computation and Invariants
 
-<a target="_blank" href="https://colab.research.google.com/github/sarinstein-yan/KnottedGraph/blob/main/getting_started.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
+<a target="_blank" href="https://colab.research.google.com/github/sarinstein-yan/KnottedGraph/blob/main/doc/getting_started.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
 ![pre-alpha](https://img.shields.io/badge/status-pre--alpha-red?style=flat-square)
 [![PyPI](https://img.shields.io/pypi/v/knotted_graph)](https://pypi.org/project/knotted_graph/)
 
@@ -22,7 +22,17 @@
 <strong>Figure: Non-Hermitian Nodal Phases —</strong>
 Exceptional Surface (lightgreen) and *Exceptional Skeleton Graph* (the graph within)
 
-`knotted_graph` is a package designed to analyze and visualize the topological features of 2-band, 3-D non-Hermitian nodal systems. In these systems, the eigen-energies become complex, and points in momentum space where the Hamiltonian's eigenvalues and eigenvectors coalesce simultaneously are known as **exceptional points (EPs)**.
+`knotted_graph` is a general computational package for embedded spatial graphs,
+planar-diagram/PD-code construction, and graph polynomial invariants such as the
+Yamada polynomial. It includes input adapters for coordinate chains,
+biomolecular backbones, polymer snapshots, surface meshes, and explicit spatial
+graph data, plus optional geometric simplification and visualization workflows.
+
+The original `NodalSkeleton` workflow remains available as a domain-specific
+application for 2-band, 3-D non-Hermitian nodal systems. In these systems, the
+eigen-energies become complex, and points in momentum space where the
+Hamiltonian's eigenvalues and eigenvectors coalesce simultaneously are known as
+**exceptional points (EPs)**.
 
 In 3D non-Hermitian nodal systems, these EPs usually form an **exceptional surfaces (ES)**. The **skeleton** (i.e. **medial axis**) serves as a topological fingerprint for the non-Hermitian nodal phase. The `NodalSkeleton` class helps in:
 
@@ -31,7 +41,10 @@ In 3D non-Hermitian nodal systems, these EPs usually form an **exceptional surfa
 3. Extracting the *medial axis (skeleton)* of the ES, which forms a *spatial multigraph*.
 4. Analyzing and visualizing the topology of this skeleton graph.
 
-This guide will walk you through the process of using the `NodalSkeleton` class, from defining a Hamiltonian to analyzing its exceptional skeleton graph.
+This guide currently walks through the `NodalSkeleton` application workflow,
+from defining a Hamiltonian to analyzing its exceptional skeleton graph. Generic
+spatial-graph inputs can enter downstream through `knotted_graph.inputs`,
+`PDCode`, and the Yamada engine without using `NodalSkeleton`.
 
 ## Installation
 
