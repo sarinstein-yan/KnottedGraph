@@ -32,11 +32,11 @@ pipeline primary:
 | Public API | `knotted_graph.__init__`, docs, examples | Export stable generic functions first; expose application workflows explicitly. |
 | Inputs | `knotted_graph.inputs` | Convert PDB, mmCIF, polymers, CSV graphs, meshes, and coordinate chains into core objects. |
 | Core graph contract | shared utilities, `networkx.MultiGraph` conventions | Nodes have finite 3D `pos`; edges may have 3D polyline `pts`; parallel edges and edge keys are preserved. |
-| Applications | `NodalSkeleton`, surface/physics helpers | Domain-specific workflows that produce core spatial graphs. |
-| Projection and PD | `knotted_graph.yamada.pd_code`, `geom`, `util` | Convert embedded graphs to `PDCode`, `Vertex`, `Crossing`, and `Arc` objects. |
-| Yamada engine | `knotted_graph.yamada.polynomial`, `recursive` | Shared crossing-state generation with selectable Negami or recursive graph evaluation. |
-| Repulsive layout | `knotted_graph.repulsive_layout` | Optional 3D curve-network relaxation that accepts and returns the core graph contract. |
-| Visualization | `vis`, plotting helpers | Optional diagnostics and presentation outputs. |
+| Applications | `knotted_graph.applications.nodal`, surface/physics helpers | Domain-specific workflows that produce core spatial graphs. |
+| Projection and PD | `knotted_graph.projection` | Convert embedded graphs to `PDCode`, `Vertex`, `Crossing`, and `Arc` objects. |
+| Yamada engine | `knotted_graph.invariants.yamada` | Shared crossing-state generation with selectable Negami or recursive graph evaluation. |
+| Repulsive layout | `knotted_graph.layout.repulsive` | Optional 3D curve-network relaxation that accepts and returns the core graph contract. |
+| Visualization | `knotted_graph.visualization`, plotting helpers | Optional diagnostics and presentation outputs. |
 
 ## Current Branch State
 
@@ -47,7 +47,7 @@ Staged work currently includes:
 - `src/knotted_graph/yamada/polynomial.py`: combined Yamada fix.
 - `tests/test_yamada_combined_fix.py`: regression tests for Negami exponent and crossing-port resolution.
 - `pyproject.toml` and `uv.lock`: package/environment changes.
-- `getting_started.ipynb -> doc/getting_started.ipynb`: documentation move.
+- `getting_started.ipynb -> doc/applications/nodal_skeleton.ipynb`: documentation move.
 
 Known verification:
 
@@ -68,7 +68,7 @@ Expected result:
 | `origin/main` | Math/protein artifacts, recursive Yamada files, data/notebooks/cache files, asset deletions. | Selective cherry-pick only. Do not wholesale merge. |
 | `origin/dev` | Small Yamada update line. | Treat as superseded by the current combined Yamada fix unless a diff review finds unique tests or docs. |
 | `origin/input-adapter` | `knotted_graph.inputs`, adapter tests, input-gallery examples. | Merge early after core Yamada fix. This aligns with the generic package architecture. |
-| `origin/add-repulsive-curves` | `knotted_graph.repulsive_layout`, tests, CLI, bootstrap script, third-party notices, large vendored dependency trees. | Merge selectively. Keep Python integration and tests first; decide vendoring policy explicitly. |
+| `origin/add-repulsive-curves` | `knotted_graph.layout.repulsive`, tests, CLI, bootstrap script, third-party notices, large vendored dependency trees. | Merge selectively. Keep Python integration and tests first; decide vendoring policy explicitly. |
 
 ## History Rewrite Strategy
 
@@ -216,7 +216,7 @@ Contract tests:
 - Edges have `pts` when geometric paths are available.
 - Graph summary and Yamada projection paths consume the same core graph contract
   used by non-physics adapters.
-- Importing `knotted_graph.yamada.polynomial` does not import `pyvista`,
+- Importing `knotted_graph.invariants.yamada.polynomial` does not import `pyvista`,
   `skimage`, or `poly2graph`.
 
 ### Phase 4: Merge Repulsive Layout Selectively
@@ -227,12 +227,12 @@ algebraic users or forcing a large vendored dependency into the core package.
 Source:
 
 - Select from `origin/add-repulsive-curves`:
-  - `src/knotted_graph/repulsive_layout/*`
+  - `src/knotted_graph/layout/repulsive/*`
   - `tests/test_repulsive_layout_*.py`
   - `scripts/bootstrap_repulsion.py`
   - `THIRD_PARTY_NOTICES.md`
 - Treat `external/repulsive-curves/*` and
-  `src/knotted_graph/repulsive_layout/vendor/*` as a separate policy decision.
+  `src/knotted_graph/layout/repulsive/vendor/*` as a separate policy decision.
 
 Recommended vendoring policy:
 
@@ -295,8 +295,8 @@ Required updates:
 - Update `dev/Architecture.md`.
 - Replace the old "Input Wrapper = NodalSkeleton" mapping with
   `knotted_graph.inputs` plus application workflows.
-- Change "Repulsive Curves" anchor from `yamada/planar_diagram.py` to
-  `repulsive_layout`.
+- Change "Repulsive Curves" anchor from `projection/planar_diagram.py` to
+  `layout/repulsive`.
 - State that `NodalSkeleton` is a domain application built on the generic core.
 - Update the paper's section 10 before publication.
 - Add a short public architecture note in user-facing docs.
@@ -354,4 +354,3 @@ The branch is ready to become public main when all of these are true:
   included in public history.
 - `uv run --with pytest python -m pytest -q` passes.
 - `dev/Architecture.md` and the paper architecture section agree with the code.
-

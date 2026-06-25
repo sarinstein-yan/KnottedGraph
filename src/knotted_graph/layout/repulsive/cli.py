@@ -13,7 +13,7 @@ from .topology import verify_obj_step_sequence
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="python -m knotted_graph.repulsive_layout",
+        prog="python -m knotted_graph.layout.repulsive",
         description="Run Repulsor safe-step spatial graph layout examples.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)

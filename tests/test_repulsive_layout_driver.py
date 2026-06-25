@@ -10,11 +10,14 @@ repo_root = Path(__file__).resolve().parents[1]
 kg_pkg = types.ModuleType("knotted_graph")
 kg_pkg.__path__ = [str(repo_root / "src" / "knotted_graph")]
 sys.modules.setdefault("knotted_graph", kg_pkg)
-repulsive_pkg = types.ModuleType("knotted_graph.repulsive_layout")
-repulsive_pkg.__path__ = [str(repo_root / "src" / "knotted_graph" / "repulsive_layout")]
-sys.modules.setdefault("knotted_graph.repulsive_layout", repulsive_pkg)
+layout_pkg = types.ModuleType("knotted_graph.layout")
+layout_pkg.__path__ = [str(repo_root / "src" / "knotted_graph" / "layout")]
+sys.modules.setdefault("knotted_graph.layout", layout_pkg)
+repulsive_pkg = types.ModuleType("knotted_graph.layout.repulsive")
+repulsive_pkg.__path__ = [str(repo_root / "src" / "knotted_graph" / "layout" / "repulsive")]
+sys.modules.setdefault("knotted_graph.layout.repulsive", repulsive_pkg)
 
-from knotted_graph.repulsive_layout import driver
+from knotted_graph.layout.repulsive import driver
 
 
 def test_run_driver_keeps_topology_check_enabled_by_default(monkeypatch, tmp_path):

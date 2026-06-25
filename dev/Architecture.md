@@ -75,18 +75,18 @@ flowchart LR
 
 | Architecture block | Primary code anchors | Notes |
 |---|---|---|
-| USER API | `src/knotted_graph/__init__.py`, `README.md`, `doc/getting_started.ipynb` | Lightweight generic imports expose Yamada helpers, graph utilities, examples, and lazy optional application/visualization helpers. |
-| Model Library | `src/knotted_graph/examples.py` | Provides predefined Bloch-vector generators used by the `NodalSkeleton` application workflow and examples. |
+| USER API | `src/knotted_graph/__init__.py`, `README.md`, `doc/index.md`, `doc/quickstart.md` | Root imports expose generic graph, projection, and invariant helpers only. Application workflows are imported from application namespaces. |
+| Model Library | `src/knotted_graph/applications/nodal/models.py` | Provides predefined Bloch-vector generators used by the `NodalSkeleton` application workflow and tutorials. |
 | Input Adapters | `src/knotted_graph/inputs/` | Converts coordinate chains, PDB/mmCIF backbones, polymers, spatial-graph CSV files, and surface meshes into core graph or mesh objects. |
-| NodalSkeleton Application | `src/knotted_graph/NodalSkeleton.py::NodalSkeleton.__init__` | Domain-specific non-Hermitian physics workflow; accepts Hamiltonian/Bloch-vector data and produces sampled fields plus a core skeleton graph. |
+| NodalSkeleton Application | `src/knotted_graph/applications/nodal/skeleton.py::NodalSkeleton.__init__` | Domain-specific non-Hermitian physics workflow; accepts Hamiltonian/Bloch-vector data and produces sampled fields plus a core skeleton graph. |
 | Skeleton Extractor | `NodalSkeleton.spectrum`, `NodalSkeleton._interior_mask`, `NodalSkeleton._skeleton_image`, `NodalSkeleton.skeleton_coords` | Application-specific route that builds an exceptional-surface interior mask and extracts the medial-axis skeleton with `skimage.morphology.skeletonize`. |
-| Graph Building & Post Processing | `NodalSkeleton.skeleton_graph`, `src/knotted_graph/util.py` | Uses `poly2graph.skeleton2graph`, then optional leaf removal, edge simplification, RDP smoothing, and trivalence tagging. |
-| Core Objects | `networkx.MultiGraph`, `src/knotted_graph/inputs/`, `src/knotted_graph/yamada/geom.py`, `src/knotted_graph/yamada/pd_code.py`, `src/knotted_graph/yamada/polynomial.py` | Main generic objects include embedded spatial multigraphs with node `pos` and edge `pts`, `PDCode`, `Vertex`, `Crossing`, `Arc`, and `Yamada`. |
-| Repulsive Curves | `src/knotted_graph/repulsive_layout/` | Optional 3D curve-network relaxation that accepts and returns the core `networkx.MultiGraph(pos/pts)` contract before projection. |
-| Projections & PD Encoding | `src/knotted_graph/yamada/pd_code.py::PDCode`, `src/knotted_graph/yamada/util.py`, `src/knotted_graph/util.py::generate_isotopy_projections` | Rotates spatial graphs, projects them, detects crossings, creates arcs, and emits PD-code strings and structured objects. |
-| Yamada Engine | `src/knotted_graph/yamada/polynomial.py`, `src/knotted_graph/yamada/recursive.py`, `src/knotted_graph/util.py::compute_yamada_safely` | Computes Yamada polynomials from resolved diagram states using either the Negami state-sum route or recursive deletion-contraction backend. |
-| Visualizations | `NodalSkeleton.plot_exceptional_surface`, `NodalSkeleton.plot_skeleton_graph`, `NodalSkeleton.plot_planar_diagram`, `NodalSkeleton.plot_pretty_planar_diagram`, `src/knotted_graph/vis.py` | Renders exceptional surfaces, skeleton graphs, vector/scalar fields, planar diagrams, and standalone Plotly/Matplotlib helpers. |
-| Miscellaneous Applications | `src/knotted_graph/surface_modes.py`, `NodalSkeleton.graph_summary`, `NodalSkeleton.has_minor`, Petersen helpers in `src/knotted_graph/vis.py` | Includes surface-mode calculations, graph summaries, graph-minor searches, and special-purpose graph visualizations. |
+| Graph Building & Post Processing | `NodalSkeleton.skeleton_graph`, `src/knotted_graph/extraction/`, `src/knotted_graph/core/graph.py` | Uses `poly2graph.skeleton2graph`, then optional leaf removal, edge simplification, RDP smoothing, and trivalence tagging. |
+| Core Objects | `networkx.MultiGraph`, `src/knotted_graph/core/`, `src/knotted_graph/projection/geom.py` | Main generic objects include embedded spatial multigraphs with node `pos` and edge `pts`, `PDCode`, `Vertex`, `Crossing`, and `Arc`. |
+| Repulsive Curves | `src/knotted_graph/layout/repulsive/` | Optional 3D curve-network relaxation that accepts and returns the core `networkx.MultiGraph(pos/pts)` contract before projection. |
+| Projections & PD Encoding | `src/knotted_graph/projection/pd_code.py::PDCode`, `src/knotted_graph/projection/rotations.py`, `src/knotted_graph/projection/pd_code.py::select_projection` | Rotates spatial graphs, projects them, detects crossings, creates arcs, and emits PD-code strings and structured objects. |
+| Yamada Engine | `src/knotted_graph/invariants/yamada/polynomial.py`, `src/knotted_graph/invariants/yamada/recursive.py`, `src/knotted_graph/projection/pd_code.py::compute_yamada_polynomial` | Computes Yamada polynomials from the selected planar diagram using either the Negami state-sum route or recursive deletion-contraction backend for resolved states. |
+| Visualizations | `src/knotted_graph/visualization/`, `NodalSkeleton.plot_exceptional_surface`, `NodalSkeleton.plot_skeleton_graph`, `NodalSkeleton.plot_planar_diagram`, `NodalSkeleton.plot_pretty_planar_diagram` | Generic graph helpers live under `visualization`; application-specific PyVista plots live under `applications.nodal`. |
+| Miscellaneous Applications | `src/knotted_graph/applications/nodal/surface_modes.py`, `NodalSkeleton.graph_summary`, Petersen helpers in `src/knotted_graph/visualization/graph.py` | Includes surface-mode calculations, graph summaries, graph-minor searches, and special-purpose graph visualizations. |
 
 ## Core Data Contracts
 
@@ -103,7 +103,7 @@ flowchart LR
 | PyVista field volume | `NodalSkeleton.fields_pv` | Surface/vector/scalar visualizations | Optional application visualization data, `pv.ImageData` with scalar/vector point arrays. |
 | Exceptional surface mesh | `NodalSkeleton.exceptional_surface_pv`, surface mesh adapter | Surface visualizations, skeletonization workflows | `pv.PolyData` contour or imported mesh object. |
 | PD-code objects | `PDCode.compute` | Yamada engine, planar diagram plotting | `vertices`, `crossings`, `arcs`, plus a PD-code string. |
-| Yamada polynomial | `Yamada.compute`, `compute_yamada_from_states`, `PDCode.compute_yamada`, `NodalSkeleton.yamada_polynomial` | User API, reports, downstream math | SymPy expression in the requested variable; backend selectable as `method="negami"` or `method="recursive"` where supported. |
+| Yamada polynomial | `Yamada.compute`, `compute_yamada_from_states`, `PDCode.compute_yamada`, `compute_yamada_polynomial`, `NodalSkeleton.yamada_polynomial` | User API, reports, downstream math | SymPy expression in the requested variable. Embedded graph entry points use an explicit rotation when supplied; otherwise they sample rotations and choose the valid projection with the fewest crossings. |
 
 ## Conversion Notes
 

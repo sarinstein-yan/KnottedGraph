@@ -221,7 +221,7 @@ if __name__ == "__main__":
     eigvals_obc_y, eigvecs_obc_y = eig_batch(h_obc_y)
     eigvals_obc_z, eigvecs_obc_z = eig_batch(h_obc_z)
 
-    from knotted_graph.vis import plot_surface_modes
+    from knotted_graph.applications.nodal.visualization import plot_surface_modes
 
     fig = plot_surface_modes(
             (eigvals_obc_x, eigvals_obc_y, eigvals_obc_z),

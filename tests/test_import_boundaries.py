@@ -27,11 +27,14 @@ def test_top_level_import_does_not_load_application_stack():
             "pyvista",
             "skimage",
             "skimage.morphology",
-            "knotted_graph.NodalSkeleton",
-            "knotted_graph.surface_modes",
-            "knotted_graph.vis",
+            "knotted_graph.applications.nodal",
+            "knotted_graph.applications.nodal.skeleton",
+            "knotted_graph.visualization.graph",
         ]
-        print(json.dumps({name: name in sys.modules for name in names}))
+        result = {name: name in sys.modules for name in names}
+        result["has_nodal_skeleton"] = hasattr(knotted_graph, "NodalSkeleton")
+        result["has_compute_yamada_safely"] = hasattr(knotted_graph, "compute_yamada_safely")
+        print(json.dumps(result))
         """
     )
 
@@ -40,9 +43,11 @@ def test_top_level_import_does_not_load_application_stack():
         "pyvista": False,
         "skimage": False,
         "skimage.morphology": False,
-        "knotted_graph.NodalSkeleton": False,
-        "knotted_graph.surface_modes": False,
-        "knotted_graph.vis": False,
+        "knotted_graph.applications.nodal": False,
+        "knotted_graph.applications.nodal.skeleton": False,
+        "knotted_graph.visualization.graph": False,
+        "has_nodal_skeleton": False,
+        "has_compute_yamada_safely": False,
     }
 
 
@@ -52,16 +57,16 @@ def test_yamada_polynomial_import_does_not_load_application_stack():
         import json
         import sys
 
-        from knotted_graph.yamada.polynomial import Yamada, compute_negami
+        from knotted_graph.invariants.yamada.polynomial import Yamada, compute_negami
 
         names = [
             "poly2graph",
             "pyvista",
             "skimage",
             "skimage.morphology",
-            "knotted_graph.NodalSkeleton",
-            "knotted_graph.surface_modes",
-            "knotted_graph.vis",
+            "knotted_graph.applications.nodal",
+            "knotted_graph.applications.nodal.skeleton",
+            "knotted_graph.visualization.graph",
         ]
         print(json.dumps({name: name in sys.modules for name in names}))
         """
@@ -72,9 +77,9 @@ def test_yamada_polynomial_import_does_not_load_application_stack():
         "pyvista": False,
         "skimage": False,
         "skimage.morphology": False,
-        "knotted_graph.NodalSkeleton": False,
-        "knotted_graph.surface_modes": False,
-        "knotted_graph.vis": False,
+        "knotted_graph.applications.nodal": False,
+        "knotted_graph.applications.nodal.skeleton": False,
+        "knotted_graph.visualization.graph": False,
     }
 
 

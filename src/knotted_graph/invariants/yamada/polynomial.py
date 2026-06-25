@@ -3,8 +3,11 @@ import networkx as nx
 import itertools
 import math
 from dataclasses import dataclass
+from typing import Any
+
 from joblib import Parallel, delayed
-from .geom import Vertex, Crossing, Arc
+from knotted_graph.projection.geom import Vertex, Crossing, Arc
+
 from .recursive import compute_yamada_polynomial_recursive
 
 
@@ -19,25 +22,19 @@ Port = tuple[int, str]
 
 
 def compute_negami(G: nx.MultiGraph, x: sp.Symbol, y: sp.Symbol) -> sp.Expr:
-    """
-    Compute the Negami polynomial for a graph G.
-    Negami polynomial is a bivariate Laurent polynomial:
-      h(G; x, y) = sum_{F ⊆ E(G)} (-x)^{-|F|} * x^{μ(G-F)} * y^{β(G-F)},
-    where:
-      - μ(G-F) is the number of connected components of G with the edges in F removed,
-      - β(G-F) = |E(G-F)| - |V(G-F)| + μ(G-F).
-      
-    Parameters:
+    """Compute the bivariate Negami polynomial for an undirected multigraph.
+
+    Parameters
     ----------
-      G : networkx.MultiGraph
-         The graph (assumed undirected) encoded as a NetworkX multigraph.
-      x, y : sympy.Symbol
-         The symbols for the polynomial.
-    
-    Returns:
+    G
+        Graph encoded as a NetworkX multigraph.
+    x, y
+        Symbols for the bivariate Laurent polynomial.
+
+    Returns
     -------
-    sp.Expr
-        A sympy expression representing the Negami polynomial h(G; x, y).
+    sympy.Expr
+        The polynomial ``h(G; x, y)``.
     """
     # List all edges with keys (each edge is (u, v, key))
     edges = list(G.edges(keys=True))
@@ -70,43 +67,28 @@ def compute_yamada_from_states(
     n_jobs: int = -1,
     method: str = "negami",
 ) -> sp.Expr:
-    """
-    Compute the Yamada polynomial for a spatial graph diagram using its resolved states.
+    """Compute the Yamada polynomial from resolved diagram states.
 
-    The Yamada polynomial is computed as:
-        Y(D; A) = ∑ₛ A^(p(s)-m(s)) · h(Dₛ; -1, -A-2-A^(-1)),
-    where:
-        - D is the spatial graph diagram,
-        - Dₛ is the resolved state graph,
-        - p(s) and m(s) are integers associated with the state,
-        - h(G; x, y) is the Negami polynomial of the graph G.
+    Parameters
+    ----------
+    state_graphs
+        Resolved state graphs.
+    exponents
+        State exponents corresponding to ``p(s) - m(s)``.
+    A
+        Polynomial variable.
+    normalize
+        If true, shift the lowest exponent to zero.
+    n_jobs
+        Number of parallel jobs for state graph evaluation.
+    method
+        Backend for crossing-free state graphs: ``"negami"`` or
+        ``"recursive"``.
 
-    The computation involves:
-        1. Calculating the Negami polynomial h(G; x, y) for each resolved state graph.
-        2. Forming the term A^(p(s)-m(s)) * h(G; x, y) for each state.
-        3. Substituting x = -1 and y = -A - 2 - A^(-1) into the polynomial.
-        4. Optionally normalizing the polynomial by adjusting the lowest exponent of A to 0.
-
-    Parameters:
-    ---------
-        state_graphs : list[nx.MultiGraph]
-            List of resolved graphs (NetworkX MultiGraph objects) from the state resolutions.
-        exponents : list[int]
-            List of integers corresponding to p(s) - m(s) values for each state.
-        A : sp.Symbol
-            The symbol for the Yamada polynomial variable.
-        normalize : bool, optional
-            Whether to normalize the polynomial so that the lowest exponent of A is 0. Default is True.
-        n_jobs : int, optional
-            The number of parallel jobs to use for graph polynomial evaluation. Default is -1 (use all available cores).
-        method : {"negami", "recursive"}, optional
-            Evaluation backend for crossing-free resolved state graphs. The
-            Negami backend uses the state-sum specialization. The recursive
-            backend uses deletion-contraction with memoization.
-
-    Returns:
-        sp.Expr
-            A sympy.Expr representing the Yamada polynomial Y(D; A).
+    Returns
+    -------
+    sympy.Expr
+        The Yamada polynomial.
     """
     if method not in {"negami", "recursive"}:
         raise ValueError("method must be either 'negami' or 'recursive'.")
@@ -341,7 +323,7 @@ class Yamada():
     arcs: list[Arc]
 
     @classmethod
-    def from_PDCode(cls, PDCode: "PDCode") -> "Yamada":
+    def from_PDCode(cls, PDCode: Any) -> "Yamada":
         """
         Create a Yamada polynomial calculator from a PD code string.
         """

@@ -93,7 +93,7 @@ all = [
 ]
 
 [project.scripts]
-kg-repulsive-layout = "knotted_graph.repulsive_layout.cli:main"
+kg-repulsive-layout = "knotted_graph.layout.repulsive.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/sarinstein-yan/KnottedGraph"
@@ -104,4 +104,15 @@ PyPI = "https://pypi.org/project/knotted_graph/"
 dev = [
     "pytest",
     "ruff",
+]
+docs = [
+    "jupytext",
+    "myst-nb",
+    "myst-parser",
+    "nbclient",
+    "pydata-sphinx-theme",
+    "sphinx>=7,<9",
+    "sphinx-autodoc-typehints",
+    "sphinx-copybutton",
+    "sphinx-design",
 ]

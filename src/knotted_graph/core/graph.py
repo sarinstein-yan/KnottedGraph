@@ -1,18 +1,11 @@
 import numpy as np
-import sympy as sp
 import networkx as nx
 import fastrdp
 import logging
-from collections import defaultdict
-from typing import List, Tuple, Iterable, Set, Optional, Any, Sequence, TypeVar
+from typing import List, Tuple, Set, Any, Sequence
 from numpy.typing import NDArray, ArrayLike
-kSymbols = TypeVar('kSymbols', bound=Tuple[sp.Symbol, sp.Symbol, sp.Symbol])
 
 __all__ = [
-    "generate_isotopy_projections",
-    "compute_yamada_safely",
-    "PT",
-    "is_PT_symmetric",
     "is_trivalent",
     "idx_to_coord",
     "get_all_edge_pts",
@@ -24,173 +17,6 @@ __all__ = [
     "ThetaGraph",
     "weisfeiler_lehman_multigraph_hash",
 ]
-
-
-def generate_isotopy_projections(
-        skeleton_graph: nx.MultiGraph,
-        num_rotations: int = 10
-) -> List[Tuple[List[float], str]]:
-    """Generate isotopy projections of the skeleton graph."""
-    from knotted_graph import PDCode, generate_isotopy_angles
-
-    isotopy_samples = generate_isotopy_angles(num_rotations, order='ZYX')
-    
-    projection = []
-    for angles in isotopy_samples:
-        processor = PDCode(skeleton_graph)
-        angles = angles.tolist()
-        pd_code = processor.compute(angles)
-        num_crossings = len(processor.crossings)
-        
-        projection.append({
-            'num_crossings': num_crossings,
-            'vertices': list(processor.vertices.values()),
-            'crossings': list(processor.crossings.values()),
-            'arcs': list(processor.arcs.values()),
-            'angles': angles,
-            'pd_code': pd_code,
-        })
-    
-    # Sort by number of crossings
-    projection.sort(key=lambda x: x['num_crossings'])
-    return projection
-
-
-def compute_yamada_safely(
-    skeleton_graph: nx.MultiGraph,
-    variable: sp.Symbol,
-    normalize: bool = True,
-    n_jobs: int = -1,
-    num_rotations: int = 10,
-    num_overlaps: int = 1,
-) -> sp.Expr:
-    """
-    Process graph with multiple rotations and return a Yamada polynomial.
-
-    Policy:
-      • If num_overlaps <= 1: return the Yamada polynomial from the first *valid* projection.
-      • Else: iterate projections until any polynomial appears `num_overlaps` times
-        (up to SymPy equivalence). Return that agreed polynomial immediately.
-      • If none reaches `num_overlaps`: raise RuntimeError.
-
-    Raises
-    ------
-    RuntimeError
-        If no projection succeeds (num_overlaps <= 1 case) or no agreement is found
-        after exhausting projections (num_overlaps > 1 case).
-    """
-    from knotted_graph import Yamada
-    from tqdm import tqdm
-
-    def _equiv(a: sp.Expr, b: sp.Expr) -> bool:
-        # Robust equality check up to algebraic simplification
-        try:
-            return sp.simplify(a - b) == 0
-        except Exception:
-            # Fallback: expand+cancel then compare
-            return sp.simplify(sp.together(sp.expand(a - b))) == 0
-
-    projections = generate_isotopy_projections(skeleton_graph, num_rotations)
-
-    # Fast path: only need the first valid result
-    if num_overlaps <= 1:
-        for p in projections:
-            try:
-                return (
-                    Yamada(p["vertices"], p["crossings"], p["arcs"])
-                    .compute(variable, normalize=normalize, n_jobs=n_jobs)
-                )
-            except Exception as e:
-                logging.error(f"Error computing Yamada polynomial: {e}")
-                continue
-        raise RuntimeError("All projections failed; no Yamada polynomial could be computed.")
-
-    # Consensus path: need agreement across projections
-    polys: List[sp.Expr] = []                 # store unique representative polys
-    counts: defaultdict[int, int] = defaultdict(int)  # index -> count
-
-    for p in tqdm(projections, desc="Computing Yamada polynomial"):
-        try:
-            y = Yamada(p["vertices"], p["crossings"], p["arcs"]).compute(
-                variable, normalize=normalize, n_jobs=n_jobs
-            )
-        except Exception as e:
-            logging.error(f"Error computing Yamada polynomial: {e}")
-            continue
-
-        # Try to match against existing representatives
-        matched_idx = None
-        for idx, rep in enumerate(polys):
-            if _equiv(y, rep):
-                matched_idx = idx
-                break
-
-        if matched_idx is None:
-            # New representative
-            polys.append(y)
-            matched_idx = len(polys) - 1
-            counts[matched_idx] = 1
-        else:
-            counts[matched_idx] += 1
-
-        if counts[matched_idx] >= num_overlaps:
-            # Return the canonical representative for the agreed class
-            return polys[matched_idx]
-
-    # No agreement reached
-    summary = ", ".join(f"class{idx}: {cnt}×" for idx, cnt in counts.items()) or "none"
-    raise RuntimeError(
-        f"No agreement of {num_overlaps} matching Yamada polynomials found "
-        f"across {len(projections)} projections (tallies: {summary})."
-    )
-
-
-# PT-operator
-def PT(
-    h: sp.Matrix, 
-    k_symbols: Optional[kSymbols] = None,
-) -> sp.Matrix:
-    """Apply the PT-symmetry operation to a 2x2 matrix.
-
-    Parameters
-    ----------
-    h : sp.Matrix
-        The 2x2 matrix to be transformed.
-    k_symbols : (sp.Symbol, sp.Symbol, sp.Symbol), optional
-        The momentum space coordinates, by default None, which assumes
-        only momentum symbols are present in the matrix.
-
-    Returns
-    -------
-    sp.Matrix
-        The transformed 2x2 matrix.
-    """    
-    if k_symbols is None:
-        k_symbols = sorted(h.free_symbols, key=lambda s: s.name)
-    sx = sp.Matrix([[0, 1], [1, 0]])
-    return sx * sp.conjugate(h).xreplace({k: -k for k in k_symbols}) * sx
-
-
-def is_PT_symmetric(
-        h: sp.Matrix, 
-        k_symbols: Optional[kSymbols] = None
-    ) -> bool:
-    """Check if a 2x2 Operator is PT-symmetric.
-
-    Parameters
-    ----------
-    h : sp.Matrix
-        The 2x2 matrix to be checked.
-    k_symbols : (sp.Symbol, sp.Symbol, sp.Symbol), optional
-        The momentum space coordinates, by default None, which assumes
-        only momentum symbols are present in the matrix.
-
-    Returns
-    -------
-    bool
-        True if the operator is PT-symmetric, False otherwise.
-    """
-    return sp.simplify(h - PT(h, k_symbols=k_symbols)) == sp.zeros(2, 2)
 
 
 def is_trivalent(G):
@@ -456,15 +282,10 @@ def _collapse_cycle_component(
 def simplify_edges(G: nx.MultiGraph) -> nx.MultiGraph:
     """Collapse degree‑2 chains in *G* while preserving geometry.
 
-    The algorithm operates *per connected component*:
-    1. **Early exit** – If *G* contains **no cycles**, return a copy of the
-       node‑only graph (no edges).
-    2. Components that include *junction* nodes (degree > 2) have each chain
-       between junctions collapsed to a *single* multiedge storing all the
-       collected poly‑line points.
-    3. Components with *no* junctions (i.e. simple cycles / isolated edges)
-       are reduced to a single self‑loop on a representative node while
-       preserving the entire path.
+    The algorithm operates per connected component. Acyclic components return a
+    node-only graph. Components with junction nodes collapse chains between
+    junctions to single multiedges. Components with no junctions are reduced to a
+    representative self-loop while preserving the path geometry.
 
     Parameters
     ----------

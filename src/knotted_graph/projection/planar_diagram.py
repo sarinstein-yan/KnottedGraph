@@ -1,7 +1,7 @@
 """Planar diagram refinement and plotting utilities.
 
 This module provides a :class:`PlanarDiagram` helper that refines the layout of
-an already-projected :class:`~knotted_graph.yamada.pd_code.PDCode`. The class
+an already-projected :class:`~knotted_graph.projection.pd_code.PDCode`. The class
 performs a lightweight ambient-isotopic massage of the diagram using a
 force-directed relaxation while validating that the cyclic ordering of arcs at
 each node is preserved and that no spurious crossings are introduced. The

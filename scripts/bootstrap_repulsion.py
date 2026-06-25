@@ -35,7 +35,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Prepare the optional Repulsor dependency for "
-            "knotted_graph.repulsive_layout without vendoring it into the package."
+            "knotted_graph.layout.repulsive without vendoring it into the package."
         )
     )
     parser.add_argument(
@@ -110,7 +110,7 @@ def main() -> None:
     print(f"  {repulsor_root}")
     print("Use it with:")
     print(f"  export REPULSOR_ROOT={repulsor_root}")
-    print("The C++ driver is compiled lazily by knotted_graph.repulsive_layout.driver.build_driver().")
+    print("The C++ driver is compiled lazily by knotted_graph.layout.repulsive.driver.build_driver().")
 
 
 if __name__ == "__main__":

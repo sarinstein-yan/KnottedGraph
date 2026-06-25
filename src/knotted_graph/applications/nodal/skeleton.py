@@ -3,26 +3,24 @@ import sympy as sp
 import networkx as nx
 import matplotlib.pyplot as plt
 import skimage.morphology as morph
-from poly2graph import skeleton2graph
 from functools import cached_property, lru_cache
 from tabulate import tabulate
 import minorminer
-import logging
 
 import pyvista as pv
 
-from knotted_graph.util import (
-    compute_yamada_safely,
+from knotted_graph.applications.nodal.symmetry import is_PT_symmetric
+from knotted_graph.core import (
     remove_leaf_nodes,
     simplify_edges,
     smooth_edges,
     get_all_edge_pts,
     total_edge_pts,
-    is_PT_symmetric,
     is_trivalent,
     idx_to_coord,
 )
-from knotted_graph.yamada import PDCode, compute_yamada_polynomial
+from knotted_graph.extraction import skeleton_image_to_graph
+from knotted_graph.projection import PDCode, compute_yamada_polynomial
 
 from typing import Tuple, Union, Optional, Any, Dict, Sequence
 from numpy.typing import NDArray, ArrayLike
@@ -34,91 +32,24 @@ from numpy.typing import NDArray, ArrayLike
 
 
 class NodalSkeleton:
-    r"""
-    Analyzes and visualizes the nodal structures of 2-band non-Hermitian Hamiltonians.
+    """Analyze a two-band non-Hermitian nodal-skeleton model.
 
-    This class computes the exceptional surface, its skeleton (medial axis),
-    and represents the skeleton as a spatial graph. It provides tools for
-    analyzing the topology of this graph and visualizing both the surface and
-    the graph in 3D k-space.
+    The workflow samples a Hamiltonian or Bloch vector over a 3D momentum grid,
+    extracts the exceptional-surface interior, skeletonizes that region, and
+    converts the skeleton into a spatial ``networkx.MultiGraph``.
 
     Parameters
     ----------
-    char : Union[sp.Matrix, sp.ImmutableMatrix, Sequence[sp.Expr]]
-        The characterization of the Hamiltonian. This can be a 2x2 SymPy matrix
-        representing the Hamiltonian $H(k)$, or a sequence of three SymPy
-        expressions representing the components of the Bloch vector $\vec{d}(k)$
-        such that $H(k) = \vec{d}(k) \cdot \vec{\sigma}$, where $\vec{\sigma}$
-        are the Pauli matrices.
-    k_symbols : Tuple[sp.Symbol, sp.Symbol, sp.Symbol], optional
-        A tuple of three SymPy symbols for the momentum components (kx, ky, kz).
-        If None, they are inferred from the free symbols in `char`.
-        Defaults to None.
-    span : Tuple[(float, float),
-                 (float, float),
-                 (float, float)], optional
-        The plotting range for (kx, ky, kz) as ((kx_min, kx_max),
-        (ky_min, ky_max), (kz_min, kz_max)). Defaults to
-        ((-np.pi, np.pi), (-np.pi, np.pi), (0, np.pi)).
-    dimension : int, optional
-        The number of points to use for each dimension of the k-space grid.
-        Defaults to 200.
-
-    Attributes
-    ----------
-    h_k : sp.Matrix
-        The 2x2 SymPy matrix of the Hamiltonian.
-    bloch_vec : tuple[sp.Expr, sp.Expr, sp.Expr]
-        The components of the Bloch vector (dx, dy, dz).
-    spectrum_expr : sp.Expr
-        The expression for the k-space spectrum, defined as
-        \( + \sqrt{ \vec{d} \cdot \vec{d} } \).
-    band_gap_expr : sp.Expr
-        The expression for the k-space band gap, defined as
-        \( \Delta = 2 \lVert \vec{d} \rVert \).
-    dispersion_expr : tuple[sp.Expr, sp.Expr, sp.Expr]
-        The expressions for the k-space dispersion relation
-        \( \frac{dE}{dk} \) for each component (dx, dy, dz).
-    berry_curvature_expr : tuple[sp.Expr, sp.Expr, sp.Expr]
-        The expressions for the Berry curvature vector field
-    k_symbols : tuple[sp.Symbol, sp.Symbol, sp.Symbol]
-        The symbols for the momentum components (kx, ky, kz).
-    span : np.ndarray
-        The plotting range for (kx, ky, kz).
-    dimension : int
-        The resolution of the k-space grid.
-    kx_grid, ky_grid, kz_grid : np.ndarray
-        The meshgrid arrays for the k-space coordinates.
-    kx_span, ky_span, kz_span : tuple[float, float]
-        The spans for kx, ky, and kz.
-    kx_vals, ky_vals, kz_vals : np.ndarray
-        The values for kx, ky, and kz at the grid points.
-    is_Hermitian : bool
-        Whether the Hamiltonian is Hermitian.
-    is_PT_symmetric : bool
-        Whether the Hamiltonian is PT-symmetric.
-    bloch_vec_funcs : tuple[callable, callable, callable]
-        The lambdified functions for the Bloch vector components.
-    spectrum : (N, N, N) complex
-        The k-space spectrum (upper band) calculated from the Bloch vector.
-    band_gap : (N, N, N) float
-        The k-space band gap, defined as \( \Delta = 2 \lVert \vec{d} \rVert \).
-    dispersion : (N, N, N, 3) complex
-        The k-space dispersion relation \( \frac{dE}{dk} \).
-    berry_curvature : (N, N, N, 3) float
-        The Berry curvature vector field on the k-space grid.
-    interior_mask : (N, N, N) bool
-        A binary mask of the filled interior of the exceptional surface,
-        where the energy is purely imaginary.
-    skeleton_coords : (M, 3) float
-        The k-space coordinates of the points on the skeleton of the
-        exceptional surface, where M is the number of skeleton points.
-    skeleton_graph_cache : Optional[nx.MultiGraph]
-        Cached graph representation of the skeleton of the exceptional surface.
-    total_edge_pts : int
-        The total number of points constituting the edges of the skeleton graph.
-    fields_pv : pv.ImageData
-        A PyVista grid object containing the k-space field data
+    char
+        Either a 2x2 SymPy Hamiltonian matrix or a three-component Bloch vector.
+    k_symbols
+        Momentum symbols. If omitted, symbols are inferred from ``char``.
+    span
+        Coordinate bounds for the 3D momentum grid.
+    dimension
+        Number of grid samples along each axis.
+    axis_scale
+        Visualization scale applied to grid coordinates.
     """
 
     pauli_x = sp.ImmutableDenseMatrix([[0, 1], [1, 0]])
@@ -402,7 +333,7 @@ class NodalSkeleton:
             return self.skeleton_graph_cache
 
         # Compute the graph
-        G = skeleton2graph(self._skeleton_image) \
+        G = skeleton_image_to_graph(self._skeleton_image) \
             if skeleton_image is None else skeleton_image
         if simplify:
             G = remove_leaf_nodes(G)
@@ -1063,7 +994,7 @@ class NodalSkeleton:
         This is a specialized plotting method that visualizes the Berry
         curvature inside the exceptional surface. It calls `plot_vector_field`
         with appropriate defaults for orientation ('berry') and scaling
-        ('log10(|berry|+1)').
+        (``log10(|berry|+1)``).
 
         Parameters
         ----------
@@ -1124,7 +1055,7 @@ class NodalSkeleton:
         This method visualizes the gradient of the imaginary part of the energy
         (dispersion) inside the exceptional surface. It calls `plot_vector_field`
         with orientation set to 'im_disp' and scaling to
-        'log10(|im_disp|+1)'.
+        ``log10(|im_disp|+1)``.
 
         Parameters
         ----------
@@ -1195,10 +1126,10 @@ class NodalSkeleton:
         ----------
         rotation_angles : tuple[float], optional
             The angles for the rotations in radians. Defaults to (0., 0., 0.).
-            See `NodalSkeleton.util.get_rotation_matrix` for details.
+            See ``knotted_graph.projection.get_rotation_matrix`` for details.
         rotation_order : str, optional
             The order of rotations to apply. Defaults to 'ZYX'.
-            See `NodalSkeleton.util.get_rotation_matrix` for details.
+            See ``knotted_graph.projection.get_rotation_matrix`` for details.
         ax : plt.Axes, optional
             The axes to plot on. If None, a new figure and axes are created.
         edge_kwargs : Dict, optional
@@ -1280,7 +1211,7 @@ class NodalSkeleton:
             crossing_kwargs: Dict = {},
         ) -> plt.Axes:
         """Plot a prettier version of the planar diagram."""
-        from knotted_graph.yamada import PlanarDiagram
+        from knotted_graph.projection import PlanarDiagram
         from copy import deepcopy
 
         pd = deepcopy(self.PDCode)
@@ -1310,10 +1241,11 @@ class NodalSkeleton:
         normalize: bool = True,
         n_jobs: int = -1,
         *,
-        rotation_angles: tuple[float] = (0.,0.,0.),
+        rotation_angles: tuple[float] | None = None,
         rotation_order: str = 'ZYX',
-        num_rotations: int = 10,
-        num_overlaps: int = 1,
+        num_rotation_samples: int = 10,
+        crossing_warning_threshold: int = 10,
+        method: str = "negami",
     ) -> sp.Expr:
         """
         Computes the Yamada polynomial for the skeleton graph.
@@ -1327,20 +1259,19 @@ class NodalSkeleton:
         n_jobs : int, optional
             The number of jobs to run in parallel. Defaults to -1.
         rotation_angles : tuple[float], optional
-            ONLY if the skeleton graph is NOT trivalent.
-            The angles for the rotations in radians. Defaults to (0., 0., 0.).
-            See `NodalSkeleton.util.get_rotation_matrix` for details.
+            If supplied, compute this exact projection. Otherwise, sample
+            ``num_rotation_samples`` rotations and use the projection with the
+            fewest crossings.
         rotation_order : str, optional
-            ONLY if the skeleton graph is NOT trivalent.
             The order of rotations to apply. Defaults to 'ZYX'.
-            See `NodalSkeleton.util.get_rotation_matrix` for details.
-        num_rotations: int, optional
-            ONLY if the skeleton graph is trivalent.
-            The number of different rotations to sample. Defaults to 10.
-        num_overlaps: int, optional
-            ONLY if the skeleton graph is trivalent.
-            Only return the polynomial if it appears at least this many times
-            in the sampled rotations. Defaults to 1.
+        num_rotation_samples: int, optional
+            Number of approximately non-isotopic rotations to sample when
+            ``rotation_angles`` is not supplied. Defaults to 10.
+        crossing_warning_threshold : int, optional
+            Emit a RuntimeWarning if the selected diagram has at least this many
+            crossings. Defaults to 10.
+        method : {"negami", "recursive"}, optional
+            Backend for evaluating crossing-free state graphs.
 
         Returns
         -------
@@ -1350,29 +1281,17 @@ class NodalSkeleton:
         if not self.skeleton_graph_cache:
             self.skeleton_graph()
 
-        if self.is_graph_trivalent:
-            logging.info(
-                f"The skeleton graph is trivalent, running {num_rotations} different"
-                " rotations to compute the Yamada polynomial safely."
-            )
-            return compute_yamada_safely(
-                self.skeleton_graph_cache, variable,
-                normalize=normalize, n_jobs=n_jobs,
-                num_rotations=num_rotations,
-                num_overlaps=num_overlaps
-            )
-        else:
-            logging.warning(
-                "The skeleton graph is not trivalent. "
-                f"Calculating the rotation angles {rotation_angles} "
-                f"in {rotation_order} order."
-            )
-            return compute_yamada_polynomial(
-                self.skeleton_graph_cache, variable,
-                normalize=normalize, n_jobs=n_jobs,
-                rotation_angles=rotation_angles,
-                rotation_order=rotation_order
-            )
+        return compute_yamada_polynomial(
+            self.skeleton_graph_cache,
+            variable,
+            normalize=normalize,
+            n_jobs=n_jobs,
+            rotation_angles=rotation_angles,
+            rotation_order=rotation_order,
+            num_rotation_samples=num_rotation_samples,
+            crossing_warning_threshold=crossing_warning_threshold,
+            method=method,
+        )
 
 
     def graph_summary(

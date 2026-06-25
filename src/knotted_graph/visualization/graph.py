@@ -10,7 +10,6 @@ __all__ = [
     "draw_petersen_embedding",
     "plot_3D_and_projections_plotly",
     "plot_3D_graph_plotly",
-    "plot_surface_modes",
 ]
 
 

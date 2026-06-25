@@ -1,3 +1,9 @@
+from __future__ import annotations
+
+import warnings
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Set, Tuple
+
 import numpy as np
 import sympy as sp
 import networkx as nx
@@ -5,20 +11,56 @@ from shapely import Point, MultiPoint, LineString, MultiLineString
 from shapely.ops import substring
 from shapely.affinity import affine_transform
 from shapely.strtree import STRtree
-from typing import List, Tuple, Dict, Set, Optional
+
+from knotted_graph.invariants.yamada.polynomial import Yamada
+
 from .geom import Vertex, Crossing, Arc
-from .util import get_rotation_matrix
-from .polynomial import Yamada
+from .rotations import generate_isotopy_angles, get_rotation_matrix
 
 
 __all__ = [
     "PDCode",
+    "ProjectionResult",
+    "YamadaComputationResult",
     "explode_to_segments",
     "find_all_crossings",
     "project_crossings_on_edge",
     "compute_pd_code",
-    "compute_yamada_polynomial"
+    "compute_yamada_polynomial",
+    "sample_projections",
+    "select_projection",
 ]
+
+
+@dataclass
+class ProjectionResult:
+    """A computed projection of a spatial graph into a planar diagram."""
+
+    processor: PDCode = field(repr=False, compare=False)
+    rotation_angles: tuple[float, float, float] | None
+    rotation_order: str
+    pd_code: str
+    num_crossings: int
+
+    @property
+    def vertices(self) -> list[Vertex]:
+        return list(self.processor.vertices.values())
+
+    @property
+    def crossings(self) -> list[Crossing]:
+        return list(self.processor.crossings.values())
+
+    @property
+    def arcs(self) -> list[Arc]:
+        return list(self.processor.arcs.values())
+
+
+@dataclass
+class YamadaComputationResult:
+    """Yamada polynomial plus the projection used to compute it."""
+
+    polynomial: sp.Expr
+    projection: ProjectionResult
 
 
 # TODO: add the six generalized Reidemeister moves (in terms of PD codes), and use
@@ -42,11 +84,14 @@ class PDCode:
     ) -> str:
         """Compute the graph with optional rotation."""
         args = (tuple(rotation_angles or (0.,0.,0.)), rotation_order)
-        if args in self._cache:
-            return self._cache[args]
-        
-        # Clear Arc counter
+
+        self.vertices = {}
+        self.crossings = {}
+        self.arcs = {}
+        self.node_key_to_vertex_id = {}
+        self.edge_key_to_index = {}
         Arc.reset_counter()
+
         # Create shapely geometries
         node_points = MultiPoint([
             Point(node_data['pos']) 
@@ -388,16 +433,123 @@ def compute_pd_code(
                                 rotation_order=rotation_order)
 
 
+def _normalize_rotation_angles(
+    rotation_angles: Optional[list[float] | tuple[float, float, float]],
+) -> tuple[float, float, float] | None:
+    if rotation_angles is None:
+        return None
+    if len(rotation_angles) != 3:
+        raise ValueError("rotation_angles must contain exactly three values.")
+    return tuple(float(angle) for angle in rotation_angles)
+
+
+def _compute_projection(
+    skeleton_graph: nx.MultiGraph,
+    rotation_angles: tuple[float, float, float] | None,
+    rotation_order: str,
+) -> ProjectionResult:
+    processor = PDCode(skeleton_graph)
+    pd_code = processor.compute(
+        rotation_angles=rotation_angles,
+        rotation_order=rotation_order,
+    )
+    return ProjectionResult(
+        processor=processor,
+        rotation_angles=rotation_angles,
+        rotation_order=rotation_order,
+        pd_code=pd_code,
+        num_crossings=len(processor.crossings),
+    )
+
+
+def sample_projections(
+    skeleton_graph: nx.MultiGraph,
+    *,
+    num_rotation_samples: int = 10,
+    rotation_order: str = "ZYX",
+) -> list[ProjectionResult]:
+    """Sample projections and return valid results in sample order."""
+    if num_rotation_samples <= 0:
+        raise ValueError("num_rotation_samples must be a positive integer.")
+
+    errors: list[str] = []
+    projections: list[ProjectionResult] = []
+    for sample_index, angles in enumerate(
+        generate_isotopy_angles(num_rotation_samples, order=rotation_order)
+    ):
+        rotation_angles = tuple(float(angle) for angle in angles)
+        try:
+            projections.append(
+                _compute_projection(skeleton_graph, rotation_angles, rotation_order)
+            )
+        except Exception as exc:
+            errors.append(f"sample {sample_index}: {exc}")
+
+    if not projections:
+        details = "; ".join(errors) if errors else "no samples were generated"
+        raise RuntimeError(f"All projection samples failed: {details}")
+    return projections
+
+
+def select_projection(
+    skeleton_graph: nx.MultiGraph,
+    *,
+    rotation_angles: Optional[list[float] | tuple[float, float, float]] = None,
+    rotation_order: str = "ZYX",
+    num_rotation_samples: int = 10,
+) -> ProjectionResult:
+    """Select the explicit projection or the sampled projection with fewest crossings."""
+    exact_angles = _normalize_rotation_angles(rotation_angles)
+    if exact_angles is not None:
+        return _compute_projection(skeleton_graph, exact_angles, rotation_order)
+
+    projections = sample_projections(
+        skeleton_graph,
+        num_rotation_samples=num_rotation_samples,
+        rotation_order=rotation_order,
+    )
+    return min(
+        enumerate(projections),
+        key=lambda indexed: (indexed[1].num_crossings, indexed[0]),
+    )[1]
+
+
 def compute_yamada_polynomial(
         skeleton_graph: nx.MultiGraph, 
         variable: sp.Symbol,
         rotation_angles: Optional[list[float]] = None,
         rotation_order: str = 'ZYX',
+        num_rotation_samples: int = 10,
+        crossing_warning_threshold: int = 10,
         normalize: bool = True,
-        n_jobs: int = -1
-    ) -> sp.Expr:
-    """Compute the Yamada polynomial for a skeleton graph."""
-    generator = PDCode(skeleton_graph)
-    generator.compute(rotation_angles=rotation_angles, 
-                      rotation_order=rotation_order)
-    return generator.compute_yamada(variable, normalize=normalize, n_jobs=n_jobs)
+        n_jobs: int = -1,
+        method: str = "negami",
+        return_result: bool = False,
+    ) -> sp.Expr | YamadaComputationResult:
+    """Compute the Yamada polynomial from the simplest selected projection."""
+    projection = select_projection(
+        skeleton_graph,
+        rotation_angles=rotation_angles,
+        rotation_order=rotation_order,
+        num_rotation_samples=num_rotation_samples,
+    )
+    if (
+        crossing_warning_threshold is not None
+        and projection.num_crossings >= crossing_warning_threshold
+    ):
+        warnings.warn(
+            "Selected planar diagram has "
+            f"{projection.num_crossings} crossings; Yamada computation may be expensive.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+
+    polynomial = projection.processor.compute_yamada(
+        variable,
+        normalize=normalize,
+        n_jobs=n_jobs,
+        method=method,
+    )
+    if return_result:
+        return YamadaComputationResult(polynomial=polynomial, projection=projection)
+    return polynomial

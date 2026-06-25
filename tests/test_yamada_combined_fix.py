@@ -8,8 +8,8 @@ import sympy as sp
 
 
 try:
-    from knotted_graph.yamada.geom import Arc, Crossing
-    from knotted_graph.yamada.polynomial import Yamada, compute_negami
+    from knotted_graph.projection.geom import Arc, Crossing
+    from knotted_graph.invariants.yamada.polynomial import Yamada, compute_negami
 except ModuleNotFoundError as exc:
     if exc.name != "poly2graph":
         raise
@@ -17,12 +17,18 @@ except ModuleNotFoundError as exc:
     kg_pkg = types.ModuleType("knotted_graph")
     kg_pkg.__path__ = [str(src / "knotted_graph")]
     sys.modules["knotted_graph"] = kg_pkg
-    yamada_pkg = types.ModuleType("knotted_graph.yamada")
-    yamada_pkg.__path__ = [str(src / "knotted_graph" / "yamada")]
-    sys.modules["knotted_graph.yamada"] = yamada_pkg
+    projection_pkg = types.ModuleType("knotted_graph.projection")
+    projection_pkg.__path__ = [str(src / "knotted_graph" / "projection")]
+    sys.modules["knotted_graph.projection"] = projection_pkg
+    invariants_pkg = types.ModuleType("knotted_graph.invariants")
+    invariants_pkg.__path__ = [str(src / "knotted_graph" / "invariants")]
+    sys.modules["knotted_graph.invariants"] = invariants_pkg
+    yamada_pkg = types.ModuleType("knotted_graph.invariants.yamada")
+    yamada_pkg.__path__ = [str(src / "knotted_graph" / "invariants" / "yamada")]
+    sys.modules["knotted_graph.invariants.yamada"] = yamada_pkg
 
-    from knotted_graph.yamada.geom import Arc, Crossing
-    from knotted_graph.yamada.polynomial import Yamada, compute_negami
+    from knotted_graph.projection.geom import Arc, Crossing
+    from knotted_graph.invariants.yamada.polynomial import Yamada, compute_negami
 
 
 class _Point:

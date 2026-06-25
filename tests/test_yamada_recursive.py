@@ -1,8 +1,8 @@
 import networkx as nx
 import sympy as sp
 
-from knotted_graph.yamada.polynomial import compute_yamada_from_states
-from knotted_graph.yamada.recursive import (
+from knotted_graph.invariants.yamada.polynomial import compute_yamada_from_states
+from knotted_graph.invariants.yamada.recursive import (
     compute_yamada_polynomial_recursive,
     contract_multigraph_edge,
     delete_multigraph_edge,
