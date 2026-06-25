@@ -76,3 +76,25 @@ def test_yamada_polynomial_import_does_not_load_application_stack():
         "knotted_graph.surface_modes": False,
         "knotted_graph.vis": False,
     }
+
+
+def test_input_package_import_does_not_load_surface_stack():
+    loaded = _run_python(
+        """
+        import json
+        import sys
+
+        import knotted_graph.inputs
+
+        names = [
+            "pyvista",
+            "knotted_graph.inputs.surface_mesh",
+        ]
+        print(json.dumps({name: name in sys.modules for name in names}))
+        """
+    )
+
+    assert loaded == {
+        "pyvista": False,
+        "knotted_graph.inputs.surface_mesh": False,
+    }
