@@ -7,6 +7,8 @@ import networkx as nx
 import numpy as np
 
 from knotted_graph.layout.repulsive import pipeline
+from knotted_graph.layout.repulsive.curve_io import curve_network_to_multigraph
+from knotted_graph.layout.repulsive.models import CurveNetwork
 
 
 def _read_curve(path: Path) -> tuple[np.ndarray, list[tuple[int, int]]]:
@@ -40,6 +42,39 @@ def _write_history(path: Path) -> None:
         "1,0.5,0.5,1.0,1,1,0.25,0,10.0,9.0\n",
         encoding="utf-8",
     )
+
+
+def test_curve_network_to_multigraph_preserves_spatial_graph_contract():
+    network = CurveNetwork(
+        name="demo theta",
+        node_order=("u", "v"),
+        node_positions={
+            "u": np.array([0.0, 0.0, 0.0]),
+            "v": np.array([2.0, 0.0, 0.0]),
+        },
+        arc_order=("upper", "lower"),
+        arc_polylines={
+            "upper": np.array([[0.0, 0.0, 0.0], [1.0, 1.0, 0.0], [2.0, 0.0, 0.0]]),
+            "lower": np.array([[0.0, 0.0, 0.0], [1.0, -1.0, 0.0], [2.0, 0.0, 0.0]]),
+        },
+        arc_specs={"upper": "upper arc"},
+        arc_colors={"upper": "red", "lower": "blue"},
+        node_colors={"u": "gold", "v": "navy"},
+        metadata={"sample_id": "demo"},
+    )
+
+    graph = curve_network_to_multigraph(network)
+
+    assert isinstance(graph, nx.MultiGraph)
+    assert graph.graph["input_kind"] == "curve_network"
+    assert graph.graph["name"] == "demo theta"
+    assert graph.graph["sample_id"] == "demo"
+    assert set(graph.nodes) == {"u", "v"}
+    assert set(graph.edges(keys=True)) == {("u", "v", "upper"), ("u", "v", "lower")}
+    np.testing.assert_allclose(graph.nodes["u"]["pos"], [0.0, 0.0, 0.0])
+    np.testing.assert_allclose(graph.edges["u", "v", "upper"]["pts"][1], [1.0, 1.0, 0.0])
+    assert graph.edges["u", "v", "upper"]["color"] == "red"
+    assert graph.edges["u", "v", "upper"]["description"] == "upper arc"
 
 
 def test_relax_spatial_graph_preserves_skeleton_graph_api(monkeypatch, tmp_path):

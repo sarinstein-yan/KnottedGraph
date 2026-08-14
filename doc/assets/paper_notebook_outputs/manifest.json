@@ -1,0 +1,345 @@
+[
+  {
+    "group": "Fig2 Appendix",
+    "title": "Constant-energy Brillouin-zone panel",
+    "file": "fig2_appendix_bz_cropped.png",
+    "source": "Fig2-appendix.ipynb / FigsAppendix.ipynb",
+    "description": "Constant-energy surface panel used for the appendix Fig. 2 discussion."
+  },
+  {
+    "group": "Skeletonization Appendix",
+    "title": "Knot-to-spatial-graph pipeline",
+    "file": "appendix_skeletonization_knot_to_spatial_graph.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "End-to-end pipeline from surface/knot geometry to an extracted spatial graph."
+  },
+  {
+    "group": "Skeletonization Appendix",
+    "title": "(2,4)-torus ordered surface-to-graph pipeline",
+    "file": "appendix_skeletonization_torus_pipeline_gamma_02.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Ordered multi-stage pipeline for the (2,4)-torus example."
+  },
+  {
+    "group": "Skeletonization Appendix",
+    "title": "(2,4)-torus surface, gamma=0.06",
+    "file": "appendix_skeletonization_torus_surface_gamma_0p06.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Intermediate surface plot for the (2,4)-torus skeletonization example."
+  },
+  {
+    "group": "Skeletonization Appendix",
+    "title": "(2,4)-torus skeleton points, gamma=0.06",
+    "file": "appendix_skeletonization_torus_skeleton_gamma_0p06.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Intermediate skeleton points plot for the (2,4)-torus skeletonization example."
+  },
+  {
+    "group": "Skeletonization Appendix",
+    "title": "(2,4)-torus spatial graph, gamma=0.06",
+    "file": "appendix_skeletonization_torus_graph_gamma_0p06.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Intermediate spatial graph plot for the (2,4)-torus skeletonization example."
+  },
+  {
+    "group": "Skeletonization Appendix",
+    "title": "(2,4)-torus surface, gamma=0.2",
+    "file": "appendix_skeletonization_torus_surface_gamma_0p2.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Intermediate surface plot for the (2,4)-torus skeletonization example."
+  },
+  {
+    "group": "Skeletonization Appendix",
+    "title": "(2,4)-torus skeleton points, gamma=0.2",
+    "file": "appendix_skeletonization_torus_skeleton_gamma_0p2.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Intermediate skeleton points plot for the (2,4)-torus skeletonization example."
+  },
+  {
+    "group": "Skeletonization Appendix",
+    "title": "(2,4)-torus spatial graph, gamma=0.2",
+    "file": "appendix_skeletonization_torus_graph_gamma_0p2.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Intermediate spatial graph plot for the (2,4)-torus skeletonization example."
+  },
+  {
+    "group": "Yamada Appendix",
+    "title": "Knotted-graph table for Yamada examples",
+    "file": "appendix_yamada_knotted_graph_table_4x6.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Table of generated graph examples used in the Yamada-invariant appendix."
+  },
+  {
+    "group": "Yamada Appendix",
+    "title": "Yamada invariant figure",
+    "file": "appendix_yamada_figure_rasterized.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Rasterized composite figure for the Yamada invariant table."
+  },
+  {
+    "group": "Energy Isosurfaces Appendix",
+    "title": "Energy-isosurface grid",
+    "file": "appendix_energy_isosurfaces_grid_windowed.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Composite grid of constant-energy surfaces for model examples."
+  },
+  {
+    "group": "Energy Isosurfaces Appendix",
+    "title": "panel 00 Unknot",
+    "file": "appendix_energy_tile_panel_00_unknot.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Individual constant-energy surface tile generated for the appendix grid."
+  },
+  {
+    "group": "Energy Isosurfaces Appendix",
+    "title": "panel 01 Hopf link",
+    "file": "appendix_energy_tile_panel_01_hopf_link.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Individual constant-energy surface tile generated for the appendix grid."
+  },
+  {
+    "group": "Energy Isosurfaces Appendix",
+    "title": "panel 02 Trefoil",
+    "file": "appendix_energy_tile_panel_02_trefoil.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Individual constant-energy surface tile generated for the appendix grid."
+  },
+  {
+    "group": "Energy Isosurfaces Appendix",
+    "title": "panel 03 Solomons Knot",
+    "file": "appendix_energy_tile_panel_03_solomons_knot.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Individual constant-energy surface tile generated for the appendix grid."
+  },
+  {
+    "group": "Energy Isosurfaces Appendix",
+    "title": "panel 04 Three-link",
+    "file": "appendix_energy_tile_panel_04_three-link.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Individual constant-energy surface tile generated for the appendix grid."
+  },
+  {
+    "group": "Energy Isosurfaces Appendix",
+    "title": "panel 05 Torus (1, 2)",
+    "file": "appendix_energy_tile_panel_05_torus_1_2.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Individual constant-energy surface tile generated for the appendix grid."
+  },
+  {
+    "group": "Energy Isosurfaces Appendix",
+    "title": "panel 06 Awesome Knotted Graph",
+    "file": "appendix_energy_tile_panel_06_awesome_knotted_graph.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Individual constant-energy surface tile generated for the appendix grid."
+  },
+  {
+    "group": "Berry Curvature Appendix",
+    "title": "Gamma 0.8 slicing planes",
+    "file": "appendix_berry_gamma0p8_planes.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Plane-intersection setup used for Berry-curvature flow visualization."
+  },
+  {
+    "group": "Berry Curvature Appendix",
+    "title": "Hopf-link intersection replot",
+    "file": "appendix_berry_hopf_intersections.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Replotted Hopf-link intersections used for Berry-flow discussion."
+  },
+  {
+    "group": "Berry Curvature Appendix",
+    "title": "Berry profile",
+    "file": "appendix_berry_profile.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Berry-profile plot generated in the appendix workflow."
+  },
+  {
+    "group": "Intrinsic Linkedness Appendix",
+    "title": "Rich-topology intrinsic-linkedness panel",
+    "file": "appendix_intrinsic_linkedness_2row.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Composite panel showing the intrinsically linked example and graph-theoretic reduction."
+  },
+  {
+    "group": "Intrinsic Linkedness Appendix",
+    "title": "Awesome example row",
+    "file": "appendix_intrinsic_awesome_row_1x4.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "One-row figure for the awesome knotted-graph intrinsic-linkedness example."
+  },
+  {
+    "group": "Intrinsic Linkedness Appendix",
+    "title": "Awesome surface",
+    "file": "appendix_intrinsic_awesomesurface_auto.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Supporting plot generated for the intrinsic-linkedness appendix figure."
+  },
+  {
+    "group": "Intrinsic Linkedness Appendix",
+    "title": "Petersen graph reference",
+    "file": "appendix_intrinsic_petersengraph.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Supporting plot generated for the intrinsic-linkedness appendix figure."
+  },
+  {
+    "group": "Intrinsic Linkedness Appendix",
+    "title": "Intrinsically linked graph reference",
+    "file": "appendix_intrinsic_intrinsically_linked.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Supporting plot generated for the intrinsic-linkedness appendix figure."
+  },
+  {
+    "group": "Planarity Appendix",
+    "title": "Three-link planarity grid",
+    "file": "appendix_planarity_threelink_grid_3x3.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Surface, graph, and planar graph views used for the planarity appendix."
+  },
+  {
+    "group": "Planarity Appendix",
+    "title": "Planarity summary figure",
+    "file": "appendix_planarity_summary.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Summary panel for the graph planarity discussion."
+  },
+  {
+    "group": "Planarity Appendix",
+    "title": "Three-link surface, gamma=0.116",
+    "file": "appendix_planarity_threelink_surf_0p116.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Individual three-link surface generated for the planarity sequence."
+  },
+  {
+    "group": "Planarity Appendix",
+    "title": "Three-link surface, gamma=0.41",
+    "file": "appendix_planarity_threelink_surf_0p41.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Individual three-link surface generated for the planarity sequence."
+  },
+  {
+    "group": "Planarity Appendix",
+    "title": "Three-link surface, gamma=0.5",
+    "file": "appendix_planarity_threelink_surf_0p5.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Individual three-link surface generated for the planarity sequence."
+  },
+  {
+    "group": "Planarity Appendix",
+    "title": "Planarity graph G1",
+    "file": "appendix_planarity_g1.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Graph-theoretic panel generated for the planarity appendix."
+  },
+  {
+    "group": "Planarity Appendix",
+    "title": "Planarity graph G2",
+    "file": "appendix_planarity_g2.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Graph-theoretic panel generated for the planarity appendix."
+  },
+  {
+    "group": "Planarity Appendix",
+    "title": "Planarity graph G3",
+    "file": "appendix_planarity_g3.png",
+    "source": "FigsAppendix.ipynb",
+    "description": "Graph-theoretic panel generated for the planarity appendix."
+  },
+  {
+    "group": "Multiband Material Figures",
+    "title": "Experiment 4 Panel A: AlB2-type nodal net",
+    "file": "multiband_experiment4_a.png",
+    "source": "Multiband.ipynb",
+    "description": "Material panel generated for the TiB2/ZrB2 AlB2-type nodal-net examples."
+  },
+  {
+    "group": "Multiband Material Figures",
+    "title": "Experiment 4 Panel B: AlB2-type nodal net",
+    "file": "multiband_experiment4_b.png",
+    "source": "Multiband.ipynb",
+    "description": "Material panel generated for the TiB2/ZrB2 AlB2-type nodal-net examples."
+  },
+  {
+    "group": "Multiband Material Figures",
+    "title": "Experiment 4 Panel C: AlB2-type nodal net",
+    "file": "multiband_experiment4_c.png",
+    "source": "Multiband.ipynb",
+    "description": "Material panel generated for the TiB2/ZrB2 AlB2-type nodal-net examples."
+  },
+  {
+    "group": "Multiband Material Figures",
+    "title": "Experiment 7 A: Ti3Al",
+    "file": "multiband_experiment7_a.png",
+    "source": "Multiband.ipynb",
+    "description": "Material surface-to-knotted-graph panel generated for the real-material examples."
+  },
+  {
+    "group": "Multiband Material Figures",
+    "title": "Experiment 7 B: YH3",
+    "file": "multiband_experiment7_b.png",
+    "source": "Multiband.ipynb",
+    "description": "Material surface-to-knotted-graph panel generated for the real-material examples."
+  },
+  {
+    "group": "Multiband Material Figures",
+    "title": "Experiment 7 C: Co2MnGa enlarged cell",
+    "file": "multiband_experiment7_c.png",
+    "source": "Multiband.ipynb",
+    "description": "Material surface-to-knotted-graph panel generated for the real-material examples."
+  },
+  {
+    "group": "Multiband Material Figures",
+    "title": "Experiment 7 D: Co2MnGa single cell",
+    "file": "multiband_experiment7_d.png",
+    "source": "Multiband.ipynb",
+    "description": "Material surface-to-knotted-graph panel generated for the real-material examples."
+  },
+  {
+    "group": "Multiband Material Figures",
+    "title": "Main-text material composite 3x4",
+    "file": "multiband_main_text_3x4.png",
+    "source": "Multiband.ipynb",
+    "description": "Main-text composite figure variant generated by the multiband notebook."
+  },
+  {
+    "group": "Multiband Material Figures",
+    "title": "Main-text material composite 3x4_cropped",
+    "file": "multiband_main_text_3x4_cropped.png",
+    "source": "Multiband.ipynb",
+    "description": "Main-text composite figure variant generated by the multiband notebook."
+  },
+  {
+    "group": "Multiband Material Figures",
+    "title": "Main-text material composite 3x4_flat",
+    "file": "multiband_main_text_3x4_flat.png",
+    "source": "Multiband.ipynb",
+    "description": "Main-text composite figure variant generated by the multiband notebook."
+  },
+  {
+    "group": "Multiband Notebook Embedded Outputs",
+    "title": "Embedded output from cell 40",
+    "file": "multiband_embedded_cell040_out01.png",
+    "source": "Multiband.ipynb",
+    "description": "PNG output stored directly inside the notebook output area."
+  },
+  {
+    "group": "Multiband Notebook Embedded Outputs",
+    "title": "Embedded output from cell 80",
+    "file": "multiband_embedded_cell080_out01.png",
+    "source": "Multiband.ipynb",
+    "description": "PNG output stored directly inside the notebook output area."
+  },
+  {
+    "group": "Multiband Notebook Embedded Outputs",
+    "title": "Embedded output from cell 83",
+    "file": "multiband_embedded_cell083_out01.png",
+    "source": "Multiband.ipynb",
+    "description": "PNG output stored directly inside the notebook output area."
+  },
+  {
+    "group": "Multiband Notebook Embedded Outputs",
+    "title": "Embedded output from cell 99",
+    "file": "multiband_embedded_cell099_out00.png",
+    "source": "Multiband.ipynb",
+    "description": "PNG output stored directly inside the notebook output area."
+  }
+]

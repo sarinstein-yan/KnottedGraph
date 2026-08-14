@@ -3,12 +3,6 @@
 The repository is organized around generic mathematical components first, with
 applications layered on top.
 
-```{image} ../../assets/paper/architecture.svg
-:alt: KnottedGraph architecture diagram
-:width: 90%
-:align: center
-```
-
 ## Submodules
 
 - `knotted_graph.core`: embedded graph validation, graph constructors, and graph
@@ -37,3 +31,18 @@ spatial-graph entry point. If `rotation_angles` is supplied, it computes exactly
 that projection. Otherwise it samples `num_rotation_samples=10` rotations,
 chooses the valid projection with the fewest crossings, and emits a
 `RuntimeWarning` when the selected diagram has at least 10 crossings.
+
+## Inspection-Oriented API Direction
+
+Intermediate objects are part of the public user story, not only internal
+implementation details. Users should be able to inspect or export the major
+pipeline stages used in the paper figures: imported input, surface or mesh,
+skeleton image, raw spatial graph, simplified spatial graph, sampled
+projections, selected planar diagram, PD code, and invariant output.
+
+Current graph-to-Yamada workflows expose this pattern through
+`sample_projections`, `select_projection`, and
+`compute_yamada_polynomial(..., return_result=True)`. Future high-level
+pipeline helpers should preserve these lower-level APIs while collecting the
+same intermediate objects into a convenient result object for tutorials,
+figures, and reproducible analyses.

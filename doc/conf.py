@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "src"))
 project = "KnottedGraph"
 author = "Xianquan (Sarinstein) Yan, Hakan Akgün"
 copyright = "2026, KnottedGraph contributors"
-release = "0.1.3"
+release = "0.2.0"
 
 extensions = [
     "myst_nb",
@@ -30,7 +30,8 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 html_theme = "pydata_sphinx_theme"
 html_title = "KnottedGraph"
-html_static_path = []
+html_static_path = ["_static"]
+html_css_files = ["custom.css"]
 html_theme_options = {
     "github_url": "https://github.com/sarinstein-yan/KnottedGraph",
     "show_toc_level": 2,

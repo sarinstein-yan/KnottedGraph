@@ -3,9 +3,47 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import networkx as nx
 import numpy as np
 
 from .models import CurveNetwork
+
+
+def curve_network_to_multigraph(network: CurveNetwork) -> nx.MultiGraph:
+    """Convert a ``CurveNetwork`` into the standard spatial ``MultiGraph``.
+
+    The returned graph uses KnottedGraph's generic embedded-graph convention:
+    each node has a 3D ``pos`` attribute and each edge has a 3D ``pts``
+    polyline. Arc names become edge keys, so protein-derived theta graph
+    examples can be passed directly to visualization, projection, and invariant
+    APIs.
+    """
+    graph = nx.MultiGraph()
+    graph.graph.update(network.metadata)
+    graph.graph["input_kind"] = "curve_network"
+    graph.graph["name"] = network.name
+
+    for node in network.node_order:
+        graph.add_node(
+            node,
+            pos=np.asarray(network.node_positions[node], dtype=float).copy(),
+            color=network.node_colors.get(node),
+        )
+
+    if len(network.node_order) != 2:
+        raise ValueError("curve_network_to_multigraph currently expects exactly two graph nodes.")
+    source, target = network.node_order
+    for arc_name in network.arc_order:
+        graph.add_edge(
+            source,
+            target,
+            key=arc_name,
+            pts=np.asarray(network.arc_polylines[arc_name], dtype=float).copy(),
+            color=network.arc_colors.get(arc_name),
+            description=network.arc_specs.get(arc_name),
+        )
+
+    return graph
 
 
 def network_to_vertices(network: CurveNetwork) -> tuple[np.ndarray, dict[str, list[int]]]:

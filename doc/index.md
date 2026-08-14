@@ -29,6 +29,7 @@ The public source layout follows the architecture diagram:
 
 installation
 quickstart
+user_guide/index
 applications/index
 api/index
 developer/architecture

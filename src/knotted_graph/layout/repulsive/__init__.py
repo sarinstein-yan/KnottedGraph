@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .decimation import DecimationOptions
+from .curve_io import curve_network_to_multigraph
 from .driver import DriverConfig, SolverOptions
 from .models import CurveNetwork, GraphLayoutResult, RepulsiveLayoutResult
 from .pipeline import relax_spatial_graph, run_protein_example
@@ -18,6 +19,7 @@ __all__ = [
     "SolverOptions",
     "available_samples",
     "build_protein_example",
+    "curve_network_to_multigraph",
     "relax_spatial_graph",
     "run_protein_example",
     "verify_obj_step_sequence",
