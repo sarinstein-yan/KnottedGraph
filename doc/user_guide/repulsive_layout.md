@@ -80,30 +80,124 @@ topology_verified = True
 clearance_summary = {'initial_min_distance': ..., 'relaxed_min_distance': ..., 'final_min_distance': ...}
 ```
 
-Use the same Plotly call before and after layout:
+Use the same Plotly style before and after layout. The axes are intentionally
+visible: for layout debugging the user should see where close approaches occur
+in 3D, not only an isolated curve drawing.
 
 ```python
 from knotted_graph.visualization import plot_3D_graph_plotly
-
-
-def show_spatial_graph(graph):
-    fig = plot_3D_graph_plotly(graph)
-    fig.update_layout(
-        title=None,
-        scene=dict(
-            xaxis=dict(visible=True),
-            yaxis=dict(visible=True),
-            zaxis=dict(visible=True),
-            aspectmode="data",
-            camera=dict(eye=dict(x=1.55, y=1.75, z=1.05)),
-        ),
-    )
-    fig.show()
-
-
-show_spatial_graph(graph)
-show_spatial_graph(relaxed_graph)
 ```
+
+For a paper figure or debugging page, put the two plots next to each other so
+the user can see what the repulsive pass changed:
+
+```python
+from plotly.subplots import make_subplots
+
+before_fig = plot_3D_graph_plotly(graph)
+after_fig = plot_3D_graph_plotly(relaxed_graph)
+
+fig = make_subplots(
+    rows=1,
+    cols=2,
+    specs=[[{"type": "scene"}, {"type": "scene"}]],
+    horizontal_spacing=0.02,
+)
+for trace in before_fig.data:
+    fig.add_trace(trace, row=1, col=1)
+for trace in after_fig.data:
+    fig.add_trace(trace, row=1, col=2)
+
+fig.update_layout(
+    title=None,
+    scene=dict(
+        xaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        yaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        zaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        aspectmode="data",
+        camera=dict(eye=dict(x=1.45, y=1.55, z=1.18)),
+    ),
+    scene2=dict(
+        xaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        yaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        zaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        aspectmode="data",
+        camera=dict(eye=dict(x=1.45, y=1.55, z=1.18)),
+    ),
+    showlegend=False,
+)
+fig.show()
+```
+
+```{image} ../assets/plot_outputs/repulsive_before_after_plotly.png
+:alt: Output from plotting a tangled theta graph before and after repulsive layout
+:width: 92%
+:align: center
+```
+
+The left panel is the input embedding. The right panel is the cleaner embedded
+representative returned as `layout.graph`. The nodes and edge keys are the same;
+only the geometric representative has changed.
 
 The figures in the next sections show three actual input graphs accepted by the
 repulsive-layout API. After a solver run, replace each input graph with
@@ -144,7 +238,48 @@ def tangled_theta_graph(samples=130):
 
 
 graph = tangled_theta_graph()
-show_spatial_graph(graph)
+fig = plot_3D_graph_plotly(graph)
+fig.update_layout(
+    title=None,
+    scene=dict(
+        xaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        yaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        zaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        aspectmode="data",
+        camera=dict(eye=dict(x=1.45, y=1.55, z=1.18)),
+    ),
+)
+fig.show()
 ```
 
 ```{image} ../assets/plot_outputs/repulsive_example_geometric_theta.png
@@ -176,7 +311,48 @@ network = build_protein_example(
 set_special_node_distance(network, target_distance=9.0)
 
 graph = curve_network_to_multigraph(network)
-show_spatial_graph(graph)
+fig = plot_3D_graph_plotly(graph)
+fig.update_layout(
+    title=None,
+    scene=dict(
+        xaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        yaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        zaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        aspectmode="data",
+        camera=dict(eye=dict(x=1.45, y=1.55, z=1.18)),
+    ),
+)
+fig.show()
 ```
 
 ```{image} ../assets/plot_outputs/repulsive_example_protein_theta.png
@@ -212,7 +388,49 @@ graph = coordinates_to_multigraph(
     closure="direct",
     input_id="closed_polymer_loop",
 )
-show_spatial_graph(graph)
+
+fig = plot_3D_graph_plotly(graph)
+fig.update_layout(
+    title=None,
+    scene=dict(
+        xaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        yaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        zaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        aspectmode="data",
+        camera=dict(eye=dict(x=1.45, y=1.55, z=1.18)),
+    ),
+)
+fig.show()
 ```
 
 ```{image} ../assets/plot_outputs/repulsive_example_polymer_loop.png

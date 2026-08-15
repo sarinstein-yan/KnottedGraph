@@ -133,13 +133,18 @@ def plot_3D_graph_plotly(G: Union[nx.Graph, nx.MultiGraph]) -> "go.Figure":
     Robust 3D Plotly visualizer for a knotted graph.
 
     - Flattens mixed Python lists/arrays of edge 'pts' into a clean (N,3) array.
-    - Plots edges as blue lines and **all** nodes as red markers.
+    - Plots edges in the documentation's standard blue style.
+    - Shows vertices as red markers so graph branch points are visually clear.
     """
     import plotly.graph_objects as go
     edge_traces = []
-    edge_color = 'blue'
+    edge_shadow_color = "#0b3c5d"
+    edge_color = "#1f77b4"
+    vertex_color = "#d62728"
+    vertex_outline_color = "#7f1d1d"
+    all_points = []
 
-    # — edge traces (unchanged) —
+    # Edge traces.
     for u, v, data in G.edges(data=True):
         raw_pts = data.get('pts', [])
         flat_pts = []
@@ -156,18 +161,28 @@ def plot_3D_graph_plotly(G: Union[nx.Graph, nx.MultiGraph]) -> "go.Figure":
             continue
 
         pts_arr = np.stack(flat_pts)
+        all_points.extend(pts_arr)
         x, y, z = pts_arr[:,0], pts_arr[:,1], pts_arr[:,2]
-        edge_traces.append(
-            go.Scatter3d(
-                x=x, y=y, z=z,
-                mode='lines',
-                line=dict(color=edge_color, width=2),
-                hoverinfo='none',
-                showlegend=False
-            )
+        edge_traces.extend(
+            [
+                go.Scatter3d(
+                    x=x, y=y, z=z,
+                    mode='lines',
+                    line=dict(color=edge_shadow_color, width=13),
+                    hoverinfo='none',
+                    showlegend=False
+                ),
+                go.Scatter3d(
+                    x=x, y=y, z=z,
+                    mode='lines',
+                    line=dict(color=edge_color, width=9),
+                    hoverinfo='none',
+                    showlegend=False
+                ),
+            ]
         )
 
-    # — node traces: now include every node with an 'pos' attribute —
+    # Node traces include every node with a 'pos' attribute.
     node_x, node_y, node_z = [], [], []
     for n, data in G.nodes(data=True):
         if 'pos' in data:
@@ -176,28 +191,87 @@ def plot_3D_graph_plotly(G: Union[nx.Graph, nx.MultiGraph]) -> "go.Figure":
                 node_x.append(o[0])
                 node_y.append(o[1])
                 node_z.append(o[2])
+                all_points.append(o)
 
     node_trace = go.Scatter3d(
         x=node_x, y=node_y, z=node_z,
         mode='markers',
-        marker=dict(size=5, color='red'),
+        marker=dict(size=7, color=vertex_color, line=dict(color=vertex_outline_color, width=1)),
         hoverinfo='none',
         showlegend=False
     ) if node_x else None
 
-    # — combine and layout —
-    traces = edge_traces + ([node_trace] if node_trace else [])
+    bbox_trace = None
+    if all_points:
+        pts = np.asarray(all_points, dtype=float)
+        pts = pts[np.isfinite(pts).all(axis=1)]
+        if len(pts):
+            lo = pts.min(axis=0)
+            hi = pts.max(axis=0)
+            span = np.maximum(hi - lo, 1.0)
+            lo = lo - 0.06 * span
+            hi = hi + 0.06 * span
+            corners = np.array(
+                [
+                    [lo[0], lo[1], lo[2]],
+                    [hi[0], lo[1], lo[2]],
+                    [hi[0], hi[1], lo[2]],
+                    [lo[0], hi[1], lo[2]],
+                    [lo[0], lo[1], hi[2]],
+                    [hi[0], lo[1], hi[2]],
+                    [hi[0], hi[1], hi[2]],
+                    [lo[0], hi[1], hi[2]],
+                ]
+            )
+            bbox_edges = [
+                (0, 1), (1, 2), (2, 3), (3, 0),
+                (4, 5), (5, 6), (6, 7), (7, 4),
+                (0, 4), (1, 5), (2, 6), (3, 7),
+            ]
+            box_x, box_y, box_z = [], [], []
+            for a, b in bbox_edges:
+                box_x.extend([corners[a, 0], corners[b, 0], None])
+                box_y.extend([corners[a, 1], corners[b, 1], None])
+                box_z.extend([corners[a, 2], corners[b, 2], None])
+            bbox_trace = go.Scatter3d(
+                x=box_x,
+                y=box_y,
+                z=box_z,
+                mode="lines",
+                line=dict(color="black", width=2),
+                hoverinfo="skip",
+                showlegend=False,
+            )
+
+    # Combine and layout.
+    traces = ([bbox_trace] if bbox_trace else []) + edge_traces + ([node_trace] if node_trace else [])
     fig = go.Figure(data=traces)
+    paper_axis = dict(
+        visible=True,
+        title="",
+        showticklabels=False,
+        showbackground=False,
+        showgrid=False,
+        zeroline=False,
+        showline=True,
+        linecolor="black",
+        linewidth=2,
+    )
     fig.update_layout(
-        title="Interactive 3D Graph Visualization<br>(All Nodes)",
+        title=None,
         scene=dict(
-            xaxis_title='X', yaxis_title='Y', zaxis_title='Z',
-            aspectmode='data'
+            xaxis=paper_axis,
+            yaxis=paper_axis,
+            zaxis=paper_axis,
+            aspectmode="data",
+            camera=dict(eye=dict(x=1.45, y=1.55, z=1.18)),
         ),
-        margin=dict(l=0, r=0, t=40, b=0),
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        margin=dict(l=0, r=0, t=0, b=0),
         showlegend=False,
-        width=600,
-        height=600
+        width=900,
+        height=800,
     )
     return fig
 

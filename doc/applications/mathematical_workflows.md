@@ -68,6 +68,8 @@ import csv
 from pathlib import Path
 
 dataset_path = Path("structured_graph_yamada_dataset.csv")
+if not dataset_path.exists():
+    dataset_path = Path("doc/assets/data/structured_graph_yamada_dataset.csv")
 
 with dataset_path.open(newline="") as handle:
     for row in csv.DictReader(handle):
@@ -184,9 +186,11 @@ ske = NodalSkeleton(
     dimension=48,
 )
 
+surface = ske.exceptional_surface_pv.connectivity("largest")
 graph = ske.skeleton_graph(simplify=True, smooth_epsilon=2)
 simple_graph = nx.Graph(graph)
 
+print("surface_points_cells =", (surface.n_points, surface.n_cells))
 print("nodes_edges =", (graph.number_of_nodes(), graph.number_of_edges()))
 print("is_planar =", nx.check_planarity(simple_graph)[0])
 print("degree_sequence =", sorted(dict(graph.degree()).values()))
@@ -195,14 +199,138 @@ print("degree_sequence =", sorted(dict(graph.degree()).values()))
 Output:
 
 ```text
+surface_points_cells = (11630, 23256)
 nodes_edges = (5, 8)
 is_planar = True
 degree_sequence = [3, 3, 3, 3, 4]
 ```
 
-This page deliberately does not include standalone Petersen or $K_{3,3}$
-drawings, because those figures are ordinary graph-theory illustrations rather
-than outputs of the KnottedGraph pipeline.
+First inspect the surface that produced the graph:
+
+```python
+import plotly.graph_objects as go
+
+mesh = surface.triangulate()
+faces = mesh.faces.reshape(-1, 4)[:, 1:]
+pts = mesh.points
+
+fig = go.Figure(
+    go.Mesh3d(
+        x=pts[:, 0],
+        y=pts[:, 1],
+        z=pts[:, 2],
+        i=faces[:, 0],
+        j=faces[:, 1],
+        k=faces[:, 2],
+        color="#1f77b4",
+        opacity=0.58,
+    )
+)
+fig.update_layout(
+    title=None,
+    scene=dict(
+        xaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        yaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        zaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        aspectmode="data",
+        camera=dict(eye=dict(x=1.45, y=1.55, z=1.18)),
+    ),
+)
+fig.show()
+```
+
+```{image} ../assets/paper_notebook_outputs/appendix_intrinsic_awesomesurface_auto.png
+:alt: Awesome-model surface used before intrinsic linkedness inspection
+:width: 68%
+:align: center
+```
+
+Then inspect the spatial graph extracted from that same surface. The
+graph-theory certificate is a downstream mathematical check, so the separate
+Petersen/certificate drawings are not repeated here.
+
+```python
+from knotted_graph.visualization import plot_3D_graph_plotly
+
+fig = plot_3D_graph_plotly(graph)
+fig.update_layout(
+    title=None,
+    scene=dict(
+        xaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        yaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        zaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        aspectmode="data",
+        camera=dict(eye=dict(x=1.45, y=1.55, z=1.18)),
+    ),
+)
+fig.show()
+```
+
+```{image} ../assets/plot_outputs/nodal_awesome_graph_plotly.png
+:alt: Plotly spatial graph extracted from the awesome-model surface
+:width: 70%
+:align: center
+```
 
 ## Planarity From Extracted Graphs
 
@@ -220,34 +348,6 @@ from knotted_graph.applications.nodal.models import threelink_bloch_vector
 from knotted_graph.visualization import plot_3D_graph_plotly
 
 kx, ky, kz = sp.symbols("k_x k_y k_z", real=True)
-
-def surface_figure(surface, camera):
-    mesh = surface.triangulate()
-    faces = mesh.faces.reshape(-1, 4)[:, 1:]
-    pts = mesh.points
-    fig = go.Figure(
-        go.Mesh3d(
-            x=pts[:, 0],
-            y=pts[:, 1],
-            z=pts[:, 2],
-            i=faces[:, 0],
-            j=faces[:, 1],
-            k=faces[:, 2],
-            color="#263f39",
-            opacity=0.9,
-        )
-    )
-    fig.update_layout(
-        title=None,
-        scene=dict(
-            xaxis=dict(visible=True),
-            yaxis=dict(visible=True),
-            zaxis=dict(visible=True),
-            aspectmode="data",
-            camera=dict(eye=camera),
-        ),
-    )
-    return fig
 
 planarity_runs = {}
 for gamma in (0.116, 0.41, 0.5):
@@ -281,7 +381,63 @@ For $\gamma=0.116$, first inspect the surface:
 
 ```python
 surface, graph, is_planar = planarity_runs[0.116]
-fig = surface_figure(surface, camera=dict(x=1.55, y=1.75, z=1.05))
+
+mesh = surface.triangulate()
+faces = mesh.faces.reshape(-1, 4)[:, 1:]
+pts = mesh.points
+
+fig = go.Figure(
+    go.Mesh3d(
+        x=pts[:, 0],
+        y=pts[:, 1],
+        z=pts[:, 2],
+        i=faces[:, 0],
+        j=faces[:, 1],
+        k=faces[:, 2],
+        color="#1f77b4",
+        opacity=0.58,
+    )
+)
+fig.update_layout(
+    title=None,
+    scene=dict(
+        xaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        yaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        zaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        aspectmode="data",
+        camera=dict(eye=dict(x=1.45, y=1.55, z=1.18)),
+    ),
+)
 fig.show()
 ```
 
@@ -298,11 +454,41 @@ fig = plot_3D_graph_plotly(graph)
 fig.update_layout(
     title=None,
     scene=dict(
-        xaxis=dict(visible=True),
-        yaxis=dict(visible=True),
-        zaxis=dict(visible=True),
+        xaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        yaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        zaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
         aspectmode="data",
-        camera=dict(eye=dict(x=1.55, y=1.75, z=1.05)),
+        camera=dict(eye=dict(x=1.45, y=1.55, z=1.18)),
     ),
 )
 fig.show()
@@ -318,7 +504,63 @@ For $\gamma=0.41$, the same library calls produce a different surface:
 
 ```python
 surface, graph, is_planar = planarity_runs[0.41]
-fig = surface_figure(surface, camera=dict(x=1.55, y=1.75, z=1.05))
+
+mesh = surface.triangulate()
+faces = mesh.faces.reshape(-1, 4)[:, 1:]
+pts = mesh.points
+
+fig = go.Figure(
+    go.Mesh3d(
+        x=pts[:, 0],
+        y=pts[:, 1],
+        z=pts[:, 2],
+        i=faces[:, 0],
+        j=faces[:, 1],
+        k=faces[:, 2],
+        color="#1f77b4",
+        opacity=0.58,
+    )
+)
+fig.update_layout(
+    title=None,
+    scene=dict(
+        xaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        yaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        zaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        aspectmode="data",
+        camera=dict(eye=dict(x=1.45, y=1.55, z=1.18)),
+    ),
+)
 fig.show()
 ```
 
@@ -335,11 +577,41 @@ fig = plot_3D_graph_plotly(graph)
 fig.update_layout(
     title=None,
     scene=dict(
-        xaxis=dict(visible=True),
-        yaxis=dict(visible=True),
-        zaxis=dict(visible=True),
+        xaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        yaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        zaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
         aspectmode="data",
-        camera=dict(eye=dict(x=1.65, y=1.5, z=1.15)),
+        camera=dict(eye=dict(x=1.45, y=1.55, z=1.18)),
     ),
 )
 fig.show()
@@ -355,7 +627,63 @@ For $\gamma=0.5$, inspect the thicker surface:
 
 ```python
 surface, graph, is_planar = planarity_runs[0.5]
-fig = surface_figure(surface, camera=dict(x=1.55, y=1.75, z=1.05))
+
+mesh = surface.triangulate()
+faces = mesh.faces.reshape(-1, 4)[:, 1:]
+pts = mesh.points
+
+fig = go.Figure(
+    go.Mesh3d(
+        x=pts[:, 0],
+        y=pts[:, 1],
+        z=pts[:, 2],
+        i=faces[:, 0],
+        j=faces[:, 1],
+        k=faces[:, 2],
+        color="#1f77b4",
+        opacity=0.58,
+    )
+)
+fig.update_layout(
+    title=None,
+    scene=dict(
+        xaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        yaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        zaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        aspectmode="data",
+        camera=dict(eye=dict(x=1.45, y=1.55, z=1.18)),
+    ),
+)
 fig.show()
 ```
 
@@ -370,11 +698,41 @@ fig = plot_3D_graph_plotly(graph)
 fig.update_layout(
     title=None,
     scene=dict(
-        xaxis=dict(visible=True),
-        yaxis=dict(visible=True),
-        zaxis=dict(visible=True),
+        xaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        yaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        zaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
         aspectmode="data",
-        camera=dict(eye=dict(x=1.55, y=1.65, z=1.1)),
+        camera=dict(eye=dict(x=1.45, y=1.55, z=1.18)),
     ),
 )
 fig.show()

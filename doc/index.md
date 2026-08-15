@@ -20,7 +20,8 @@ then use it in scientific and mathematical applications.
 :link: quickstart
 :link-type: doc
 
-Install the package and run the shortest end-to-end examples.
+Run the shortest pipeline from a 2D surface to spatial graph, planar projection,
+PD code, and $\Upsilon(G;Y)$.
 +++
 **Start with the Quick Start →**
 :::
@@ -73,27 +74,10 @@ The public source layout mirrors the computational pipeline:
 
 ```{toctree}
 :hidden:
-:caption: Getting Started
-:maxdepth: 1
-
-installation
-quickstart
-```
-
-```{toctree}
-:hidden:
-:caption: Core Workflows
+:caption: User Guide
 :maxdepth: 2
 
 user_guide/index
-```
-
-```{toctree}
-:hidden:
-:caption: Application Tutorials
-:maxdepth: 2
-
-applications/index
 ```
 
 ```{toctree}

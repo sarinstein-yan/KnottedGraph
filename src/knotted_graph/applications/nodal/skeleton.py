@@ -440,7 +440,7 @@ class NodalSkeleton:
     def plot_exceptional_surface(
         self,
         plotter: Optional[pv.Plotter] = None,
-        surf_color: Any = "#12a47f",
+        surf_color: Any = "#1f77b4",
         surf_opacity: float = 0.9,
         surf_decimation: float = 0.2,
         surf_kwargs: Dict = {},
@@ -460,7 +460,7 @@ class NodalSkeleton:
             An existing PyVista plotter object to add the mesh to. If None, a new
             plotter is created. Defaults to None.
         surf_color : Any, optional
-            Color of the surface. Defaults to "#12a47f".
+            Color of the surface. Defaults to "#1f77b4".
         surf_opacity : float, optional
             Opacity of the surface. Defaults to 0.9.
         surf_decimation : float, optional
@@ -656,8 +656,8 @@ class NodalSkeleton:
             add_edges: bool = True,
             node_radius: float = 0.08,
             tube_radius: float = 0.04,
-            node_color: Any = '#A60628',
-            edge_color: Any = '#348ABD',
+            node_color: Any = '#d62728',
+            edge_color: Any = '#1f77b4',
             node_kwargs: Dict = {},
             edge_kwargs: Dict = {},
             # --- Field plotting args ---
@@ -694,9 +694,9 @@ class NodalSkeleton:
         tube_radius : float, optional
             Radius of the tubes representing edges. Defaults to 0.04.
         node_color : Any, optional
-            Color of the nodes. Defaults to '#A60628'.
+            Color of the nodes. Defaults to '#d62728'.
         edge_color : Any, optional
-            Color of the edges. Defaults to '#348ABD'.
+            Color of the edges. Defaults to '#1f77b4'.
         node_kwargs : Dict, optional
             Additional keyword arguments for plotting nodes.
         edge_kwargs : Dict, optional

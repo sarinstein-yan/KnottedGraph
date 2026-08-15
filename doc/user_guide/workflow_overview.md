@@ -5,6 +5,24 @@ Users can enter the workflow from coordinate data, biomolecular files, polymer
 simulation outputs, surface meshes, already embedded spatial graphs, planar
 diagrams, or abstract graph families.
 
+When explaining geometric input to new users, use the surface-first order:
+
+\[
+\text{2D surface in }\mathbb{R}^3
+\longrightarrow
+G\subset\mathbb{R}^3
+\longrightarrow
+D(G)
+\longrightarrow
+\operatorname{PD}(G)
+\longrightarrow
+\Upsilon(G;Y).
+\]
+
+This is the order used in the [Quick Start](../quickstart.md): first a
+two-dimensional surface is displayed, then its spatial-graph spine is plotted,
+then the selected planar projection, PD code, and Yamada polynomial are shown.
+
 ## Main Stages
 
 | Workflow stage | Package location | Typical object |
@@ -29,62 +47,65 @@ graph = ensure_embedding(graph, copy=True, normalize=True)
 
 ## High-Level Use
 
-For many users, the most direct path is:
+For many users, the conceptual path is to begin with a surface or surface-like
+geometry, extract or choose a graph spine, and then run the generic graph
+pipeline. The full plotted example is in the Quick Start; in compact form, the
+computation looks like this:
 
 ```python
-import numpy as np
 import sympy as sp
 
-from knotted_graph.inputs import from_coordinate_chain
-from knotted_graph.projection import compute_yamada_polynomial
+from knotted_graph.core import ensure_embedding
+from knotted_graph.projection import compute_yamada_polynomial, select_projection
 
-t = np.linspace(0.0, 2 * np.pi, 240, endpoint=False)
-coords = np.column_stack(
-    [
-        (1.65 + 0.85 * np.cos(3 * t)) * np.cos(2 * t),
-        (1.65 + 0.85 * np.cos(3 * t)) * np.sin(2 * t),
-        0.85 * np.sin(3 * t),
-    ]
-)
+# The Quick Start defines this helper and plots both objects:
+# surface: a 2D tube surface embedded in R^3
+# graph: the corresponding trivalent spatial-graph spine
+tube_surfaces, vertex_surfaces, graph = trivalent_k4_surface_graph()
+graph = ensure_embedding(graph, copy=True, normalize=False)
 
-parsed = from_coordinate_chain(
-    coords,
-    closed=True,
-    closure="direct",
-    input_id="trefoil_curve",
-)
+projection = select_projection(graph, rotation_angles=(0.0, 0.0, 0.0))
 
 Y = sp.Symbol("Y")
-upsilon = compute_yamada_polynomial(parsed.graph, Y)
+upsilon = compute_yamada_polynomial(
+    graph,
+    Y,
+    rotation_angles=projection.rotation_angles,
+)
 print(f"Upsilon(G; Y) = {sp.expand(upsilon)}")
+print(f"nodes_edges = {(graph.number_of_nodes(), graph.number_of_edges())}")
+print(f"degrees = {dict(graph.degree())}")
 ```
 
 Output:
 
 ```text
-Upsilon(G; Y) = -Y**11 + Y**9 + Y**8 + Y**7 - Y**4 - Y**3 - Y**2 - Y - 1
+Upsilon(G; Y) = -Y**6 - 2*Y**4 - 2*Y**2 - 1
+nodes_edges = (4, 6)
+degrees = {'a': 3, 'b': 3, 'c': 3, 'd': 3}
 ```
 
-For this closed trefoil-like coordinate chain, the parsed object is easy to
-inspect:
+For this surface spine, the graph object is easy to inspect:
 
 ```python
-parsed.input_id, parsed.source_format, parsed.closed, parsed.issues
-parsed.graph.number_of_nodes(), parsed.graph.number_of_edges()
+graph.graph["graph_id"], graph.graph["input_kind"], graph.graph["is_closed"]
+graph.number_of_nodes(), graph.number_of_edges()
 ```
 
 Example output:
 
 ```text
-('trefoil_curve', 'array', True, [])
-(1, 1)
+('quickstart_trivalent_k4_surface_spine', 'synthetic_surface_spine', True)
+(4, 6)
 ```
 
-This means the input was accepted as an array, no validation issues were found,
-and the closed curve became one self-loop edge attached to one anchor node.
+This means the surface-spine object is an embedded spatial graph with four real
+branch vertices and six edges.
 
-The input-adapter chapter shows the corresponding plot for this coordinate
-chain. The overview keeps only the end-to-end computation and object contract.
+The overview keeps the object contract short. The Quick Start shows the plotted
+surface, plotted spatial graph, selected planar projection, printed PD code, and
+printed $\Upsilon(G;Y)$ result; the later chapters then explain each reusable
+piece in detail.
 
 For application workflows, import the application explicitly:
 

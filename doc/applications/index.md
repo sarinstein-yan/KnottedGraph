@@ -1,11 +1,21 @@
 # Application Tutorials
 
-These tutorials show how the generic KnottedGraph machinery is used in complete
+These tutorials show how the generic KnottedGraph machinery becomes complete
 research-facing workflows. If you are learning the reusable library primitives,
 start with the [User Guide](../user_guide/index.md); use this section when you
-want an end-to-end application.
+want to see a full scientific or mathematical calculation carried from input
+object to plotted graph, planar projection, and $\Upsilon(G;Y)$ output.
 
-## Choose a workflow
+In the left navigation this section appears after **Repulsive Layout**, so the
+reader first learns the generic input, inspection, projection, invariant, and
+layout tools before seeing the domain-specific workflows.
+
+The section is ordered intentionally. It begins with domain applications,
+places reproducibility notes after the main physics and biomolecular examples,
+and ends with **Mathematical Workflows**, where the same invariant engine is
+used for graph-family experiments and conjecture building.
+
+## Tutorial Order
 
 ::::{grid} 1 2 2 2
 :gutter: 3
@@ -16,6 +26,8 @@ want an end-to-end application.
 
 Extract an exceptional-surface skeleton, inspect the spatial graph, project it,
 and compute topological invariants.
++++
+**1. Start here for surface-to-skeleton physics.**
 :::
 
 :::{grid-item-card} Material Fermi-Surface Fingerprints
@@ -24,6 +36,8 @@ and compute topological invariants.
 
 Follow the manuscript-facing material workflow from surface data to knotted
 spatial-graph fingerprints.
++++
+**2. Continue to material Hamiltonian examples.**
 :::
 
 :::{grid-item-card} Protein-Derived Theta Graphs
@@ -32,6 +46,28 @@ spatial-graph fingerprints.
 
 Convert biomolecular coordinate data into embedded theta graphs and continue
 through the common layout and invariant pipeline.
++++
+**3. Compare with biomolecular inputs.**
+:::
+
+:::{grid-item-card} Nodal Skeleton Notebook
+:link: nodal_skeleton_notebook
+:link-type: doc
+
+Open the notebook version of the nodal-skeleton workflow when you want a
+reproducible, cell-by-cell companion to the tutorial page.
++++
+**4. Reproduce the nodal example as a notebook.**
+:::
+
+:::{grid-item-card} Notebook Figure Gallery
+:link: paper_notebook_gallery
+:link-type: doc
+
+Inspect the notebook figures that directly teach the framework: Hamiltonian
+model, surface, skeleton points, spatial graph, and downstream checks.
++++
+**5. Audit the paper figures.**
 :::
 
 :::{grid-item-card} Mathematical Workflows
@@ -40,18 +76,18 @@ through the common layout and invariant pipeline.
 
 Use graph families and Yamada polynomials for combinatorial experiments,
 pattern discovery, recurrence searches, and conjecture building.
++++
+**6. Finish with mathematical exploration.**
 :::
 
 ::::
 
-## Reproducible notebook material
+## Section Navigation
 
-The executable nodal-skeleton notebook and the notebook-output policy sit after
-the main domain tutorials. They are useful for reproducing examples, but they
-are supporting material rather than the conceptual entry point to the library.
+The same order is used by the page navigation and the previous/next links:
 
 ```{toctree}
-:hidden:
+:caption: Application Tutorial Order
 :maxdepth: 1
 
 nodal_skeleton
@@ -62,6 +98,6 @@ paper_notebook_gallery
 mathematical_workflows
 ```
 
-The section intentionally ends with **Mathematical Workflows**. That page
-broadens the perspective from domain-specific examples to mathematical
-discovery with the same invariant engine.
+The final page is intentionally **Mathematical Workflows**. It broadens the
+section from domain-specific examples to mathematical discovery with the same
+Yamada-polynomial engine.

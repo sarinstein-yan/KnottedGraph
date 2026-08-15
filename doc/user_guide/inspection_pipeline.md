@@ -19,7 +19,10 @@ workflow has produced a spatial graph.
 import sympy as sp
 
 from knotted_graph.applications.nodal import NodalSkeleton
-from knotted_graph.applications.nodal.models import solomon_bloch_vector
+from knotted_graph.applications.nodal.models import (
+    pq_torus_knot_bloch_vector,
+    solomon_bloch_vector,
+)
 from knotted_graph.projection import sample_projections, select_projection
 
 kx, ky, kz = sp.symbols("k_x k_y k_z", real=True)
@@ -98,16 +101,46 @@ fig = go.Figure(
         i=faces[:, 0],
         j=faces[:, 1],
         k=faces[:, 2],
-        color="#263f39",
-        opacity=0.94,
+        color="#1f77b4",
+        opacity=0.58,
     )
 )
 fig.update_layout(
     title=None,
     scene=dict(
-        xaxis=dict(visible=True),
-        yaxis=dict(visible=True),
-        zaxis=dict(visible=True),
+        xaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        yaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        zaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
         aspectmode="data",
         camera=dict(eye=dict(x=1.45, y=1.55, z=1.18)),
     ),
@@ -133,17 +166,47 @@ fig = go.Figure(
         y=skeleton_points[:, 1],
         z=skeleton_points[:, 2],
         mode="markers",
-        marker=dict(size=3),
+        marker=dict(size=3, color="#1f77b4"),
     )
 )
 fig.update_layout(
     title=None,
     scene=dict(
-        xaxis=dict(visible=True),
-        yaxis=dict(visible=True),
-        zaxis=dict(visible=True),
+        xaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        yaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        zaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
         aspectmode="data",
-        camera=dict(eye=dict(x=1.55, y=1.75, z=1.05)),
+        camera=dict(eye=dict(x=1.45, y=1.55, z=1.18)),
     ),
 )
 fig.show()
@@ -161,18 +224,48 @@ Raw spatial graph:
 from knotted_graph.visualization import plot_3D_graph_plotly
 
 raw_graph = ske.skeleton_graph(simplify=False, smooth_epsilon=2)
-raw_fig = plot_3D_graph_plotly(raw_graph)
-raw_fig.update_layout(
+fig = plot_3D_graph_plotly(raw_graph)
+fig.update_layout(
     title=None,
     scene=dict(
-        xaxis=dict(visible=True),
-        yaxis=dict(visible=True),
-        zaxis=dict(visible=True),
+        xaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        yaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        zaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
         aspectmode="data",
-        camera=dict(eye=dict(x=1.55, y=1.75, z=1.05)),
+        camera=dict(eye=dict(x=1.45, y=1.55, z=1.18)),
     ),
 )
-raw_fig.show()
+fig.show()
 ```
 
 ```{image} ../assets/plot_outputs/inspection_raw_graph_plotly.png
@@ -188,18 +281,48 @@ Simplified spatial graph:
 
 ```python
 simplified_graph = ske.skeleton_graph(simplify=True, smooth_epsilon=2)
-simplified_fig = plot_3D_graph_plotly(simplified_graph)
-simplified_fig.update_layout(
+fig = plot_3D_graph_plotly(simplified_graph)
+fig.update_layout(
     title=None,
     scene=dict(
-        xaxis=dict(visible=True),
-        yaxis=dict(visible=True),
-        zaxis=dict(visible=True),
+        xaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        yaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        zaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
         aspectmode="data",
-        camera=dict(eye=dict(x=1.55, y=1.75, z=1.05)),
+        camera=dict(eye=dict(x=1.45, y=1.55, z=1.18)),
     ),
 )
-simplified_fig.show()
+fig.show()
 ```
 
 ```{image} ../assets/plot_outputs/inspection_simplified_graph_plotly.png
@@ -277,12 +400,12 @@ skeleton points, and the spatial graph as separate inspectable objects.
 import sympy as sp
 
 from knotted_graph.applications.nodal import NodalSkeleton
-from knotted_graph.applications.nodal.models import solomon_bloch_vector
+from knotted_graph.applications.nodal.models import pq_torus_knot_bloch_vector
 
 kx, ky, kz = sp.symbols("k_x k_y k_z", real=True)
 
 ske = NodalSkeleton(
-    solomon_bloch_vector(0.2, k_symbols=(kx, ky, kz)),
+    pq_torus_knot_bloch_vector(1, 2, 0.2, k_symbols=(kx, ky, kz)),
     k_symbols=(kx, ky, kz),
     dimension=120,
     axis_scale=(1.0, 1.0, 1.5),
@@ -303,16 +426,16 @@ Output:
 
 ```text
 surface.n_points, surface.n_cells
-(7176, 14352)
+(12920, 25840)
 
 skeleton_points.shape
-(618, 3)
+(317, 3)
 
 raw_graph.number_of_nodes(), raw_graph.number_of_edges()
-(20, 20)
+(10, 10)
 
 simplified_graph.number_of_nodes(), simplified_graph.number_of_edges()
-(2, 2)
+(1, 1)
 ```
 
 Plot the surface with Plotly by converting the PyVista mesh:
@@ -332,16 +455,46 @@ fig = go.Figure(
         i=faces[:, 0],
         j=faces[:, 1],
         k=faces[:, 2],
-        color="#263f39",
-        opacity=0.9,
+        color="#1f77b4",
+        opacity=0.58,
     )
 )
 fig.update_layout(
     title=None,
     scene=dict(
-        xaxis=dict(visible=True),
-        yaxis=dict(visible=True),
-        zaxis=dict(visible=True),
+        xaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        yaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        zaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
         aspectmode="data",
         camera=dict(eye=dict(x=1.45, y=1.55, z=1.18)),
     ),
@@ -364,15 +517,45 @@ fig = go.Figure(
         y=skeleton_points[:, 1],
         z=skeleton_points[:, 2],
         mode="markers",
-        marker=dict(size=3, color="#348ABD"),
+        marker=dict(size=3, color="#1f77b4"),
     )
 )
 fig.update_layout(
     title=None,
     scene=dict(
-        xaxis=dict(visible=True),
-        yaxis=dict(visible=True),
-        zaxis=dict(visible=True),
+        xaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        yaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        zaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
         aspectmode="data",
         camera=dict(eye=dict(x=1.45, y=1.55, z=1.18)),
     ),
@@ -395,9 +578,39 @@ fig = plot_3D_graph_plotly(raw_graph)
 fig.update_layout(
     title=None,
     scene=dict(
-        xaxis=dict(visible=True),
-        yaxis=dict(visible=True),
-        zaxis=dict(visible=True),
+        xaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        yaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        zaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
         aspectmode="data",
         camera=dict(eye=dict(x=1.45, y=1.55, z=1.18)),
     ),
@@ -418,7 +631,7 @@ pipeline stage.
 
 ```python
 ske_006 = NodalSkeleton(
-    solomon_bloch_vector(0.06, k_symbols=(kx, ky, kz)),
+    pq_torus_knot_bloch_vector(1, 2, 0.06, k_symbols=(kx, ky, kz)),
     k_symbols=(kx, ky, kz),
     dimension=120,
     axis_scale=(1.0, 1.0, 1.5),
@@ -436,11 +649,50 @@ fig = go.Figure(
         i=faces[:, 0],
         j=faces[:, 1],
         k=faces[:, 2],
-        color="#263f39",
-        opacity=0.9,
+        color="#1f77b4",
+        opacity=0.58,
     )
 )
-fig.update_layout(title=None, scene=dict(aspectmode="data"))
+fig.update_layout(
+    title=None,
+    scene=dict(
+        xaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        yaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        zaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        aspectmode="data",
+        camera=dict(eye=dict(x=1.45, y=1.55, z=1.18)),
+    ),
+)
 fig.show()
 ```
 
@@ -459,10 +711,49 @@ fig = go.Figure(
         y=skeleton_points_006[:, 1],
         z=skeleton_points_006[:, 2],
         mode="markers",
-        marker=dict(size=3, color="#348ABD"),
+        marker=dict(size=3, color="#1f77b4"),
     )
 )
-fig.update_layout(title=None, scene=dict(aspectmode="data"))
+fig.update_layout(
+    title=None,
+    scene=dict(
+        xaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        yaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        zaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        aspectmode="data",
+        camera=dict(eye=dict(x=1.45, y=1.55, z=1.18)),
+    ),
+)
 fig.show()
 ```
 
@@ -476,7 +767,46 @@ fig.show()
 raw_graph_006 = ske_006.skeleton_graph(simplify=False, smooth_epsilon=2)
 
 fig = plot_3D_graph_plotly(raw_graph_006)
-fig.update_layout(title=None, scene=dict(aspectmode="data"))
+fig.update_layout(
+    title=None,
+    scene=dict(
+        xaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        yaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        zaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        aspectmode="data",
+        camera=dict(eye=dict(x=1.45, y=1.55, z=1.18)),
+    ),
+)
 fig.show()
 ```
 

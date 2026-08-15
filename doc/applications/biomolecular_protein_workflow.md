@@ -5,6 +5,11 @@ embedded-graph contract used by projection, visualization, repulsive layout,
 and Yamada computation. The protein helpers currently expose three built-in
 theta-graph examples: `1aoc`, `3ulk`, and `5osq`.
 
+Input source: these examples come from PDB biomolecular coordinate data. The
+helper selects three geometrically meaningful protein-derived arcs, resamples
+them, and converts the resulting curve network into a spatial
+`networkx.MultiGraph`.
+
 ## Build A Protein Theta Graph
 
 ```python
@@ -14,8 +19,8 @@ from knotted_graph.layout.repulsive import (
     available_samples,
     build_protein_example,
     curve_network_to_multigraph,
-    set_special_node_distance,
 )
+from knotted_graph.layout.repulsive.protein_examples import set_special_node_distance
 
 print(available_samples())
 
@@ -62,11 +67,41 @@ fig = plot_3D_graph_plotly(graph)
 fig.update_layout(
     title=None,
     scene=dict(
-        xaxis=dict(visible=True),
-        yaxis=dict(visible=True),
-        zaxis=dict(visible=True),
+        xaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        yaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        zaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
         aspectmode="data",
-        camera=dict(eye=dict(x=1.35, y=1.65, z=1.2)),
+        camera=dict(eye=dict(x=1.45, y=1.55, z=1.18)),
     ),
 )
 fig.show()
@@ -133,11 +168,41 @@ fig = plot_3D_graph_plotly(graph_3ulk)
 fig.update_layout(
     title=None,
     scene=dict(
-        xaxis=dict(visible=True),
-        yaxis=dict(visible=True),
-        zaxis=dict(visible=True),
+        xaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        yaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        zaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
         aspectmode="data",
-        camera=dict(eye=dict(x=1.35, y=1.65, z=1.2)),
+        camera=dict(eye=dict(x=1.45, y=1.55, z=1.18)),
     ),
 )
 fig.show()
@@ -161,11 +226,41 @@ fig = plot_3D_graph_plotly(graph_5osq)
 fig.update_layout(
     title=None,
     scene=dict(
-        xaxis=dict(visible=True),
-        yaxis=dict(visible=True),
-        zaxis=dict(visible=True),
+        xaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        yaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
+        zaxis=dict(
+            visible=True,
+            title="",
+            showticklabels=False,
+            showbackground=False,
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            linewidth=2,
+        ),
         aspectmode="data",
-        camera=dict(eye=dict(x=1.35, y=1.65, z=1.2)),
+        camera=dict(eye=dict(x=1.45, y=1.55, z=1.18)),
     ),
 )
 fig.show()

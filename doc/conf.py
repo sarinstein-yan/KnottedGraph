@@ -34,6 +34,8 @@ html_static_path = ["_static"]
 html_css_files = ["custom.css"]
 html_theme_options = {
     "github_url": "https://github.com/sarinstein-yan/KnottedGraph",
+    "navigation_depth": 3,
+    "show_nav_level": 2,
     "show_toc_level": 2,
 }
 
