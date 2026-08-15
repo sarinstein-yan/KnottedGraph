@@ -18,7 +18,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 DOC_ROOT = ROOT / "doc"
-OUT = ROOT / "KnottedGraph_Website_Examples.ipynb"
+OUT = ROOT / "User_guide" / "website_examples.ipynb"
 
 DOC_FILES = [
     "index.md",
@@ -320,8 +320,8 @@ def build_notebook() -> dict[str, Any]:
             "print(f'DOC_ROOT = {DOC_ROOT}')\n",
             outputs=[
                 stream_output(
-                    f"PROJECT_ROOT = {ROOT}\n"
-                    f"DOC_ROOT = {DOC_ROOT}\n"
+                    "PROJECT_ROOT = <repository root>\n"
+                    "DOC_ROOT = <repository root>/doc\n"
                 )
             ],
             tags=["setup"],
@@ -401,6 +401,7 @@ def build_notebook() -> dict[str, Any]:
 
 def main() -> None:
     notebook = build_notebook()
+    OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(notebook, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     code_cells = sum(1 for cell in notebook["cells"] if cell["cell_type"] == "code")
     markdown_cells = sum(1 for cell in notebook["cells"] if cell["cell_type"] == "markdown")

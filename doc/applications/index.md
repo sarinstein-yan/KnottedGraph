@@ -50,16 +50,6 @@ through the common layout and invariant pipeline.
 **3. Compare with biomolecular inputs.**
 :::
 
-:::{grid-item-card} Nodal Skeleton Notebook
-:link: nodal_skeleton_notebook
-:link-type: doc
-
-Open the notebook version of the nodal-skeleton workflow when you want a
-reproducible, cell-by-cell companion to the tutorial page.
-+++
-**4. Reproduce the nodal example as a notebook.**
-:::
-
 :::{grid-item-card} Notebook Figure Gallery
 :link: paper_notebook_gallery
 :link-type: doc
@@ -67,7 +57,7 @@ reproducible, cell-by-cell companion to the tutorial page.
 Inspect the notebook figures that directly teach the framework: Hamiltonian
 model, surface, skeleton points, spatial graph, and downstream checks.
 +++
-**5. Audit the paper figures.**
+**4. Audit the paper figures.**
 :::
 
 :::{grid-item-card} Mathematical Workflows
@@ -77,7 +67,7 @@ model, surface, skeleton points, spatial graph, and downstream checks.
 Use graph families and Yamada polynomials for combinatorial experiments,
 pattern discovery, recurrence searches, and conjecture building.
 +++
-**6. Finish with mathematical exploration.**
+**5. Finish with mathematical exploration.**
 :::
 
 ::::
@@ -93,7 +83,6 @@ The same order is used by the page navigation and the previous/next links:
 nodal_skeleton
 material_fingerprints
 biomolecular_protein_workflow
-nodal_skeleton_notebook.ipynb
 paper_notebook_gallery
 mathematical_workflows
 ```

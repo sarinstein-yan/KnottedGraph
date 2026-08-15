@@ -4,6 +4,7 @@ import pytest
 
 from knotted_graph.core.embedding import (
     EmbeddingValidationError,
+    contract_short_edges,
     ensure_embedding,
     is_embedding,
     validate_embedding,
@@ -72,3 +73,24 @@ def test_validate_embedding_rejects_polyline_endpoint_mismatch():
     assert validate_embedding(graph) == [
         "edge ('u', 'v', 'edge') endpoints do not match node positions"
     ]
+
+
+def test_contract_short_edges_relinks_incident_edge_endpoints():
+    graph = nx.MultiGraph()
+    graph.add_node("a", pos=[0.0, 0.0, 0.0])
+    graph.add_node("b", pos=[0.1, 0.0, 0.0])
+    graph.add_node("c", pos=[1.0, 0.0, 0.0])
+    graph.add_edge("a", "b", key="short", pts=[[0.0, 0.0, 0.0], [0.1, 0.0, 0.0]])
+    graph.add_edge("b", "c", key="long", pts=[[0.1, 0.0, 0.0], [1.0, 0.0, 0.0]])
+
+    contracted = contract_short_edges(graph, min_length=0.2)
+
+    assert contracted.number_of_nodes() == 2
+    assert contracted.number_of_edges() == 1
+    assert validate_embedding(contracted) == []
+
+    kept = next(node for node in contracted if node != "c")
+    np.testing.assert_allclose(contracted.nodes[kept]["pos"], [0.05, 0.0, 0.0])
+    edge = next(iter(contracted.edges(data=True)))
+    np.testing.assert_allclose(edge[2]["pts"][0], [0.05, 0.0, 0.0])
+    np.testing.assert_allclose(edge[2]["pts"][-1], [1.0, 0.0, 0.0])

@@ -23,6 +23,7 @@ __all__ = [
     "smooth_edges",
     "remove_leaf_nodes",
     "simplify_edges",
+    "contract_short_edges",
 ]
 
 
@@ -244,6 +245,107 @@ def remove_leaf_nodes(G: nx.MultiGraph) -> nx.MultiGraph:
         for node in leaf_nodes:
             H.remove_node(node)
     return H
+
+
+def contract_short_edges(
+    G: nx.MultiGraph,
+    min_length: float = 0.30,
+    *,
+    copy: bool = True,
+) -> nx.MultiGraph:
+    """Contract edges whose endpoint distance is below ``min_length``.
+
+    This is useful after skeletonization, where voxelization can introduce tiny
+    spurious edges between nearby junction nodes.  The operation preserves
+    embedded edge polylines by moving incident edge endpoints onto the merged
+    vertex.
+    """
+
+    H = ensure_embedding(G, copy=copy, normalize=True)
+
+    def endpoint_distance(u: Any, v: Any) -> float:
+        return float(np.linalg.norm(H.nodes[u]["pos"] - H.nodes[v]["pos"]))
+
+    def relink_edge_points(
+        pts: Any,
+        old_endpoint: np.ndarray,
+        new_endpoint: np.ndarray,
+        other_endpoint: np.ndarray,
+    ) -> np.ndarray:
+        arr = np.asarray(pts, dtype=float)
+        if arr.ndim != 2 or arr.shape[1] != 3 or arr.shape[0] == 0:
+            arr = np.vstack([old_endpoint, other_endpoint])
+
+        if np.linalg.norm(arr[0] - old_endpoint) <= np.linalg.norm(arr[-1] - old_endpoint):
+            arr[0] = new_endpoint
+            arr[-1] = other_endpoint
+        else:
+            arr[-1] = new_endpoint
+            arr[0] = other_endpoint
+
+        return drop_consecutive_duplicates(arr)
+
+    while True:
+        candidates: list[tuple[float, Any, Any]] = []
+        for u, v in H.edges():
+            if u == v:
+                continue
+            length = endpoint_distance(u, v)
+            if length < min_length:
+                candidates.append((length, u, v))
+
+        if not candidates:
+            break
+
+        _, u, v = min(candidates, key=lambda item: item[0])
+        degree_u, degree_v = H.degree[u], H.degree[v]
+        if degree_u > degree_v:
+            keep, kill = u, v
+        elif degree_v > degree_u:
+            keep, kill = v, u
+        else:
+            keep, kill = (u, v) if str(u) <= str(v) else (v, u)
+
+        keep_pos = np.asarray(H.nodes[keep]["pos"], dtype=float)
+        kill_pos = np.asarray(H.nodes[kill]["pos"], dtype=float)
+        merged_pos = 0.5 * (keep_pos + kill_pos)
+        H.nodes[keep]["pos"] = merged_pos
+
+        for a, b, key, data in list(H.edges(keep, keys=True, data=True)):
+            if kill in (a, b):
+                continue
+            other = b if a == keep else a
+            other_pos = np.asarray(H.nodes[other]["pos"], dtype=float)
+            H[a][b][key]["pts"] = relink_edge_points(
+                data.get("pts", np.vstack([keep_pos, other_pos])),
+                old_endpoint=keep_pos,
+                new_endpoint=merged_pos,
+                other_endpoint=other_pos,
+            )
+
+        incident_edges = list(H.edges(kill, keys=True, data=True))
+        for a, b, key, data in incident_edges:
+            other = b if a == kill else a
+            if H.has_edge(a, b, key):
+                H.remove_edge(a, b, key)
+
+            if other == keep:
+                continue
+
+            other_pos = np.asarray(H.nodes[other]["pos"], dtype=float)
+            edge_data = dict(data or {})
+            edge_data["pts"] = relink_edge_points(
+                edge_data.get("pts", np.vstack([kill_pos, other_pos])),
+                old_endpoint=kill_pos,
+                new_endpoint=merged_pos,
+                other_endpoint=other_pos,
+            )
+            H.add_edge(keep, other, **edge_data)
+
+        if kill in H:
+            H.remove_node(kill)
+
+    return ensure_embedding(H, copy=False, normalize=True)
 
 
 def _append_edge_pts(path: list[np.ndarray], edge_pts: Any) -> None:
