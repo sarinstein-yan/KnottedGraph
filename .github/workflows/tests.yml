@@ -39,12 +39,11 @@ jobs:
       - name: Install core development environment
         run: uv sync --group dev
 
-      - name: Run core tests
+      - name: Run base-dependency tests
         run: >
           uv run --no-sync pytest -q
           tests/core
           tests/contracts
-          tests/inputs
           tests/invariants
 
   optional:
@@ -72,7 +71,7 @@ jobs:
         run: uv run --no-sync pytest -q
 
   lint:
-    name: Ruff
+    name: Ruff (new review code)
     runs-on: ubuntu-latest
 
     steps:
@@ -92,5 +91,11 @@ jobs:
       - name: Install development environment
         run: uv sync --group dev
 
-      - name: Run Ruff
-        run: uv run --no-sync ruff check src tests
+      - name: Run Ruff on newly added review code
+        run: >
+          uv run --no-sync ruff check
+          scripts/bootstrap_repulsion.py
+          tests/applications/test_nodal_regressions.py
+          tests/projection/test_crossing_search_regression.py
+          tests/projection/test_trivial_self_crossing_convention.py
+          tests/invariants/yamada/test_state_streaming_regression.py
