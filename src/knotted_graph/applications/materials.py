@@ -13,6 +13,7 @@ __all__ = [
     "H_D6_sympy",
     "H_Ti3Al_sympy",
     "H_YH3_sympy",
+    "MaterialFermiSurface",
 ]
 
 kSymbols = tuple[sp.Symbol, sp.Symbol, sp.Symbol]
@@ -144,3 +145,13 @@ def H_YH3_sympy(
     h3 = p["a3"] * (sp.cos(kx) + sp.cos(ky) + sp.cos(kz) - p["m3"])
     energy = sp.sqrt((g1**2 + h1**2) * (g2**2 + h2**2) * (g3**2 + h3**2))
     return sp.Matrix([[energy, 0], [0, -energy]])
+
+
+
+def __getattr__(name: str):
+    """Lazily expose heavy material workflows without changing lightweight imports."""
+    if name == "MaterialFermiSurface":
+        from .material_surface import MaterialFermiSurface
+
+        return MaterialFermiSurface
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

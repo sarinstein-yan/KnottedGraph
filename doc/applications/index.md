@@ -1,92 +1,23 @@
 # Application Tutorials
 
-These tutorials show how the generic KnottedGraph machinery becomes complete
-research-facing workflows. If you are learning the reusable library primitives,
-start with the [User Guide](../user_guide/index.md); use this section when you
-want to see a full scientific or mathematical calculation carried from input
-object to plotted graph, planar projection, and $\Upsilon(G;Y)$ output.
+<div class="kg-hero">
+  <p class="kg-lead">The application section is organized into three research-facing routes: material Fermi-surface fingerprints, protein-derived spatial graphs, and mathematical investigations. Each page gives one visual anchor and redirects to the notebook where the full calculation is explained.</p>
+  <div class="kg-link-row">
+    <a href="../../User_guide/applications/01_physics_applications.ipynb">Physics Applications Notebook</a>
+    <a href="../../User_guide/applications/03_protein_applications.ipynb">Protein Applications Notebook</a>
+    <a href="../../User_guide/applications/02_mathematics_applications.ipynb">Mathematics Applications Notebook</a>
+  </div>
+</div>
 
-In the left navigation this section appears after **Repulsive Layout**, so the
-reader first learns the generic input, inspection, projection, invariant, and
-layout tools before seeing the domain-specific workflows.
-
-The section is ordered intentionally. It begins with domain applications,
-places reproducibility notes after the main physics and biomolecular examples,
-and ends with **Mathematical Workflows**, where the same invariant engine is
-used for graph-family experiments and conjecture building.
-
-## Tutorial Order
-
-::::{grid} 1 2 2 2
-:gutter: 3
-
-:::{grid-item-card} Non-Hermitian Nodal Skeletons
-:link: nodal_skeleton
-:link-type: doc
-
-Extract an exceptional-surface skeleton, inspect the spatial graph, project it,
-and compute topological invariants.
-+++
-**1. Start here for surface-to-skeleton physics.**
-:::
-
-:::{grid-item-card} Material Fermi-Surface Fingerprints
-:link: material_fingerprints
-:link-type: doc
-
-Follow the manuscript-facing material workflow from surface data to knotted
-spatial-graph fingerprints.
-+++
-**2. Continue to material Hamiltonian examples.**
-:::
-
-:::{grid-item-card} Protein-Derived Theta Graphs
-:link: biomolecular_protein_workflow
-:link-type: doc
-
-Convert biomolecular coordinate data into embedded theta graphs and continue
-through the common layout and invariant pipeline.
-+++
-**3. Compare with biomolecular inputs.**
-:::
-
-:::{grid-item-card} Notebook Figure Gallery
-:link: paper_notebook_gallery
-:link-type: doc
-
-Inspect the notebook figures that directly teach the framework: Hamiltonian
-model, surface, skeleton points, spatial graph, and downstream checks.
-+++
-**4. Audit the paper figures.**
-:::
-
-:::{grid-item-card} Mathematical Workflows
-:link: mathematical_workflows
-:link-type: doc
-
-Use graph families and Yamada polynomials for combinatorial experiments,
-pattern discovery, recurrence searches, and conjecture building.
-+++
-**5. Finish with mathematical exploration.**
-:::
-
-::::
-
-## Section Navigation
-
-The same order is used by the page navigation and the previous/next links:
+<div class="kg-wide-figure">
+  <img src="../site_figures/feature_image1.png" alt="Material Fermi-surface fingerprints and Yamada polynomials">
+</div>
 
 ```{toctree}
-:caption: Application Tutorial Order
+:hidden:
 :maxdepth: 1
 
-nodal_skeleton
 material_fingerprints
-biomolecular_protein_workflow
-paper_notebook_gallery
-mathematical_workflows
+protein_derived_spatial_graphs
+mathematical_investigations
 ```
-
-The final page is intentionally **Mathematical Workflows**. It broadens the
-section from domain-specific examples to mathematical discovery with the same
-Yamada-polynomial engine.
