@@ -1,0 +1,96 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - Latest_Workplace
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    name: Core tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "3.11"
+          - "3.12"
+          - "3.13"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install core development environment
+        run: uv sync --group dev
+
+      - name: Run core tests
+        run: >
+          uv run --no-sync pytest -q
+          tests/core
+          tests/contracts
+          tests/inputs
+          tests/invariants
+
+  optional:
+    name: Full optional Python stack (Python 3.12)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install all Python extras
+        run: uv sync --group dev --all-extras
+
+      - name: Run complete Python test suite
+        run: uv run --no-sync pytest -q
+
+  lint:
+    name: Ruff
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install development environment
+        run: uv sync --group dev
+
+      - name: Run Ruff
+        run: uv run --no-sync ruff check src tests
