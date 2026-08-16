@@ -16,7 +16,7 @@ and its morphological skeleton is converted to the standard embedded
 from __future__ import annotations
 
 from functools import cached_property
-from typing import Any, Optional, Sequence, Union
+from typing import Any, Optional, Union
 
 import networkx as nx
 import numpy as np
@@ -138,6 +138,8 @@ class MaterialFermiSurface(NodalSkeleton):
         self.sort_by = str(sort_by)
         self.gap_mode = str(gap_mode)
         self.chunk_size = int(chunk_size)
+        if self.chunk_size <= 0:
+            raise ValueError("chunk_size must be a positive integer.")
 
         self.force_small_edge_contraction = bool(force_small_edge_contraction)
         self.small_edge_limit = float(small_edge_limit)

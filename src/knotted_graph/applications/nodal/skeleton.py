@@ -3,7 +3,7 @@ import sympy as sp
 import networkx as nx
 import matplotlib.pyplot as plt
 import skimage.morphology as morph
-from functools import cached_property, lru_cache
+from functools import cached_property
 from tabulate import tabulate
 import minorminer
 
@@ -14,7 +14,6 @@ from knotted_graph.core import (
     remove_leaf_nodes,
     simplify_edges,
     smooth_edges,
-    get_all_edge_pts,
     total_edge_pts,
     is_trivalent,
     idx_to_coord,
@@ -198,7 +197,8 @@ class NodalSkeleton:
             if d_i.is_real:
                 real_indices.append(i)
             elif d_i.is_imaginary and not d_i.free_symbols:
-                if 'idx' in imag_info: return {'valid': False}
+                if 'idx' in imag_info:
+                    return {'valid': False}
                 imag_info = {'idx': i, 'gamma': sp.im(d_i)}
 
         if len(real_indices) == 2 and 'idx' in imag_info:
@@ -878,10 +878,12 @@ class NodalSkeleton:
         vol = self.fields_pv.copy()
         mask = np.where(vol.point_data['imag'] != 0)[0]
         if orient_data:
-            if not isinstance(orient, str): orient = 'orient'
+            if not isinstance(orient, str):
+                orient = 'orient'
             vol.point_data[orient] = orient_data
         if scale_data:
-            if not isinstance(scale, str): scale = 'scale'
+            if not isinstance(scale, str):
+                scale = 'scale'
             vol.point_data[scale] = scale_data
 
         interior = vol.extract_points(mask)
@@ -1277,7 +1279,8 @@ class NodalSkeleton:
             The graph to summarize. If None, the cached skeleton graph is used.
             Defaults to None.
         """
-        if G is None: G = self.skeleton_graph_cache
+        if G is None:
+            G = self.skeleton_graph_cache
         # Basic properties
         data = []
         data.append(["Number of nodes", G.number_of_nodes()])

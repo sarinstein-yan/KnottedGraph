@@ -12,7 +12,6 @@ from knotted_graph.projection.geom import Arc, Crossing, Vertex
 from .recursive import (
     NegamiRecursiveEvaluator,
     YamadaRecursiveEvaluator,
-    compute_yamada_polynomial_recursive,
 )
 
 

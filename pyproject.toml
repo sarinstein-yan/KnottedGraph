@@ -1,5 +1,5 @@
 [build-system]
-requires = ["uv_build>=0.9.18,<0.10.0"]
+requires = ["uv_build>=0.9.18,<0.13.0"]
 build-backend = "uv_build"
 
 [project]
@@ -27,12 +27,12 @@ keywords = [
     "compression body",
 ]
 readme = {"file" = "README.md", "content-type" = "text/markdown"}
-license = {file = "LICENSE"}
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -115,3 +115,11 @@ docs = [
     "sphinx-copybutton",
     "sphinx-design",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"src/knotted_graph/__init__.py" = ["F403"]
+"src/knotted_graph/core/__init__.py" = ["F403"]
+"src/knotted_graph/invariants/yamada/__init__.py" = ["F403"]
+"src/knotted_graph/applications/nodal/__init__.py" = ["F403"]
+"src/knotted_graph/visualization/__init__.py" = ["F403"]
+"src/knotted_graph/applications/materials.py" = ["F822"]

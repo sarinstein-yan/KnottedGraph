@@ -3,7 +3,10 @@ import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-from typing import Union
+from typing import TYPE_CHECKING, Union
+
+if TYPE_CHECKING:
+    import plotly.graph_objects as go
 
 __all__ = [
     "standard_petersen_layout",
@@ -319,7 +322,7 @@ def plot_surface_modes(eigvals_tuple, k_vals_tuple, Etol_tuple, nH_coeff):
                 sm_kz.append(kz)
                 sm_num.append(sm)
     ax = axes[0]
-    sc = ax.scatter(sm_ky, sm_kz, s=5, 
+    ax.scatter(sm_ky, sm_kz, s=5, 
                     c='k')
                     # c=sm_num, cmap='gray')
     ax.set_xlabel('$k_y$')
@@ -338,7 +341,7 @@ def plot_surface_modes(eigvals_tuple, k_vals_tuple, Etol_tuple, nH_coeff):
                 sm_kz.append(kz)
                 sm_num.append(sm)
     ax = axes[1]
-    sc = ax.scatter(sm_kx, sm_kz, s=5, 
+    ax.scatter(sm_kx, sm_kz, s=5, 
                     c='k')
                     # c=sm_num, cmap='gray')
     ax.set_xlabel('$k_x$')
@@ -357,7 +360,7 @@ def plot_surface_modes(eigvals_tuple, k_vals_tuple, Etol_tuple, nH_coeff):
                 sm_ky.append(ky)
                 sm_num.append(sm)
     ax = axes[2]
-    sc = ax.scatter(sm_kx, sm_ky, s=5, 
+    ax.scatter(sm_kx, sm_ky, s=5, 
                     c='k')
                     # c=sm_num, cmap='gray')
     ax.set_xlabel('$k_x$')

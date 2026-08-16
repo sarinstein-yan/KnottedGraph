@@ -5,7 +5,6 @@ from poly2graph import (
     eig_batch,
     shift_matrix,
     hk2hz, 
-    hz2hk, 
     expand_hz_as_hop_dict,
 )
 

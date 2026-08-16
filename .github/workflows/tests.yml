@@ -70,6 +70,41 @@ jobs:
       - name: Run complete Python test suite
         run: uv run --no-sync pytest -q
 
+  wheel:
+    name: Build and install wheel
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build distribution
+        run: uv build
+      - name: Create clean wheel environment
+        run: python -m venv wheel-test
+      - name: Install built wheel
+        run: wheel-test/bin/pip install dist/*.whl
+      - name: Smoke-test installed wheel
+        run: |
+          wheel-test/bin/python - <<'PY'
+          import sympy as sp
+          import knotted_graph
+          from knotted_graph.core import ThetaGraph
+          from knotted_graph.invariants.yamada import compute_yamada_polynomial_recursive
+          A = sp.Symbol("A")
+          result = compute_yamada_polynomial_recursive(ThetaGraph(3), A)
+          print("version:", knotted_graph.__version__)
+          print("Theta_3:", result)
+          assert result != 0
+          PY
+
   lint:
     name: Ruff (new review code)
     runs-on: ubuntu-latest
@@ -91,11 +126,5 @@ jobs:
       - name: Install development environment
         run: uv sync --group dev
 
-      - name: Run Ruff on newly added review code
-        run: >
-          uv run --no-sync ruff check
-          scripts/bootstrap_repulsion.py
-          tests/applications/test_nodal_regressions.py
-          tests/projection/test_crossing_search_regression.py
-          tests/projection/test_trivial_self_crossing_convention.py
-          tests/invariants/yamada/test_state_streaming_regression.py
+      - name: Run Ruff
+        run: uv run --no-sync ruff check src tests

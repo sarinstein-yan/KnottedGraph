@@ -4,9 +4,7 @@ import networkx as nx
 from shapely.ops import substring
 from shapely.geometry import Point, LineString
 import re
-import itertools
 import hashlib
-from functools import cache
 from collections import defaultdict
 from typing import Sequence
 from numpy.typing import NDArray
@@ -136,7 +134,6 @@ def generate_isotopy_angles(
     z   = (i + 0.5) / N                          # uniform height in (0, 1]
     r   = np.sqrt(1.0 - z**2)                    # radius in XY‑plane
     x, y = r * np.cos(phi), r * np.sin(phi)
-    dirs = np.stack((x, y, z), axis=1)           # unit view‑direction vectors
 
     # --- 2. Convert each direction to Euler yaw–pitch (roll = 0) --------------
     # For extrinsic ZYX:
@@ -324,7 +321,8 @@ def multigraph_key(G):
             edges = []
             for u,v in G.edges():
                 i,j = idx[u], idx[v]
-                if i>j: i,j = j,i
+                if i > j:
+                    i, j = j, i
                 edges.append((i,j))
             return tuple(sorted(edges))
     
