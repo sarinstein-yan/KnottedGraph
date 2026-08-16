@@ -20,6 +20,9 @@ jobs:
           ref: agent/paper-review-fixes
           fetch-depth: 0
 
+      - name: Select canonical structured Yamada dataset
+        run: rm -f doc/assets/data/structured_graph_yamada_dataset.csv
+
       - name: Apply validated source changes
         run: python scripts/apply_paper_review_source_fixes_once.py
 
