@@ -1,0 +1,37 @@
+name: Apply paper review fixes
+
+on:
+  push:
+    branches:
+      - agent/paper-review-fixes
+    paths:
+      - .github/workflows/apply-paper-review-fixes.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out review branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/paper-review-fixes
+          fetch-depth: 0
+
+      - name: Apply validated source changes
+        run: python scripts/apply_paper_review_source_fixes_once.py
+
+      - name: Remove one-time updater
+        run: |
+          git rm scripts/apply_paper_review_source_fixes_once.py
+          git rm .github/workflows/apply-paper-review-fixes.yml
+
+      - name: Commit and push source changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Apply validated paper review fixes"
+          git push origin HEAD:agent/paper-review-fixes
