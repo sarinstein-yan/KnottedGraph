@@ -1,14 +1,19 @@
-import sympy as sp
-import networkx as nx
 import itertools
 import math
 from dataclasses import dataclass
 from typing import Any
 
+import networkx as nx
+import sympy as sp
 from joblib import Parallel, delayed
-from knotted_graph.projection.geom import Vertex, Crossing, Arc
 
-from .recursive import compute_yamada_polynomial_recursive
+from knotted_graph.projection.geom import Arc, Crossing, Vertex
+
+from .recursive import (
+    NegamiRecursiveEvaluator,
+    YamadaRecursiveEvaluator,
+    compute_yamada_polynomial_recursive,
+)
 
 
 __all__ = [
@@ -22,40 +27,29 @@ Port = tuple[int, str]
 
 
 def compute_negami(G: nx.MultiGraph, x: sp.Symbol, y: sp.Symbol) -> sp.Expr:
-    """Compute the bivariate Negami polynomial for an undirected multigraph.
+    """Compute the bivariate Negami polynomial by its defining edge-subset sum.
 
-    Parameters
-    ----------
-    G
-        Graph encoded as a NetworkX multigraph.
-    x, y
-        Symbols for the bivariate Laurent polynomial.
-
-    Returns
-    -------
-    sympy.Expr
-        The polynomial ``h(G; x, y)``.
+    This explicit implementation is intentionally retained as an independent
+    reference implementation.  The public ``method="negami"`` Yamada backend
+    uses the equivalent recursive Negami evaluator for speed.
     """
-    # List all edges with keys (each edge is (u, v, key))
-    edges = list(G.edges(keys=True))
-    h_poly = sp.Integer(0)  # initialize polynomial to 0
 
-    # Iterate over all subsets F of edges.
+    edges = list(G.edges(keys=True))
+    h_poly = sp.Integer(0)
+
     for r in range(len(edges) + 1):
         for F in itertools.combinations(edges, r):
             H = G.copy()
             for (u, v, key) in F:
                 H.remove_edge(u, v, key=key)
-            
+
             mu = nx.number_connected_components(H)
             num_vertices = H.number_of_nodes()
             num_edges = H.number_of_edges()
-
-            # β(G-F) = |E(G-F)| - |V(G-F)| + μ(G-F)
             beta = num_edges - num_vertices + mu
-            
-            h_poly += ((-x)**(-r)) * (x**mu) * (y**beta)
-    
+
+            h_poly += ((-x) ** (-r)) * (x**mu) * (y**beta)
+
     return sp.expand(h_poly)
 
 
@@ -80,38 +74,54 @@ def compute_yamada_from_states(
     normalize
         If true, shift the lowest exponent to zero.
     n_jobs
-        Number of parallel jobs for state graph evaluation.
+        Number of thread-parallel jobs used for state-graph evaluation.
     method
-        Backend for crossing-free state graphs: ``"negami"`` or
-        ``"recursive"``.
+        Backend for crossing-free state graphs:
+
+        - ``"negami"`` uses the recursive evaluation of Yamada's auxiliary
+          Negami specialization ``h(G;x,y)`` and then substitutes
+          ``x=-1`` and ``y=-A-2-A**(-1)``;
+        - ``"recursive"`` evaluates ``H(G)`` directly with the Yamada
+          deletion-contraction identities.
+
+        Both backends share memoized subproblems across resolved crossing states.
 
     Returns
     -------
     sympy.Expr
         The Yamada polynomial.
     """
+
+    if len(state_graphs) != len(exponents):
+        raise ValueError("state_graphs and exponents must have the same length.")
     if method not in {"negami", "recursive"}:
         raise ValueError("method must be either 'negami' or 'recursive'.")
 
     if method == "negami":
-        x, y = sp.symbols('x y')
+        x, y = sp.symbols("x y")
+        evaluator = NegamiRecursiveEvaluator(x, y)
         state_values = Parallel(
             n_jobs=n_jobs,
-            prefer='threads',
+            prefer="threads",
         )(
-            delayed(compute_negami)(G, x, y)
+            delayed(evaluator.compute)(G)
             for G in state_graphs
         )
         state_values = [
-            h_val.xreplace({x: -1, y: -A - 2 - A**(-1)})
+            sp.expand(
+                h_val.xreplace(
+                    {x: -1, y: -A - 2 - A ** (-1)}
+                )
+            )
             for h_val in state_values
         ]
     else:
+        evaluator = YamadaRecursiveEvaluator(A)
         state_values = Parallel(
             n_jobs=n_jobs,
-            prefer='threads',
+            prefer="threads",
         )(
-            delayed(compute_yamada_polynomial_recursive)(G, A)
+            delayed(evaluator.compute)(G)
             for G in state_graphs
         )
 
@@ -121,11 +131,10 @@ def compute_yamada_from_states(
 
     Y = sp.expand(sp.simplify(total_poly))
 
-    # 4) optionally normalize
     if normalize:
         terms = Y.as_ordered_terms()
         lowest_exp = min(t.as_coeff_exponent(A)[1] for t in terms)
-        Y = Y * (-A)**(-lowest_exp)
+        Y = Y * (-A) ** (-lowest_exp)
         Y = sp.expand(sp.simplify(Y))
 
     return Y
@@ -317,40 +326,44 @@ def _build_state_graph_from_ports(
 
 
 @dataclass
-class Yamada():
+class Yamada:
     vertices: list[Vertex]
     crossings: list[Crossing]
     arcs: list[Arc]
 
     @classmethod
     def from_PDCode(cls, PDCode: Any) -> "Yamada":
-        """
-        Create a Yamada polynomial calculator from a PD code string.
-        """
-        return cls(list(PDCode.vertices.values()),
-                   list(PDCode.crossings.values()),
-                   list(PDCode.arcs.values()))
+        """Create a Yamada polynomial calculator from a PD-code processor."""
+        return cls(
+            list(PDCode.vertices.values()),
+            list(PDCode.crossings.values()),
+            list(PDCode.arcs.values()),
+        )
 
     def _build_state_graphs(self):
         num_x = len(self.crossings)
         configurations = list(itertools.product([0, 1, 2], repeat=num_x))
         exponents = [s.count(0) - s.count(1) for s in configurations]
         state_graphs = [
-            _build_state_graph_from_ports(self.vertices, self.crossings, self.arcs, config)
+            _build_state_graph_from_ports(
+                self.vertices,
+                self.crossings,
+                self.arcs,
+                config,
+            )
             for config in configurations
         ]
         return state_graphs, exponents
 
     def compute(
-            self, 
-            variable: sp.Symbol,
-            normalize: bool = True,
-            n_jobs: int = -1,
-            method: str = "negami",
+        self,
+        variable: sp.Symbol,
+        normalize: bool = True,
+        n_jobs: int = -1,
+        method: str = "negami",
     ) -> sp.Expr:
-        """
-        Compute the Yamada polynomial for the knot diagram.
-        """
+        """Compute the Yamada polynomial for the diagram."""
+
         state_graphs, exponents = self._build_state_graphs()
         return compute_yamada_from_states(
             state_graphs,
