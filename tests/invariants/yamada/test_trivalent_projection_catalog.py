@@ -7,9 +7,7 @@ from knotted_graph.invariants.yamada.polynomial import (
     compute_yamada_from_states,
 )
 from knotted_graph.invariants.yamada.recursive import (
-    NegamiRecursiveEvaluator,
     YamadaRecursiveEvaluator,
-    compute_yamada_polynomial_recursive,
 )
 from knotted_graph.projection import PDCode, generate_isotopy_angles
 
