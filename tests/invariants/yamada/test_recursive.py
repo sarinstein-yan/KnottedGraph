@@ -12,6 +12,7 @@ from knotted_graph.invariants.yamada.recursive import (
     delete_multigraph_edge,
     has_isthmus_multigraph,
     is_cycle_multigraph,
+    laurent_y_to_sigma_polynomial,
     multigraph_key,
     pick_nonloop_edge,
     theta_edge_count,
@@ -290,3 +291,58 @@ def test_yamada_state_evaluator_rejects_unknown_backend():
         assert "method" in str(exc)
     else:
         raise AssertionError("unknown backend should raise ValueError")
+
+
+def test_theta_family_returns_canonical_laurent_and_converts_to_sigma():
+    """Regression: theta closed forms must not leak removable denominators."""
+    A = sp.Symbol("A")
+    sigma_symbol = sp.Symbol("sigma")
+
+    for edge_count in range(2, 9):
+        result = compute_yamada_polynomial_recursive(_theta(edge_count), A)
+
+        # The public result must be a genuine Laurent polynomial: multiplying
+        # by the expected lowest-power shift produces an ordinary polynomial.
+        shifted = sp.cancel(result * A ** (edge_count - 1))
+        numerator, denominator = sp.fraction(shifted)
+        assert A not in denominator.free_symbols
+        sp.Poly(sp.expand(numerator / denominator), A)
+
+        converted = laurent_y_to_sigma_polynomial(
+            result,
+            A,
+            sigma_symbol,
+        ).as_expr()
+        expected = sp.cancel(
+            (
+                sigma_symbol
+                + (-sigma_symbol) ** edge_count
+            )
+            / (sigma_symbol + 1)
+        )
+        _assert_expr_equal(converted, expected)
+
+
+def test_theta_family_normalized_recursive_matches_negami():
+    """Regression: normalization must inspect canonical Laurent exponents."""
+    A = sp.Symbol("A")
+
+    for edge_count in range(2, 9):
+        graph = _theta(edge_count)
+        recursive = compute_yamada_from_states(
+            [graph],
+            [0],
+            A,
+            normalize=True,
+            n_jobs=1,
+            method="recursive",
+        )
+        negami = compute_yamada_from_states(
+            [graph],
+            [0],
+            A,
+            normalize=True,
+            n_jobs=1,
+            method="negami",
+        )
+        _assert_expr_equal(recursive, negami)

@@ -129,13 +129,13 @@ def compute_yamada_from_states(
     for state_value, exp in zip(state_values, exponents):
         total_poly += (A**exp) * state_value
 
-    Y = sp.expand(sp.simplify(total_poly))
+    Y = sp.expand(sp.cancel(total_poly))
 
     if normalize:
         terms = Y.as_ordered_terms()
         lowest_exp = min(t.as_coeff_exponent(A)[1] for t in terms)
         Y = Y * (-A) ** (-lowest_exp)
-        Y = sp.expand(sp.simplify(Y))
+        Y = sp.expand(sp.cancel(Y))
 
     return Y
 

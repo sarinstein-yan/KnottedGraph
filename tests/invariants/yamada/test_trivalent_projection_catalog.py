@@ -284,7 +284,7 @@ def test_named_planar_trivalent_graphs_across_multiple_projections():
             A,
             normalize=True,
             n_jobs=1,
-            method="recursive",
+            method="negami",
         )
         _projection_invariance_check(
             abstract_graph,

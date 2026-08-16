@@ -334,7 +334,14 @@ class YamadaRecursiveEvaluator:
 
         s = theta_edge_count(H)
         if s is not None:
-            value = (self.sigma + (-self.sigma) ** s) / (self.sigma + 1)
+            # Algebraically equivalent to
+            #     (sigma + (-sigma)**s) / (sigma + 1),
+            # but denominator-free.  This avoids removable (A+1) factors
+            # after substituting sigma=A+1+A**(-1).
+            value = sum(
+                (-1) ** (power - 1) * self.sigma**power
+                for power in range(1, s)
+            )
             return self._cache_set(key, value)
 
         # Loop relation H(G) = -sigma H(G-e).
@@ -476,7 +483,7 @@ def compute_negami_recursive(
 
 
 def _laurent_polynomial_data(expr: sp.Expr, variable: sp.Symbol):
-    expr = sp.expand(expr)
+    expr = sp.expand(sp.cancel(expr))
     if expr == 0:
         return sp.Poly(0, variable), 0, 0, 0
 
@@ -486,7 +493,18 @@ def _laurent_polynomial_data(expr: sp.Expr, variable: sp.Symbol):
     max_exponent = max(exponents)
     shift = -min_exponent
 
-    shifted_poly = sp.Poly(sp.expand(expr * variable**shift), variable)
+    shifted = sp.cancel(expr * variable**shift)
+    numerator, denominator = sp.fraction(shifted)
+    if variable in denominator.free_symbols:
+        raise ValueError(
+            f"Expression is not a Laurent polynomial in {variable}: "
+            f"uncancelled denominator {denominator}."
+        )
+
+    shifted_poly = sp.Poly(
+        sp.expand(numerator / denominator),
+        variable,
+    )
     return shifted_poly, min_exponent, max_exponent, shift
 
 
@@ -524,7 +542,7 @@ def laurent_y_to_sigma_polynomial(
 
     sigma_variable = sp.Symbol("sigma") if sigma_variable is None else sigma_variable
     aux_variable = sp.Symbol("t")
-    expr = sp.expand(expr)
+    expr = sp.expand(sp.cancel(expr))
 
     shifted_poly, min_exponent, max_exponent, shift = _laurent_polynomial_data(
         expr, y_variable
