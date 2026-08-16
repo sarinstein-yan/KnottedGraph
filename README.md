@@ -27,13 +27,48 @@ cd KnottedGraph
 uv sync --all-groups
 ```
 
-Optional application extras are split by workflow:
+Optional Python extras are split by workflow:
 
 ```bash
 pip install "knotted_graph[nodal]"
 pip install "knotted_graph[repulsion]"
 pip install "knotted_graph[all]"
 ```
+
+### Repulsive-layout native dependency
+
+The `repulsion` extra installs the **Python-side dependencies**. The optional
+Repulsor solver is a separate C++ dependency and is intentionally not vendored
+inside `knotted_graph`.
+
+For a reproducible source checkout, use the repository bootstrap:
+
+```bash
+python scripts/bootstrap_repulsion.py
+export REPULSOR_ROOT="$PWD/external/Repulsor"
+```
+
+The bootstrap checks out the exact Repulsor revision pinned for this
+KnottedGraph release and initializes its submodules. The C++ driver is compiled
+lazily on first use.
+
+The reference Linux/WSL build requires a C++20 compiler and the native libraries
+linked by the driver: OpenBLAS, LAPACK/LAPACKE, `fmt`, and AMD/SuiteSparse.
+On Debian/Ubuntu systems these can be installed with packages such as:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y \
+  g++ \
+  libopenblas-dev \
+  liblapack-dev \
+  liblapacke-dev \
+  libfmt-dev \
+  libsuitesparse-dev
+```
+
+See `doc/user_guide/repulsive_layout.md` and `THIRD_PARTY_NOTICES.md` for the
+full setup and the pinned upstream revision.
 
 ## Quick Start
 
@@ -66,16 +101,26 @@ graph.add_node("v", pos=np.array([1.0, 0.0, 0.0]))
 graph.add_edge(
     "u",
     "v",
-    pts=np.array([[0.0, 0.0, 0.0], [0.5, 0.25, 0.0], [1.0, 0.0, 0.0]]),
+    pts=np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [0.5, 0.25, 0.0],
+            [1.0, 0.0, 0.0],
+        ]
+    ),
 )
 
 A = sp.Symbol("A")
-result = compute_yamada_polynomial(graph, A, return_result=True)
+result = compute_yamada_polynomial(
+    graph,
+    A,
+    return_result=True,
+)
 print(result.polynomial)
 print(result.projection.num_crossings)
 ```
 
-The non-Hermitian nodal-skeleton workflow is now an application package:
+The non-Hermitian nodal-skeleton workflow is an application package:
 
 ```python
 from knotted_graph.applications.nodal import NodalSkeleton
