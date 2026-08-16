@@ -129,15 +129,30 @@ def compute_yamada_from_states(
     for state_value, exp in zip(state_values, exponents):
         total_poly += (A**exp) * state_value
 
-    Y = sp.expand(sp.cancel(total_poly))
+    return _finalize_yamada_total(
+        total_poly,
+        A,
+        normalize=normalize,
+    )
 
+
+def _finalize_yamada_total(
+    total_poly: sp.Expr,
+    A: sp.Symbol,
+    *,
+    normalize: bool,
+) -> sp.Expr:
+    Y = sp.expand(sp.cancel(total_poly))
     if normalize:
         terms = Y.as_ordered_terms()
-        lowest_exp = min(t.as_coeff_exponent(A)[1] for t in terms)
+        lowest_exp = min(term.as_coeff_exponent(A)[1] for term in terms)
         Y = Y * (-A) ** (-lowest_exp)
         Y = sp.expand(sp.cancel(Y))
-
     return Y
+
+
+def _evaluate_state_with_exponent(evaluator, graph: nx.MultiGraph, exponent: int):
+    return exponent, evaluator.compute(graph)
 
 
 def _angle_delta(a: float, b: float) -> float:
@@ -340,20 +355,25 @@ class Yamada:
             list(PDCode.arcs.values()),
         )
 
-    def _build_state_graphs(self):
-        num_x = len(self.crossings)
-        configurations = list(itertools.product([0, 1, 2], repeat=num_x))
-        exponents = [s.count(0) - s.count(1) for s in configurations]
-        state_graphs = [
-            _build_state_graph_from_ports(
-                self.vertices,
-                self.crossings,
-                self.arcs,
-                config,
+    def _iter_state_graphs(self):
+        for config in itertools.product([0, 1, 2], repeat=len(self.crossings)):
+            yield (
+                _build_state_graph_from_ports(
+                    self.vertices,
+                    self.crossings,
+                    self.arcs,
+                    config,
+                ),
+                config.count(0) - config.count(1),
             )
-            for config in configurations
-        ]
-        return state_graphs, exponents
+
+    def _build_state_graphs(self):
+        """Materialize all states for diagnostic/backward-compatible callers."""
+        states = list(self._iter_state_graphs())
+        return (
+            [graph for graph, _ in states],
+            [exponent for _, exponent in states],
+        )
 
     def compute(
         self,
@@ -362,14 +382,43 @@ class Yamada:
         n_jobs: int = -1,
         method: str = "negami",
     ) -> sp.Expr:
-        """Compute the Yamada polynomial for the diagram."""
+        """Compute the Yamada polynomial without materializing all state graphs."""
+        if method not in {"negami", "recursive"}:
+            raise ValueError("method must be either 'negami' or 'recursive'.")
 
-        state_graphs, exponents = self._build_state_graphs()
-        return compute_yamada_from_states(
-            state_graphs,
-            exponents,
+        if method == "negami":
+            x, y = sp.symbols("x y")
+            evaluator = NegamiRecursiveEvaluator(x, y)
+        else:
+            evaluator = YamadaRecursiveEvaluator(variable)
+
+        evaluated_states = Parallel(
+            n_jobs=n_jobs,
+            prefer="threads",
+        )(
+            delayed(_evaluate_state_with_exponent)(
+                evaluator,
+                graph,
+                exponent,
+            )
+            for graph, exponent in self._iter_state_graphs()
+        )
+
+        total_poly = sp.Integer(0)
+        for exponent, state_value in evaluated_states:
+            if method == "negami":
+                state_value = sp.expand(
+                    state_value.xreplace(
+                        {
+                            x: -1,
+                            y: -variable - 2 - variable ** (-1),
+                        }
+                    )
+                )
+            total_poly += (variable**exponent) * state_value
+
+        return _finalize_yamada_total(
+            total_poly,
             variable,
             normalize=normalize,
-            n_jobs=n_jobs,
-            method=method,
         )

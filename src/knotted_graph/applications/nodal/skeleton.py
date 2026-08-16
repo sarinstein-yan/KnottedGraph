@@ -333,8 +333,16 @@ class NodalSkeleton:
             return self.skeleton_graph_cache
 
         # Compute the graph
-        G = skeleton_image_to_graph(self._skeleton_image) \
-            if skeleton_image is None else skeleton_image
+        image = (
+            self._skeleton_image
+            if skeleton_image is None
+            else np.asarray(skeleton_image, dtype=bool)
+        )
+        if image.ndim != 3:
+            raise ValueError(
+                "skeleton_image must be a three-dimensional array."
+            )
+        G = skeleton_image_to_graph(image)
         if simplify:
             G = remove_leaf_nodes(G)
             G = simplify_edges(G)
@@ -409,12 +417,13 @@ class NodalSkeleton:
         vol.point_data['|im_disp|'] = im_disp_norm
         vol.point_data['log10(|im_disp|+1)'] = np.log10(im_disp_norm + 1)
 
-        berry = self.berry_curvature.copy()
-        berry = berry.reshape(-1, 3, order='F')
-        berry_norm = np.linalg.norm(berry, axis=-1)
-        vol.point_data['berry'] = berry
-        vol.point_data['|berry|'] = berry_norm
-        vol.point_data['log10(|berry|+1)'] = np.log10(berry_norm + 1)
+        if self._berry_prerequisites['valid']:
+            berry = self.berry_curvature.copy()
+            berry = berry.reshape(-1, 3, order='F')
+            berry_norm = np.linalg.norm(berry, axis=-1)
+            vol.point_data['berry'] = berry
+            vol.point_data['|berry|'] = berry_norm
+            vol.point_data['log10(|berry|+1)'] = np.log10(berry_norm + 1)
 
         return vol
 

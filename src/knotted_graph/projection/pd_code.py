@@ -154,9 +154,11 @@ class PDCode:
         
         for i, seg in enumerate(segments):
             for idx in tree.query(seg):
+                idx = int(idx)
                 other_seg = tree.geometries.take(idx)
-                # Skip segments that are visited before or connect at endpoints
-                if segments.index(other_seg) <= i or seg.touches(other_seg):
+                # STRtree already returns the segment index. Reusing it avoids
+                # a linear ``segments.index(...)`` search for every candidate.
+                if idx <= i or seg.touches(other_seg):
                     continue
                 
                 inter = seg.intersection(other_seg)
