@@ -1,8 +1,8 @@
 """Compact exact multigraph kernels for Yamada evaluation.
 
 The recursion in this module never mutates the caller's NetworkX graph and does
-not use NetworkX or SymPy inside the hot loop.  A multigraph is represented by
-a symmetric integer multiplicity matrix.  Loops live on the diagonal.
+not use NetworkX or SymPy inside the hot loop. A multigraph is represented by
+a symmetric integer multiplicity matrix. Loops live on the diagonal.
 """
 
 from __future__ import annotations
@@ -58,82 +58,124 @@ class CompactGraph:
         row = self.rows[i]
         return 2 * row[i] + sum(row[j] for j in range(self.n) if j != i)
 
+    def scan(self) -> tuple[int, tuple[int, ...], int | None, tuple[int, int] | None]:
+        """Collect hot-loop scalar graph data in one multiplicity-matrix pass."""
+        n = self.n
+        edge_count = 0
+        degrees = [0] * n
+        first_loop = None
+        first_edge = None
+        for i in range(n):
+            loop_count = self.rows[i][i]
+            if loop_count:
+                edge_count += loop_count
+                degrees[i] += 2 * loop_count
+                if first_loop is None:
+                    first_loop = i
+            for j in range(i + 1, n):
+                count = self.rows[i][j]
+                if not count:
+                    continue
+                edge_count += count
+                degrees[i] += count
+                degrees[j] += count
+                if first_edge is None:
+                    first_edge = (i, j)
+        return edge_count, tuple(degrees), first_loop, first_edge
+
     def components(self) -> list[tuple[int, ...]]:
         n = self.n
-        unseen = set(range(n))
+        seen = bytearray(n)
         out: list[tuple[int, ...]] = []
-        while unseen:
-            start = min(unseen)
-            unseen.remove(start)
+        for start in range(n):
+            if seen[start]:
+                continue
+            seen[start] = 1
             stack = [start]
-            component = [start]
+            component = []
             while stack:
                 u = stack.pop()
-                for v, count in enumerate(self.rows[u]):
-                    if v != u and count and v in unseen:
-                        unseen.remove(v)
+                component.append(u)
+                row = self.rows[u]
+                for v in range(n):
+                    if v != u and row[v] and not seen[v]:
+                        seen[v] = 1
                         stack.append(v)
-                        component.append(v)
             out.append(tuple(sorted(component)))
         return out
 
-    def induced(self, nodes: tuple[int, ...], *, keep_loop_at: int | None = None) -> "CompactGraph":
+    def induced(
+        self,
+        nodes: tuple[int, ...],
+        *,
+        keep_loop_at: int | None = None,
+    ) -> "CompactGraph":
         nodes = tuple(nodes)
         rows = [[self.rows[i][j] for j in nodes] for i in nodes]
         if keep_loop_at is not None and keep_loop_at in nodes:
-            # caller handles any desired loop removal after construction
             pass
         return CompactGraph(tuple(tuple(row) for row in rows))
 
-    def has_bridge(self) -> bool:
-        """Tarjan bridges on the underlying simple graph, respecting multiplicity."""
+    def bridge_and_articulation(self) -> tuple[bool, int | None]:
+        """Find bridges and one articulation point in one Tarjan traversal."""
         n = self.n
         if n <= 1:
-            return False
+            return False, None
         disc = [-1] * n
         low = [0] * n
         parent = [-1] * n
         tick = 0
-        found = False
+        found_bridge = False
+        articulation = None
 
-        def dfs(u: int):
-            nonlocal tick, found
+        def dfs(u: int) -> None:
+            nonlocal tick, found_bridge, articulation
             disc[u] = low[u] = tick
             tick += 1
-            for v in range(n):
-                if v == u or self.rows[u][v] == 0:
+            children = 0
+            for v, count in enumerate(self.rows[u]):
+                if v == u or not count:
                     continue
                 if disc[v] == -1:
                     parent[v] = u
+                    children += 1
                     dfs(v)
                     low[u] = min(low[u], low[v])
-                    if low[v] > disc[u] and self.rows[u][v] == 1:
-                        found = True
-                        return
+                    if low[v] > disc[u] and count == 1:
+                        found_bridge = True
+                    if parent[u] == -1:
+                        if children > 1 and articulation is None:
+                            articulation = u
+                    elif low[v] >= disc[u] and articulation is None:
+                        articulation = u
                 elif v != parent[u]:
                     low[u] = min(low[u], disc[v])
 
         for root in range(n):
             if disc[root] == -1:
                 dfs(root)
-                if found:
-                    return True
-        return False
+        return found_bridge, articulation
+
+    def has_bridge(self) -> bool:
+        """Tarjan bridges on the underlying simple graph, respecting multiplicity."""
+        return self.bridge_and_articulation()[0]
 
     def is_cycle(self) -> bool:
-        if self.n == 0 or self.edge_count == 0:
+        edge_count, degrees, _, _ = self.scan()
+        if self.n == 0 or edge_count == 0:
             return False
         if len(self.components()) != 1:
             return False
-        return all(self.degree(i) == 2 for i in range(self.n))
+        return all(degree == 2 for degree in degrees)
 
     def theta_count(self) -> int | None:
-        if self.n != 2 or self.edge_count == 0:
+        if self.n != 2:
             return None
-        if self.rows[0][0] or self.rows[1][1]:
+        edge_count, _, _, _ = self.scan()
+        if edge_count == 0 or self.rows[0][0] or self.rows[1][1]:
             return None
         count = self.rows[0][1]
-        return count if count == self.edge_count else None
+        return count if count == edge_count else None
 
     def first_loop(self) -> int | None:
         for i in range(self.n):
@@ -149,15 +191,15 @@ class CompactGraph:
         return None
 
     def delete_loop(self, i: int) -> "CompactGraph":
-        m = [list(row) for row in self.rows]
-        m[i][i] -= 1
-        return CompactGraph(tuple(tuple(row) for row in m))
+        matrix = [list(row) for row in self.rows]
+        matrix[i][i] -= 1
+        return CompactGraph(tuple(tuple(row) for row in matrix))
 
     def delete_edge(self, i: int, j: int) -> "CompactGraph":
-        m = [list(row) for row in self.rows]
-        m[i][j] -= 1
-        m[j][i] -= 1
-        return CompactGraph(tuple(tuple(row) for row in m))
+        matrix = [list(row) for row in self.rows]
+        matrix[i][j] -= 1
+        matrix[j][i] -= 1
+        return CompactGraph(tuple(tuple(row) for row in matrix))
 
     def contract_edge(self, i: int, j: int) -> "CompactGraph":
         """Contract one occurrence of non-loop edge (i,j), preserving multiplicity."""
@@ -168,66 +210,64 @@ class CompactGraph:
         if self.rows[i][j] <= 0:
             raise ValueError("edge does not exist")
 
-        m = [list(row) for row in self.rows]
-        m[i][j] -= 1
-        m[j][i] -= 1
-
-        # Remaining i-j parallel edges and loops based at j become loops at i.
-        m[i][i] += m[j][j] + m[i][j]
+        matrix = [list(row) for row in self.rows]
+        matrix[i][j] -= 1
+        matrix[j][i] -= 1
+        matrix[i][i] += matrix[j][j] + matrix[i][j]
 
         for k in range(self.n):
             if k in (i, j):
                 continue
-            m[i][k] += m[j][k]
-            m[k][i] = m[i][k]
+            matrix[i][k] += matrix[j][k]
+            matrix[k][i] = matrix[i][k]
 
-        # Remove vertex j.  The i-j cell is removed with that row/column.
-        m.pop(j)
-        for row in m:
+        matrix.pop(j)
+        for row in matrix:
             row.pop(j)
-        return CompactGraph(tuple(tuple(row) for row in m))
+        return CompactGraph(tuple(tuple(row) for row in matrix))
 
-    def articulation_parts(self) -> list["CompactGraph"] | None:
-        """Return one-point-union factors using a small-graph exact search."""
+    def articulation_parts_at(self, cut: int) -> list["CompactGraph"] | None:
+        """Return one-point-union factors for a known articulation point."""
         n = self.n
-        if n < 3:
+        if n < 3 or not 0 <= cut < n:
+            return None
+        remaining = [i for i in range(n) if i != cut]
+        seen = bytearray(n)
+        seen[cut] = 1
+        components: list[tuple[int, ...]] = []
+        for start in remaining:
+            if seen[start]:
+                continue
+            seen[start] = 1
+            stack = [start]
+            component = []
+            while stack:
+                u = stack.pop()
+                component.append(u)
+                for v in remaining:
+                    if not seen[v] and self.rows[u][v]:
+                        seen[v] = 1
+                        stack.append(v)
+            components.append(tuple(sorted(component)))
+        if len(components) < 2:
             return None
 
-        for cut in range(n):
-            remaining = tuple(i for i in range(n) if i != cut)
-            if not remaining:
-                continue
+        parts = []
+        for part_index, component in enumerate(components):
+            nodes = tuple(sorted((*component, cut)))
+            rows = [[self.rows[a][b] for b in nodes] for a in nodes]
+            if part_index > 0:
+                local_cut = nodes.index(cut)
+                rows[local_cut][local_cut] = 0
+            parts.append(CompactGraph(tuple(tuple(row) for row in rows)))
+        return parts
 
-            unseen = set(remaining)
-            components: list[tuple[int, ...]] = []
-            while unseen:
-                start = min(unseen)
-                unseen.remove(start)
-                stack = [start]
-                comp = [start]
-                while stack:
-                    u = stack.pop()
-                    for v in tuple(unseen):
-                        if self.rows[u][v]:
-                            unseen.remove(v)
-                            stack.append(v)
-                            comp.append(v)
-                components.append(tuple(sorted(comp)))
-
-            if len(components) < 2:
-                continue
-
-            parts = []
-            for part_index, component in enumerate(components):
-                nodes = tuple(sorted((*component, cut)))
-                rows = [[self.rows[a][b] for b in nodes] for a in nodes]
-                if part_index > 0:
-                    local_cut = nodes.index(cut)
-                    rows[local_cut][local_cut] = 0
-                parts.append(CompactGraph(tuple(tuple(row) for row in rows)))
-            return parts
-
-        return None
+    def articulation_parts(self) -> list["CompactGraph"] | None:
+        """Return one-point-union factors using exact articulation detection."""
+        _, cut = self.bridge_and_articulation()
+        if cut is None:
+            return None
+        return self.articulation_parts_at(cut)
 
 
 def _theta_value(theta: int) -> Laurent:
@@ -251,100 +291,72 @@ class _CompactBase:
     def compute(self, graph: nx.MultiGraph | CompactGraph, variable: sp.Symbol) -> sp.Expr:
         return to_sympy(self.compute_laurent(graph), variable)
 
-
-class CompactYamadaEvaluator(_CompactBase):
     def _rec(self, graph: CompactGraph) -> Laurent:
         cached = self.memo.get(graph)
         if cached is not None:
             return cached
 
-        if graph.edge_count == 0:
+        edge_count, degrees, loop, edge = graph.scan()
+        if edge_count == 0:
+            value = constant((-1) ** graph.n)
+            self.memo[graph] = value
+            return value
+
+        components = graph.components()
+        if len(components) > 1:
+            value = ONE
+            for component in components:
+                value = multiply(value, self._rec(graph.induced(component)))
+            self.memo[graph] = value
+            return value
+
+        if graph.n == 2 and not graph.rows[0][0] and not graph.rows[1][1]:
+            theta = graph.rows[0][1]
+            if theta == edge_count:
+                value = _theta_value(theta)
+                self.memo[graph] = value
+                return value
+
+        if graph.n and all(degree == 2 for degree in degrees):
+            self.memo[graph] = SIGMA
+            return SIGMA
+
+        has_bridge, articulation = graph.bridge_and_articulation()
+        if has_bridge:
+            self.memo[graph] = ZERO
+            return ZERO
+
+        if loop is not None:
+            value = multiply_sigma(self._rec(graph.delete_loop(loop)), sign=-1)
+            self.memo[graph] = value
+            return value
+
+        if articulation is not None:
+            parts = graph.articulation_parts_at(articulation)
+            if parts is not None:
+                value = ONE
+                for part in parts:
+                    value = multiply(value, self._rec(part))
+                if (len(parts) - 1) % 2:
+                    value = scale(value, -1)
+                self.memo[graph] = value
+                return value
+
+        if edge is None:
             value = constant((-1) ** graph.n)
         else:
-            components = graph.components()
-            if len(components) > 1:
-                value = ONE
-                for component in components:
-                    value = multiply(value, self._rec(graph.induced(component)))
-            elif graph.has_bridge():
-                value = ZERO
-            elif graph.is_cycle():
-                value = SIGMA
-            else:
-                theta = graph.theta_count()
-                if theta is not None:
-                    value = _theta_value(theta)
-                else:
-                    loop = graph.first_loop()
-                    if loop is not None:
-                        value = multiply_sigma(self._rec(graph.delete_loop(loop)), sign=-1)
-                    else:
-                        parts = graph.articulation_parts()
-                        if parts is not None:
-                            value = ONE
-                            for part in parts:
-                                value = multiply(value, self._rec(part))
-                            if (len(parts) - 1) % 2:
-                                value = scale(value, -1)
-                        else:
-                            edge = graph.first_nonloop()
-                            if edge is None:
-                                value = constant((-1) ** graph.n)
-                            else:
-                                i, j = edge
-                                value = add(
-                                    self._rec(graph.delete_edge(i, j)),
-                                    self._rec(graph.contract_edge(i, j)),
-                                )
-
+            i, j = edge
+            value = add(
+                self._rec(graph.delete_edge(i, j)),
+                self._rec(graph.contract_edge(i, j)),
+            )
         self.memo[graph] = value
         return value
+
+
+class CompactYamadaEvaluator(_CompactBase):
+    """Exact compact evaluator for the direct Yamada recurrence."""
 
 
 class CompactNegamiSpecializedEvaluator(_CompactBase):
-    def _rec(self, graph: CompactGraph) -> Laurent:
-        cached = self.memo.get(graph)
-        if cached is not None:
-            return cached
-
-        if graph.edge_count == 0:
-            value = constant((-1) ** graph.n)
-        else:
-            components = graph.components()
-            if len(components) > 1:
-                value = ONE
-                for component in components:
-                    value = multiply(value, self._rec(graph.induced(component)))
-            elif graph.has_bridge():
-                value = ZERO
-            elif graph.is_cycle():
-                value = SIGMA
-            else:
-                theta = graph.theta_count()
-                if theta is not None:
-                    value = _theta_value(theta)
-                else:
-                    loop = graph.first_loop()
-                    if loop is not None:
-                        value = multiply_sigma(self._rec(graph.delete_loop(loop)), sign=-1)
-                    else:
-                        parts = graph.articulation_parts()
-                        if parts is not None:
-                            value = ONE
-                            for part in parts:
-                                value = multiply(value, self._rec(part))
-                            if (len(parts) - 1) % 2:
-                                value = scale(value, -1)
-                        else:
-                            edge = graph.first_nonloop()
-                            if edge is None:
-                                value = constant((-1) ** graph.n)
-                            else:
-                                i, j = edge
-                                value = add(
-                                    self._rec(graph.contract_edge(i, j)),
-                                    self._rec(graph.delete_edge(i, j)),
-                                )
-
-        self.memo[graph] = value
-        return value
+    """Exact specialized Negami evaluator with the same optimized recurrence."""
