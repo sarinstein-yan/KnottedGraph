@@ -9,9 +9,13 @@ from joblib import Parallel, delayed
 
 from knotted_graph.projection.geom import Arc, Crossing, Vertex
 
-from .recursive import (
-    NegamiRecursiveEvaluator,
-    YamadaRecursiveEvaluator,
+from .fast import (
+    FastNegamiSpecializedEvaluator,
+    FastYamadaEvaluator,
+    add as laurent_add,
+    normalize_yamada as normalize_laurent_yamada,
+    shift as laurent_shift,
+    to_sympy as laurent_to_sympy,
 )
 
 
@@ -30,7 +34,7 @@ def compute_negami(G: nx.MultiGraph, x: sp.Symbol, y: sp.Symbol) -> sp.Expr:
 
     This explicit implementation is intentionally retained as an independent
     reference implementation.  The public ``method="negami"`` Yamada backend
-    uses the equivalent recursive Negami evaluator for speed.
+    uses an exact specialization of the equivalent recursive Negami evaluator.
     """
 
     edges = list(G.edges(keys=True))
@@ -52,6 +56,27 @@ def compute_negami(G: nx.MultiGraph, x: sp.Symbol, y: sp.Symbol) -> sp.Expr:
     return sp.expand(h_poly)
 
 
+def _make_fast_evaluator(method: str):
+    if method == "negami":
+        return FastNegamiSpecializedEvaluator()
+    if method == "recursive":
+        return FastYamadaEvaluator()
+    raise ValueError("method must be either 'negami' or 'recursive'.")
+
+
+def _evaluate_fast_state(evaluator, graph: nx.MultiGraph, exponent: int):
+    return exponent, evaluator.compute_laurent(graph)
+
+
+def _sum_laurent_states(evaluated_states, A: sp.Symbol, normalize: bool) -> sp.Expr:
+    total = ()
+    for exponent, state_value in evaluated_states:
+        total = laurent_add(total, laurent_shift(state_value, exponent))
+    if normalize:
+        total = normalize_laurent_yamada(total)
+    return laurent_to_sympy(total, A)
+
+
 def compute_yamada_from_states(
     state_graphs: list[nx.MultiGraph],
     exponents: list[int],
@@ -62,33 +87,10 @@ def compute_yamada_from_states(
 ) -> sp.Expr:
     """Compute the Yamada polynomial from resolved diagram states.
 
-    Parameters
-    ----------
-    state_graphs
-        Resolved state graphs.
-    exponents
-        State exponents corresponding to ``p(s) - m(s)``.
-    A
-        Polynomial variable.
-    normalize
-        If true, shift the lowest exponent to zero.
-    n_jobs
-        Number of thread-parallel jobs used for state-graph evaluation.
-    method
-        Backend for crossing-free state graphs:
-
-        - ``"negami"`` uses the recursive evaluation of Yamada's auxiliary
-          Negami specialization ``h(G;x,y)`` and then substitutes
-          ``x=-1`` and ``y=-A-2-A**(-1)``;
-        - ``"recursive"`` evaluates ``H(G)`` directly with the Yamada
-          deletion-contraction identities.
-
-        Both backends share memoized subproblems across resolved crossing states.
-
-    Returns
-    -------
-    sympy.Expr
-        The Yamada polynomial.
+    The public result and recurrence are unchanged, but state values are now
+    represented internally as exact integer Laurent polynomials.  Conversion
+    to SymPy occurs once, after all states have been summed.  This removes
+    repeated general-purpose symbolic simplification from the hot loop.
     """
 
     if len(state_graphs) != len(exponents):
@@ -96,43 +98,20 @@ def compute_yamada_from_states(
     if method not in {"negami", "recursive"}:
         raise ValueError("method must be either 'negami' or 'recursive'.")
 
-    if method == "negami":
-        x, y = sp.symbols("x y")
-        evaluator = NegamiRecursiveEvaluator(x, y)
-        state_values = Parallel(
-            n_jobs=n_jobs,
-            prefer="threads",
-        )(
-            delayed(evaluator.compute)(G)
-            for G in state_graphs
+    evaluator = _make_fast_evaluator(method)
+
+    if n_jobs == 1:
+        evaluated_states = (
+            _evaluate_fast_state(evaluator, graph, exponent)
+            for graph, exponent in zip(state_graphs, exponents)
         )
-        state_values = [
-            sp.expand(
-                h_val.xreplace(
-                    {x: -1, y: -A - 2 - A ** (-1)}
-                )
-            )
-            for h_val in state_values
-        ]
     else:
-        evaluator = YamadaRecursiveEvaluator(A)
-        state_values = Parallel(
-            n_jobs=n_jobs,
-            prefer="threads",
-        )(
-            delayed(evaluator.compute)(G)
-            for G in state_graphs
+        evaluated_states = Parallel(n_jobs=n_jobs, prefer="threads")(
+            delayed(_evaluate_fast_state)(evaluator, graph, exponent)
+            for graph, exponent in zip(state_graphs, exponents)
         )
 
-    total_poly = sp.Integer(0)
-    for state_value, exp in zip(state_values, exponents):
-        total_poly += (A**exp) * state_value
-
-    return _finalize_yamada_total(
-        total_poly,
-        A,
-        normalize=normalize,
-    )
+    return _sum_laurent_states(evaluated_states, A, normalize)
 
 
 def _finalize_yamada_total(
@@ -141,6 +120,7 @@ def _finalize_yamada_total(
     *,
     normalize: bool,
 ) -> sp.Expr:
+    """Reference SymPy finalizer retained for compatibility/internal tests."""
     Y = sp.expand(sp.cancel(total_poly))
     if normalize:
         terms = Y.as_ordered_terms()
@@ -148,10 +128,6 @@ def _finalize_yamada_total(
         Y = Y * (-A) ** (-lowest_exp)
         Y = sp.expand(sp.cancel(Y))
     return Y
-
-
-def _evaluate_state_with_exponent(evaluator, graph: nx.MultiGraph, exponent: int):
-    return exponent, evaluator.compute(graph)
 
 
 def _angle_delta(a: float, b: float) -> float:
@@ -229,14 +205,7 @@ def _build_state_graph_from_ports(
     plus_pairs: tuple[tuple[int, int], tuple[int, int]] = ((0, 3), (1, 2)),
     minus_pairs: tuple[tuple[int, int], tuple[int, int]] = ((0, 1), (2, 3)),
 ) -> nx.MultiGraph:
-    """Build a resolved state graph by tracing half-edge ports globally.
-
-    The older implementation resolved crossings by mutating a graph in place.
-    When an arc connected two crossings, resolving the later crossing could
-    re-add a crossing node that had already been removed. Tracing ports first
-    avoids that order dependence and also handles self-crossing ports with
-    duplicate arc IDs.
-    """
+    """Build a resolved state graph by tracing half-edge ports globally."""
 
     if len(state) != len(crossings):
         raise ValueError("State length must match the number of crossings.")
@@ -313,7 +282,6 @@ def _build_state_graph_from_ports(
             if end_node is not None:
                 graph.add_edge(start_node, end_node)
 
-    # Components with no original or unresolved crossing terminal are loops.
     for port in list(adjacency):
         if port in terminal_for_port:
             continue
@@ -381,43 +349,27 @@ class Yamada:
         n_jobs: int = -1,
         method: str = "negami",
     ) -> sp.Expr:
-        """Compute the Yamada polynomial without materializing all state graphs."""
+        """Compute the Yamada polynomial using exact Laurent arithmetic.
+
+        State generation is unchanged.  The expensive crossing-free recurrence
+        now stays in sparse integer Laurent form until the final return value.
+        For ``n_jobs=1`` the joblib scheduling layer is bypassed entirely.
+        """
         if method not in {"negami", "recursive"}:
             raise ValueError("method must be either 'negami' or 'recursive'.")
 
-        if method == "negami":
-            x, y = sp.symbols("x y")
-            evaluator = NegamiRecursiveEvaluator(x, y)
-        else:
-            evaluator = YamadaRecursiveEvaluator(variable)
+        evaluator = _make_fast_evaluator(method)
+        state_iter = self._iter_state_graphs()
 
-        evaluated_states = Parallel(
-            n_jobs=n_jobs,
-            prefer="threads",
-        )(
-            delayed(_evaluate_state_with_exponent)(
-                evaluator,
-                graph,
-                exponent,
+        if n_jobs == 1:
+            evaluated_states = (
+                _evaluate_fast_state(evaluator, graph, exponent)
+                for graph, exponent in state_iter
             )
-            for graph, exponent in self._iter_state_graphs()
-        )
+        else:
+            evaluated_states = Parallel(n_jobs=n_jobs, prefer="threads")(
+                delayed(_evaluate_fast_state)(evaluator, graph, exponent)
+                for graph, exponent in state_iter
+            )
 
-        total_poly = sp.Integer(0)
-        for exponent, state_value in evaluated_states:
-            if method == "negami":
-                state_value = sp.expand(
-                    state_value.xreplace(
-                        {
-                            x: -1,
-                            y: -variable - 2 - variable ** (-1),
-                        }
-                    )
-                )
-            total_poly += (variable**exponent) * state_value
-
-        return _finalize_yamada_total(
-            total_poly,
-            variable,
-            normalize=normalize,
-        )
+        return _sum_laurent_states(evaluated_states, variable, normalize)
