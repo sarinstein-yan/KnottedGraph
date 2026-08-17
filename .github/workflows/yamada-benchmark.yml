@@ -14,6 +14,7 @@ on:
       - "dev/benchmark_crossing_bulk_query.py"
       - "dev/benchmark_crossing_vectorized.py"
       - "dev/benchmark_compact_optimization_candidates.py"
+      - "dev/benchmark_laurent_arithmetic_candidates.py"
       - "dev/yamada_output_fingerprint.py"
       - "dev/application_yamada_regression.py"
       - "dev/benchmark_topoly_identical_pd.py"
@@ -39,6 +40,8 @@ jobs:
         run: uv run --no-sync python dev/benchmark_yamada_kernel.py
       - name: Benchmark recurrence optimization candidates with exact equality gates
         run: uv run --no-sync python dev/benchmark_compact_optimization_candidates.py
+      - name: Benchmark Laurent arithmetic candidates with exact equality gates
+        run: uv run --no-sync python dev/benchmark_laurent_arithmetic_candidates.py
       - name: Profile remaining projection and invariant costs
         run: uv run --no-sync python dev/benchmark_yamada_pipeline_breakdown.py
       - name: Compare public dispatch with compact serial
