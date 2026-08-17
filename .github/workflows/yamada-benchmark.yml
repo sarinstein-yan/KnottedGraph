@@ -7,7 +7,7 @@ on:
       - "src/knotted_graph/projection/**"
       - "dev/benchmark_yamada_kernel.py"
       - "dev/benchmark_yamada_end_to_end.py"
-      - "dev/benchmark_yamada_compare.py"
+      - "dev/benchmark_topoly_common.py"
       - ".github/workflows/yamada-benchmark.yml"
 
 permissions:
@@ -54,7 +54,7 @@ jobs:
           echo "===== Latest_Workplace ====="
           cat /tmp/baseline.txt
 
-  topoly-smoke:
+  topoly-comparison:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -66,9 +66,5 @@ jobs:
         run: |
           uv sync --group dev
           uv pip install topoly
-      - name: Confirm Topoly benchmark dependency
-        run: |
-          uv run --no-sync python - <<'PY'
-          import topoly
-          print("Topoly imported:", topoly.__file__)
-          PY
+      - name: Calibrate conventions, verify held-out outputs, and benchmark
+        run: uv run --no-sync python dev/benchmark_topoly_common.py
