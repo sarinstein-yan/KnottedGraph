@@ -7,6 +7,7 @@ on:
       - "src/knotted_graph/projection/**"
       - "dev/benchmark_yamada_kernel.py"
       - "dev/benchmark_yamada_end_to_end.py"
+      - "dev/benchmark_yamada_dispatch.py"
       - "dev/benchmark_topoly_common.py"
       - "dev/benchmark_topoly_pd_adapter.py"
       - "dev/diagnose_topoly_common.py"
@@ -28,6 +29,8 @@ jobs:
         run: uv sync --group dev
       - name: Compare retained SymPy evaluators with exact Laurent kernels
         run: uv run --no-sync python dev/benchmark_yamada_kernel.py
+      - name: Compare public dispatch with compact serial
+        run: uv run --no-sync python dev/benchmark_yamada_dispatch.py
 
   end-to-end:
     runs-on: ubuntu-latest
