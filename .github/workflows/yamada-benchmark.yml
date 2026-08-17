@@ -11,9 +11,7 @@ on:
       - "dev/benchmark_state_dedup.py"
       - "dev/benchmark_projection_index.py"
       - "dev/yamada_output_fingerprint.py"
-      - "dev/benchmark_topoly_common.py"
-      - "dev/benchmark_topoly_pd_adapter.py"
-      - "dev/diagnose_topoly_common.py"
+      - "dev/benchmark_topoly_identical_pd.py"
       - "dev/diagnose_topoly_polynomial.py"
       - ".github/workflows/yamada-benchmark.yml"
 
@@ -104,7 +102,7 @@ jobs:
         run: |
           uv sync --group dev
           uv pip install topoly
-      - name: Inspect Topoly Yamada representation on identical PD codes
+      - name: Inspect Topoly normalization on identical PD codes
         run: uv run --no-sync python dev/diagnose_topoly_polynomial.py
-      - name: Use Topoly 3D bridge parser then its generated PD code
-        run: uv run --no-sync python dev/benchmark_topoly_pd_adapter.py
+      - name: Benchmark identical PD diagrams with cold memo tables
+        run: uv run --no-sync python dev/benchmark_topoly_identical_pd.py
