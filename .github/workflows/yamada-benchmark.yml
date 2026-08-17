@@ -9,6 +9,7 @@ on:
       - "dev/benchmark_yamada_end_to_end.py"
       - "dev/benchmark_yamada_dispatch.py"
       - "dev/benchmark_state_dedup.py"
+      - "dev/yamada_output_fingerprint.py"
       - "dev/benchmark_topoly_common.py"
       - "dev/benchmark_topoly_pd_adapter.py"
       - "dev/diagnose_topoly_common.py"
@@ -35,6 +36,31 @@ jobs:
         run: uv run --no-sync python dev/benchmark_yamada_dispatch.py
       - name: Measure repeated compact states
         run: uv run --no-sync python dev/benchmark_state_dedup.py
+
+  output-equivalence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Fingerprint optimized branch
+        run: |
+          uv sync --group dev
+          uv run --no-sync python dev/yamada_output_fingerprint.py > /tmp/optimized-fingerprint.json
+      - name: Fingerprint Latest_Workplace
+        run: |
+          git worktree add /tmp/KnottedGraph-reference origin/Latest_Workplace
+          cd /tmp/KnottedGraph-reference
+          uv sync --group dev
+          uv run --no-sync python "$GITHUB_WORKSPACE/dev/yamada_output_fingerprint.py" > /tmp/reference-fingerprint.json
+      - name: Require byte-identical public outputs
+        run: |
+          diff -u /tmp/reference-fingerprint.json /tmp/optimized-fingerprint.json
+          echo "All cross-branch PD codes, crossing counts, and Yamada polynomial strings match."
 
   end-to-end:
     runs-on: ubuntu-latest
