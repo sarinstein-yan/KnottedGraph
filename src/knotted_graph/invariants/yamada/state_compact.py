@@ -11,8 +11,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from knotted_graph.projection.geom import Arc, Crossing, Vertex
-
 from .compact import CompactGraph
 
 Port = tuple[int, str]
