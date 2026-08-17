@@ -12,7 +12,6 @@ import networkx as nx
 import numpy as np
 import sympy as sp
 
-from benchmark_yamada_end_to_end import multi_crossing_theta
 from knotted_graph.invariants.yamada.polynomial import Yamada
 from knotted_graph.projection import PDCode
 
@@ -73,6 +72,59 @@ def _validate_laurent_unit(kg_terms, topoly_terms):
     )
 
 
+def _fixed_size_crossing_theta(crossing_count: int) -> nx.MultiGraph:
+    """Connected theta embedding with V=2, E=3 and exactly c crossings.
+
+    Two strands alternate above and below one another in projection. With
+    ``crossing_count + 2`` x-intervals, the first/last intervals merely leave
+    and enter the shared theta vertices, while each interior interval contains
+    one transverse crossing. The z separation makes over/under information
+    unambiguous. A third strand runs above the zig-zag pair without crossing it.
+    """
+    if crossing_count < 1:
+        raise ValueError("crossing_count must be positive")
+
+    graph = nx.MultiGraph()
+    left = -float(crossing_count + 2)
+    right = float(crossing_count + 2)
+    graph.add_node("u", pos=np.array([left, 0.0, 0.0]))
+    graph.add_node("v", pos=np.array([right, 0.0, 0.0]))
+
+    x = np.linspace(left, right, crossing_count + 3)
+    y1 = np.zeros(crossing_count + 3, dtype=float)
+    y2 = np.zeros(crossing_count + 3, dtype=float)
+    for index in range(1, crossing_count + 2):
+        sign = 1.0 if index % 2 else -1.0
+        y1[index] = sign
+        y2[index] = -sign
+
+    strand1 = np.column_stack(
+        [x, y1, np.full_like(x, 0.5, dtype=float)]
+    )
+    strand2 = np.column_stack(
+        [x, y2, np.full_like(x, -0.5, dtype=float)]
+    )
+    strand1[0] = [left, 0.0, 0.0]
+    strand1[-1] = [right, 0.0, 0.0]
+    strand2[0] = [left, 0.0, 0.0]
+    strand2[-1] = [right, 0.0, 0.0]
+
+    third = np.array(
+        [
+            [left, 0.0, 0.0],
+            [left + 1.0, 3.0, 0.0],
+            [right - 1.0, 3.0, 0.0],
+            [right, 0.0, 0.0],
+        ],
+        dtype=float,
+    )
+
+    graph.add_edge("u", "v", pts=strand1)
+    graph.add_edge("u", "v", pts=strand2)
+    graph.add_edge("u", "v", pts=third)
+    return graph
+
+
 def _embedded_theta(edge_count: int) -> nx.MultiGraph:
     graph = nx.MultiGraph()
     graph.add_node("u", pos=np.array([-2.0, 0.0, 0.0]))
@@ -127,7 +179,7 @@ def _embedded_prism(rung_count: int) -> nx.MultiGraph:
 
 def _build_graph(case: Case) -> nx.MultiGraph:
     if case.family == "crossings":
-        return multi_crossing_theta(case.size)
+        return _fixed_size_crossing_theta(case.size)
     if case.family == "edges_theta":
         return _embedded_theta(case.size)
     if case.family == "vertices_cycle":
@@ -151,12 +203,15 @@ def _prepare(case: Case):
         raise AssertionError(
             f"{case.family}/{case.size}: expected {expected} crossings, got {crossings}"
         )
+    if case.family == "crossings":
+        if graph.number_of_nodes() != 2 or graph.number_of_edges() != 3:
+            raise AssertionError("crossing family must keep V=2 and E=3 fixed")
     return graph, processor, pdcode
 
 
 def _repeats(case: Case) -> int:
     if case.family == "crossings":
-        return 5 if case.size <= 6 else (3 if case.size <= 16 else 1)
+        return 5 if case.size <= 4 else (3 if case.size <= 8 else 1)
     if case.family == "edges_theta":
         return 5 if case.size <= 20 else 3
     if case.family == "vertices_cycle":
