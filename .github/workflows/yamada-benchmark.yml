@@ -6,6 +6,7 @@ on:
       - "src/knotted_graph/invariants/yamada/**"
       - "src/knotted_graph/projection/**"
       - "dev/benchmark_yamada_kernel.py"
+      - "dev/benchmark_yamada_end_to_end.py"
       - "dev/benchmark_yamada_compare.py"
       - ".github/workflows/yamada-benchmark.yml"
 
@@ -25,6 +26,33 @@ jobs:
         run: uv sync --group dev
       - name: Compare retained SymPy evaluators with exact Laurent kernels
         run: uv run --no-sync python dev/benchmark_yamada_kernel.py
+
+  end-to-end:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Benchmark optimized branch
+        run: |
+          uv sync --group dev
+          uv run --no-sync python dev/benchmark_yamada_end_to_end.py | tee /tmp/optimized.txt
+      - name: Benchmark Latest_Workplace
+        run: |
+          git worktree add /tmp/KnottedGraph-base origin/Latest_Workplace
+          cd /tmp/KnottedGraph-base
+          uv sync --group dev
+          uv run --no-sync python "$GITHUB_WORKSPACE/dev/benchmark_yamada_end_to_end.py" | tee /tmp/baseline.txt
+      - name: Print paired results
+        run: |
+          echo "===== optimized ====="
+          cat /tmp/optimized.txt
+          echo "===== Latest_Workplace ====="
+          cat /tmp/baseline.txt
 
   topoly-smoke:
     runs-on: ubuntu-latest
