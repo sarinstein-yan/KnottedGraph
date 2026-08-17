@@ -8,6 +8,7 @@ on:
       - "dev/benchmark_yamada_kernel.py"
       - "dev/benchmark_yamada_end_to_end.py"
       - "dev/benchmark_topoly_common.py"
+      - "dev/diagnose_topoly_common.py"
       - ".github/workflows/yamada-benchmark.yml"
 
 permissions:
@@ -54,7 +55,7 @@ jobs:
           echo "===== Latest_Workplace ====="
           cat /tmp/baseline.txt
 
-  topoly-comparison:
+  topoly-diagnostic:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -66,5 +67,5 @@ jobs:
         run: |
           uv sync --group dev
           uv pip install topoly
-      - name: Calibrate conventions, verify held-out outputs, and benchmark
-        run: uv run --no-sync python dev/benchmark_topoly_common.py
+      - name: Inspect bridge semantics and raw Yamada output
+        run: uv run --no-sync python dev/diagnose_topoly_common.py
