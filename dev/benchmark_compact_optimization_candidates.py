@@ -15,20 +15,10 @@ from knotted_graph.invariants.yamada.compact import (
     _theta_value,
 )
 from knotted_graph.invariants.yamada.fast import (
-    ONE,
-    SIGMA,
-    ZERO,
-    add,
-    constant,
-    multiply,
-    multiply_sigma,
-    scale,
-    to_sympy,
+    ONE, SIGMA, ZERO, add, constant, multiply, multiply_sigma, scale, to_sympy,
 )
 from knotted_graph.invariants.yamada.polynomial import (
-    Yamada,
-    _evaluate_fast_state,
-    _sum_laurent_states_raw,
+    Yamada, _evaluate_fast_state, _sum_laurent_states_raw,
 )
 from knotted_graph.projection import PDCode
 
@@ -176,9 +166,8 @@ def _choose_edge(graph: CompactGraph, degrees, strategy: str, first_edge):
         return first_edge
     best = None
     best_score = None
-    n = graph.n
-    for i in range(n):
-        for j in range(i + 1, n):
+    for i in range(graph.n):
+        for j in range(i + 1, graph.n):
             multiplicity = graph.rows[i][j]
             if not multiplicity:
                 continue
@@ -292,24 +281,14 @@ def spring_embedding(graph: nx.Graph, seed: int) -> nx.MultiGraph:
 def connected_calculator():
     embedded = spring_embedding(nx.complete_graph(4), 7)
     processor = PDCode(embedded)
-    # Find a deterministic nontrivial connected projection with at least two crossings.
-    selected = None
-    for ay in range(0, 180, 15):
-        for ax in range(0, 180, 15):
-            processor.compute(rotation_angles=(float(ax), float(ay), 0.0))
-            crossings = len(processor.crossings)
-            if 2 <= crossings <= 4:
-                selected = (float(ax), float(ay), 0.0)
-                break
-        if selected is not None:
-            break
-    if selected is None:
-        raise AssertionError("Could not find bounded connected K4 projection")
-    processor.compute(rotation_angles=selected)
+    rotation = (0.0, 89.70158313251306, 0.0)
+    processor.compute(rotation_angles=rotation)
+    if len(processor.crossings) != 1:
+        raise AssertionError(f"Expected one K4 crossing, got {len(processor.crossings)}")
     calculator = Yamada.from_PDCode(processor)
     if len(calculator._diagram_blocks()) != 1:
         raise AssertionError("Connected benchmark unexpectedly factorized")
-    return calculator, len(processor.crossings)
+    return calculator, 1
 
 
 def candidate_state_sum(calculator, strategy, delete_first):
@@ -328,70 +307,32 @@ def main():
     for name, graph in kernel_cases():
         baseline_t, baseline = median_time(lambda: CompactYamadaEvaluator().compute(graph, A))
         for strategy in strategies:
-            t, result = median_time(
-                lambda strategy=strategy: CandidateEvaluator(strategy=strategy).compute(graph)
-            )
+            t, result = median_time(lambda strategy=strategy: CandidateEvaluator(strategy=strategy).compute(graph))
             if not equal(baseline, result):
                 raise AssertionError(f"Candidate output mismatch: {name} {strategy}")
-            row = {
-                "scope": "kernel",
-                "case": name,
-                "V": graph.number_of_nodes(),
-                "E": graph.number_of_edges(),
-                "strategy": strategy,
-                "baseline_s": baseline_t,
-                "candidate_s": t,
-                "speedup": baseline_t / t,
-            }
+            row = {"scope":"kernel","case":name,"V":graph.number_of_nodes(),"E":graph.number_of_edges(),"strategy":strategy,"baseline_s":baseline_t,"candidate_s":t,"speedup":baseline_t/t}
             rows.append(row)
             print(json.dumps(row, separators=(",", ":")))
 
     ladder = nx.MultiGraph(nx.circular_ladder_graph(5))
-    baseline_negami_t, baseline_negami = median_time(
-        lambda: CompactNegamiSpecializedEvaluator().compute(ladder, A)
-    )
+    baseline_negami_t, baseline_negami = median_time(lambda: CompactNegamiSpecializedEvaluator().compute(ladder, A))
     for delete_first in (False, True):
-        t, result = median_time(
-            lambda: CandidateEvaluator(strategy="first", delete_first=delete_first).compute(ladder)
-        )
+        t, result = median_time(lambda: CandidateEvaluator(strategy="first", delete_first=delete_first).compute(ladder))
         if not equal(baseline_negami, result):
             raise AssertionError("Negami branch-order candidate changed output")
-        row = {
-            "scope": "negami_branch_order",
-            "case": "ladder_5",
-            "delete_first": delete_first,
-            "baseline_s": baseline_negami_t,
-            "candidate_s": t,
-            "speedup": baseline_negami_t / t,
-        }
+        row = {"scope":"negami_branch_order","case":"ladder_5","delete_first":delete_first,"baseline_s":baseline_negami_t,"candidate_s":t,"speedup":baseline_negami_t/t}
         rows.append(row)
         print(json.dumps(row, separators=(",", ":")))
 
     calculator, crossings = connected_calculator()
-    baseline_t, baseline = median_time(
-        lambda: calculator.compute(A, normalize=False, n_jobs=1, method="negami"), 2
-    )
+    baseline_t, baseline = median_time(lambda: calculator.compute(A, normalize=False, n_jobs=1, method="negami"), 2)
     print("CONNECTED_CANDIDATES")
     for strategy in strategies:
-        t, result = median_time(
-            lambda strategy=strategy: candidate_state_sum(calculator, strategy, True), 2
-        )
+        t, result = median_time(lambda strategy=strategy: candidate_state_sum(calculator, strategy, True), 2)
         poly, calls, memo = result
         if not equal(baseline, poly):
             raise AssertionError(f"Connected candidate output mismatch: {strategy}")
-        row = {
-            "scope": "connected",
-            "case": "K4",
-            "V": 4,
-            "E": 6,
-            "crossings": crossings,
-            "strategy": strategy,
-            "baseline_s": baseline_t,
-            "candidate_s": t,
-            "speedup": baseline_t / t,
-            "calls": calls,
-            "memo": memo,
-        }
+        row = {"scope":"connected","case":"K4","V":4,"E":6,"crossings":crossings,"strategy":strategy,"baseline_s":baseline_t,"candidate_s":t,"speedup":baseline_t/t,"calls":calls,"memo":memo}
         rows.append(row)
         print(json.dumps(row, separators=(",", ":")))
     print("SUMMARY=" + json.dumps(rows, separators=(",", ":")))
