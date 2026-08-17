@@ -88,7 +88,14 @@ def median_time(fn, repeats):
     return statistics.median(values), answer
 
 
-def select_views(embedded, *, max_views=96, max_crossings=8):
+def select_views(embedded, *, max_views=64, max_crossings=5):
+    """Return at most two representative connected projections.
+
+    The decomposable benchmark already supplies a dense c=1..7 crossing scaling
+    curve. For the connected suite we need graph-size scaling without allowing
+    a single exponential Topoly case to dominate CI for hours, so retain the
+    smallest and largest available nonzero crossing counts up to five.
+    """
     by_crossings = {}
     for angles in generate_isotopy_angles(max_views):
         rotation = tuple(float(x) for x in angles)
@@ -103,7 +110,13 @@ def select_views(embedded, *, max_views=96, max_crossings=8):
             if len(calculator._diagram_blocks()) != 1:
                 raise AssertionError("connected benchmark unexpectedly factorized")
             by_crossings[c] = (rotation, processor)
-    return [by_crossings[c] for c in sorted(by_crossings)]
+    if not by_crossings:
+        return []
+    counts = sorted(by_crossings)
+    selected_counts = [counts[0]]
+    if counts[-1] != counts[0]:
+        selected_counts.append(counts[-1])
+    return [by_crossings[c] for c in selected_counts]
 
 
 def main():
@@ -150,7 +163,7 @@ def main():
             run_kg()
             run_topoly()
             Invariant.known["Yamada"] = {}
-            repeats = 5 if crossings <= 4 else 3
+            repeats = 3
             kg_time, kg_answer = median_time(run_kg, repeats)
             tp_time, tp_answer = median_time(run_topoly, repeats)
             if validate(kg_answer, tp_answer) != unit:
