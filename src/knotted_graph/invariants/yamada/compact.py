@@ -230,6 +230,16 @@ class CompactGraph:
         return None
 
 
+def _theta_value(theta: int) -> Laurent:
+    """Exact Yamada value of a crossing-free theta multigraph."""
+    value = ZERO
+    power = ONE
+    for p in range(1, theta):
+        power = multiply_sigma(power)
+        value = add(value, scale(power, -1 if p % 2 == 0 else 1))
+    return value
+
+
 class _CompactBase:
     def __init__(self):
         self.memo: dict[CompactGraph, Laurent] = {}
@@ -263,11 +273,7 @@ class CompactYamadaEvaluator(_CompactBase):
             else:
                 theta = graph.theta_count()
                 if theta is not None:
-                    value = ZERO
-                    power = ONE
-                    for p in range(1, theta):
-                        power = multiply_sigma(power)
-                        value = add(value, scale(power, -1 if p % 2 == 0 else 1))
+                    value = _theta_value(theta)
                 else:
                     loop = graph.first_loop()
                     if loop is not None:
@@ -311,28 +317,34 @@ class CompactNegamiSpecializedEvaluator(_CompactBase):
                     value = multiply(value, self._rec(graph.induced(component)))
             elif graph.has_bridge():
                 value = ZERO
+            elif graph.is_cycle():
+                value = SIGMA
             else:
-                loop = graph.first_loop()
-                if loop is not None:
-                    value = multiply_sigma(self._rec(graph.delete_loop(loop)), sign=-1)
+                theta = graph.theta_count()
+                if theta is not None:
+                    value = _theta_value(theta)
                 else:
-                    parts = graph.articulation_parts()
-                    if parts is not None:
-                        value = ONE
-                        for part in parts:
-                            value = multiply(value, self._rec(part))
-                        if (len(parts) - 1) % 2:
-                            value = scale(value, -1)
+                    loop = graph.first_loop()
+                    if loop is not None:
+                        value = multiply_sigma(self._rec(graph.delete_loop(loop)), sign=-1)
                     else:
-                        edge = graph.first_nonloop()
-                        if edge is None:
-                            value = constant((-1) ** graph.n)
+                        parts = graph.articulation_parts()
+                        if parts is not None:
+                            value = ONE
+                            for part in parts:
+                                value = multiply(value, self._rec(part))
+                            if (len(parts) - 1) % 2:
+                                value = scale(value, -1)
                         else:
-                            i, j = edge
-                            value = add(
-                                self._rec(graph.contract_edge(i, j)),
-                                self._rec(graph.delete_edge(i, j)),
-                            )
+                            edge = graph.first_nonloop()
+                            if edge is None:
+                                value = constant((-1) ** graph.n)
+                            else:
+                                i, j = edge
+                                value = add(
+                                    self._rec(graph.contract_edge(i, j)),
+                                    self._rec(graph.delete_edge(i, j)),
+                                )
 
         self.memo[graph] = value
         return value
