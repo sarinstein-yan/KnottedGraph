@@ -53,15 +53,11 @@ def validate(kg, topoly):
     Accepted transformations are exactly
         Topoly(A) = sign * A**shift * KG(A**orientation)
     with sign in {+1,-1} and orientation in {+1,-1}.
-
-    orientation=-1 is the standard variable inversion A <-> A^-1. No other
-    coefficient permutation or scaling is accepted.
     """
     kg_t = kg_terms(kg)
     tp_t = topoly_terms(topoly)
     kg_seq = sequence(kg_t)
     tp_seq = sequence(tp_t)
-
     candidates = [
         (1, 1, kg_seq),
         (-1, 1, [-value for value in kg_seq]),
@@ -76,7 +72,6 @@ def validate(kg, topoly):
             else:
                 shift = 0
             return sign, orientation, shift
-
     raise AssertionError(
         "Topoly and KnottedGraph differ beyond ±A^k and A<->A^-1: "
         f"KG={kg_seq}, Topoly={tp_seq}"
@@ -128,6 +123,8 @@ def main():
         if not nx.is_connected(graph):
             raise AssertionError(f"{name} must be connected")
         embedded = spring_embedding(graph, seed)
+        vertices = graph.number_of_nodes()
+        edges = graph.number_of_edges()
         for rotation, processor in select_views(embedded):
             pdcode = processor._generate_pd_code()
             if pdcode in seen_pd:
@@ -153,7 +150,6 @@ def main():
             run_kg()
             run_topoly()
             Invariant.known["Yamada"] = {}
-
             repeats = 5 if crossings <= 4 else 3
             kg_time, kg_answer = median_time(run_kg, repeats)
             tp_time, tp_answer = median_time(run_topoly, repeats)
@@ -163,6 +159,8 @@ def main():
             sign, orientation, shift = unit
             row = {
                 "graph": name,
+                "V": vertices,
+                "E": edges,
                 "crossings": crossings,
                 "rotation": list(rotation),
                 "pd_length": len(pdcode),
