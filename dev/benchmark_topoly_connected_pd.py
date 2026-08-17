@@ -88,13 +88,14 @@ def median_time(fn, repeats):
     return statistics.median(values), answer
 
 
-def select_views(embedded, *, max_views=64, max_crossings=5):
+def select_views(embedded, *, max_views=64, max_crossings=3):
     """Return at most two representative connected projections.
 
-    The decomposable benchmark already supplies a dense c=1..7 crossing scaling
-    curve. For the connected suite we need graph-size scaling without allowing
-    a single exponential Topoly case to dominate CI for hours, so retain the
-    smallest and largest available nonzero crossing counts up to five.
+    The decomposable identical-PD benchmark supplies the dedicated c=1..7
+    crossing-scaling curve. This connected suite instead measures graph-size
+    scaling (V and E) while holding projection complexity to c<=3, so a single
+    exponential Topoly case cannot occupy CI for hours. For each abstract graph
+    retain the smallest and largest available nonzero crossing counts.
     """
     by_crossings = {}
     for angles in generate_isotopy_angles(max_views):
