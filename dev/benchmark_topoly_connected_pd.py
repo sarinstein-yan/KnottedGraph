@@ -48,14 +48,22 @@ def sequence(terms: dict[int, int]) -> list[int]:
 
 
 def validate(kg, topoly):
+    """Require equality up to the Laurent unit sign*x^shift."""
     kg_t = kg_terms(kg)
     tp_t = topoly_terms(topoly)
-    if sequence(kg_t) != sequence(tp_t):
+    kg_seq = sequence(kg_t)
+    tp_seq = sequence(tp_t)
+    if tp_seq == kg_seq:
+        sign = 1
+    elif tp_seq == [-value for value in kg_seq]:
+        sign = -1
+    else:
         raise AssertionError(
-            "Topoly and KnottedGraph differ beyond monomial normalization: "
-            f"KG={sequence(kg_t)}, Topoly={sequence(tp_t)}"
+            "Topoly and KnottedGraph differ beyond a Laurent unit ±x^k: "
+            f"KG={kg_seq}, Topoly={tp_seq}"
         )
-    return min(tp_t) - min(kg_t) if kg_t and tp_t else 0
+    shift = min(tp_t) - min(kg_t) if kg_t and tp_t else 0
+    return sign, shift
 
 
 def median_time(fn, repeats):
@@ -114,7 +122,7 @@ def main():
             kg_check = calculator.compute(A, normalize=False, n_jobs=1, method="negami")
             Invariant.known["Yamada"] = {}
             tp_check = YamadaGraph(pdcode).point(max_cross=200)
-            shift = validate(kg_check, tp_check)
+            unit = validate(kg_check, tp_check)
 
             def run_kg():
                 return Yamada.from_PDCode(processor).compute(
@@ -132,14 +140,16 @@ def main():
             repeats = 5 if crossings <= 4 else 3
             kg_time, kg_answer = median_time(run_kg, repeats)
             tp_time, tp_answer = median_time(run_topoly, repeats)
-            if validate(kg_answer, tp_answer) != shift:
-                raise AssertionError("normalization shift changed between runs")
+            if validate(kg_answer, tp_answer) != unit:
+                raise AssertionError("Laurent unit relation changed between runs")
 
+            sign, shift = unit
             row = {
                 "graph": name,
                 "crossings": crossings,
                 "rotation": list(rotation),
                 "pd_length": len(pdcode),
+                "unit_sign_topoly_over_kg": sign,
                 "monomial_shift_topoly_minus_kg": shift,
                 "knottedgraph_s": kg_time,
                 "topoly_s": tp_time,
