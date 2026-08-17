@@ -13,6 +13,7 @@ on:
       - "dev/benchmark_crossing_bulk_query.py"
       - "dev/yamada_output_fingerprint.py"
       - "dev/benchmark_topoly_identical_pd.py"
+      - "dev/benchmark_topoly_connected_pd.py"
       - "dev/diagnose_topoly_polynomial.py"
       - ".github/workflows/yamada-benchmark.yml"
 
@@ -107,5 +108,7 @@ jobs:
           uv pip install topoly
       - name: Inspect Topoly normalization on identical PD codes
         run: uv run --no-sync python dev/diagnose_topoly_polynomial.py
-      - name: Benchmark identical PD diagrams with cold memo tables
+      - name: Benchmark decomposable identical PD diagrams with cold memo tables
         run: uv run --no-sync python dev/benchmark_topoly_identical_pd.py
+      - name: Benchmark connected identical PD diagrams with cold memo tables
+        run: uv run --no-sync python dev/benchmark_topoly_connected_pd.py
