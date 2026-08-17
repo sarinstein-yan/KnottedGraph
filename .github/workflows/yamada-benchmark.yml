@@ -12,7 +12,9 @@ on:
       - "dev/benchmark_projection_index.py"
       - "dev/benchmark_crossing_bulk_query.py"
       - "dev/benchmark_crossing_vectorized.py"
+      - "dev/benchmark_compact_optimization_candidates.py"
       - "dev/yamada_output_fingerprint.py"
+      - "dev/application_yamada_regression.py"
       - "dev/benchmark_topoly_identical_pd.py"
       - "dev/benchmark_topoly_connected_pd.py"
       - "dev/diagnose_topoly_polynomial.py"
@@ -34,6 +36,8 @@ jobs:
         run: uv sync --group dev
       - name: Compare retained SymPy evaluators with exact Laurent kernels
         run: uv run --no-sync python dev/benchmark_yamada_kernel.py
+      - name: Benchmark recurrence optimization candidates with exact equality gates
+        run: uv run --no-sync python dev/benchmark_compact_optimization_candidates.py
       - name: Compare public dispatch with compact serial
         run: uv run --no-sync python dev/benchmark_yamada_dispatch.py
       - name: Measure repeated compact states
