@@ -9,6 +9,7 @@ on:
       - "dev/benchmark_yamada_end_to_end.py"
       - "dev/benchmark_yamada_dispatch.py"
       - "dev/benchmark_state_dedup.py"
+      - "dev/benchmark_projection_index.py"
       - "dev/yamada_output_fingerprint.py"
       - "dev/benchmark_topoly_common.py"
       - "dev/benchmark_topoly_pd_adapter.py"
@@ -36,6 +37,8 @@ jobs:
         run: uv run --no-sync python dev/benchmark_yamada_dispatch.py
       - name: Measure repeated compact states
         run: uv run --no-sync python dev/benchmark_state_dedup.py
+      - name: Benchmark indexed projection crossing lookup
+        run: uv run --no-sync python dev/benchmark_projection_index.py
 
   output-equivalence:
     runs-on: ubuntu-latest
