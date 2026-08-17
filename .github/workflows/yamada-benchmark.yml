@@ -45,6 +45,8 @@ jobs:
         run: uv run --no-sync python dev/benchmark_laurent_arithmetic_candidates.py
       - name: Benchmark C++ recurrence candidate with exact fuzz and state-sum gates
         run: |
+          sudo apt-get update
+          sudo apt-get install -y libboost-dev
           uv pip install pybind11
           uv run --no-sync python dev/benchmark_native_yamada_candidate.py
       - name: Profile remaining projection and invariant costs
