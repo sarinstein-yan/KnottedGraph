@@ -146,8 +146,8 @@ class _BaseFastEvaluator:
         return to_sympy(self.compute_laurent(G), variable)
 
 
-class FastYamadaEvaluator(_BaseFastEvaluator):
-    """Direct Yamada deletion-contraction using exact Laurent coefficients."""
+class _NetworkxLaurentYamadaEvaluator(_BaseFastEvaluator):
+    """NetworkX recurrence retained to benchmark the Laurent-only optimization."""
 
     def _rec(self, H: nx.MultiGraph) -> Laurent:
         H = _r.normalize_multigraph(H)
@@ -211,8 +211,8 @@ class FastYamadaEvaluator(_BaseFastEvaluator):
         return self._set(key, value)
 
 
-class FastNegamiSpecializedEvaluator(_BaseFastEvaluator):
-    """Negami recursion specialized exactly at x=-1, y=-A-2-A^-1."""
+class _NetworkxLaurentNegamiSpecializedEvaluator(_BaseFastEvaluator):
+    """NetworkX specialized-Negami kernel retained for staged benchmarking."""
 
     def _rec(self, H: nx.MultiGraph) -> Laurent:
         H = _r.normalize_multigraph(H)
@@ -262,3 +262,26 @@ class FastNegamiSpecializedEvaluator(_BaseFastEvaluator):
             self._rec(_r.delete_multigraph_edge(H, edge)),
         )
         return self._set(key, value)
+
+
+# Explicit names used by the benchmark to separate optimization layers.
+NetworkxLaurentYamadaEvaluator = _NetworkxLaurentYamadaEvaluator
+NetworkxLaurentNegamiSpecializedEvaluator = _NetworkxLaurentNegamiSpecializedEvaluator
+
+
+class FastYamadaEvaluator:
+    """Return the fastest validated exact direct-Yamada evaluator."""
+
+    def __new__(cls):
+        from .compact import CompactYamadaEvaluator
+
+        return CompactYamadaEvaluator()
+
+
+class FastNegamiSpecializedEvaluator:
+    """Return the fastest validated exact specialized-Negami evaluator."""
+
+    def __new__(cls):
+        from .compact import CompactNegamiSpecializedEvaluator
+
+        return CompactNegamiSpecializedEvaluator()
