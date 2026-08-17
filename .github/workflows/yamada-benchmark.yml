@@ -1,0 +1,58 @@
+name: Yamada benchmark
+
+on:
+  pull_request:
+    paths:
+      - "src/knotted_graph/invariants/yamada/**"
+      - "src/knotted_graph/projection/**"
+      - "dev/benchmark_yamada_compare.py"
+      - ".github/workflows/yamada-benchmark.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install optimized branch environment
+        run: |
+          uv sync --group dev
+          uv pip install topoly
+
+      - name: Benchmark optimized branch
+        run: |
+          echo "OPTIMIZED_JSON<<EOF" >> "$GITHUB_ENV"
+          uv run --no-sync python dev/benchmark_yamada_compare.py --package knottedgraph --repeats 2 | tee /tmp/optimized.txt
+          tail -n 1 /tmp/optimized.txt >> "$GITHUB_ENV"
+          echo "EOF" >> "$GITHUB_ENV"
+
+      - name: Benchmark Latest_Workplace baseline
+        run: |
+          git worktree add /tmp/KnottedGraph-base origin/Latest_Workplace
+          cd /tmp/KnottedGraph-base
+          uv sync --group dev
+          uv run --no-sync python "$GITHUB_WORKSPACE/dev/benchmark_yamada_compare.py" --package knottedgraph --repeats 2 | tee /tmp/baseline.txt
+
+      - name: Benchmark Topoly
+        run: |
+          uv run --no-sync python dev/benchmark_yamada_compare.py --package topoly --repeats 2 | tee /tmp/topoly.txt
+
+      - name: Print comparison
+        run: |
+          echo "===== Latest_Workplace ====="
+          cat /tmp/baseline.txt
+          echo "===== optimized branch ====="
+          cat /tmp/optimized.txt
+          echo "===== Topoly ====="
+          cat /tmp/topoly.txt
