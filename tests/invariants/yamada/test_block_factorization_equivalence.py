@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import networkx as nx
+import numpy as np
 import sympy as sp
 
-from dev.benchmark_yamada_end_to_end import multi_crossing_theta
 from knotted_graph.invariants.yamada.polynomial import (
     Yamada,
     _evaluate_fast_state,
@@ -12,6 +13,53 @@ from knotted_graph.invariants.yamada.polynomial import (
 from knotted_graph.projection import PDCode
 
 A = sp.Symbol("A")
+
+
+def _multi_crossing_theta(component_count: int = 3) -> nx.MultiGraph:
+    """Self-contained nondegenerate fixture used by the regression suite."""
+    graph = nx.MultiGraph()
+
+    for component in range(component_count):
+        y_offset = 5.0 * component
+        sign = 1.0 if component % 2 == 0 else -1.0
+        left = f"u{component}"
+        right = f"v{component}"
+        graph.add_node(left, pos=np.array([-2.0, y_offset, 0.0]))
+        graph.add_node(right, pos=np.array([2.0, y_offset, 0.0]))
+
+        curves = [
+            np.array(
+                [
+                    [-2.0, 0.0, 0.0],
+                    [-1.0, -1.0, 0.5 * sign],
+                    [1.0, 1.0, 0.5 * sign],
+                    [2.0, 0.0, 0.0],
+                ]
+            ),
+            np.array(
+                [
+                    [-2.0, 0.0, 0.0],
+                    [-1.0, 1.0, -0.5 * sign],
+                    [1.0, -1.0, -0.5 * sign],
+                    [2.0, 0.0, 0.0],
+                ]
+            ),
+            np.array(
+                [
+                    [-2.0, 0.0, 0.0],
+                    [-1.0, 2.0, 0.0],
+                    [1.0, 2.0, 0.0],
+                    [2.0, 0.0, 0.0],
+                ]
+            ),
+        ]
+
+        for points in curves:
+            shifted = points.copy()
+            shifted[:, 1] += y_offset
+            graph.add_edge(left, right, pts=shifted)
+
+    return graph
 
 
 def _global_state_sum(calculator: Yamada, method: str, normalize: bool):
@@ -28,7 +76,7 @@ def _assert_equal(left, right):
 
 
 def test_factorized_state_sum_matches_full_cartesian_state_sum():
-    graph = multi_crossing_theta(4)
+    graph = _multi_crossing_theta(4)
     processor = PDCode(graph)
     processor.compute(rotation_angles=(0.0, 0.0, 0.0))
     calculator = Yamada.from_PDCode(processor)
@@ -42,10 +90,7 @@ def test_factorized_state_sum_matches_full_cartesian_state_sum():
 
 
 def test_connected_diagram_is_not_split_into_independent_blocks():
-    # A single member of the same family has one projection crossing and is a
-    # connected spatial graph. This guards the conservative crossing-terminal
-    # union used by the factorizer.
-    graph = multi_crossing_theta(1)
+    graph = _multi_crossing_theta(1)
     processor = PDCode(graph)
     processor.compute(rotation_angles=(0.0, 0.0, 0.0))
     calculator = Yamada.from_PDCode(processor)
