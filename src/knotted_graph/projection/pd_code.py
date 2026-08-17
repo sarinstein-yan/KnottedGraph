@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
+import shapely
 import sympy as sp
 import networkx as nx
 from shapely import Point, MultiPoint, LineString, MultiLineString
@@ -147,34 +148,55 @@ class PDCode:
 
     @staticmethod
     def _find_all_crossings(multilines: MultiLineString) -> List[Point]:
-        """Find all crossing points, including self-crossings."""
-        segments = PDCode._explode_to_segments(multilines)
+        """Find all crossing points, including self-crossings.
+
+        Candidate pairs, endpoint-touch rejection, and segment intersections are
+        evaluated in Shapely's vectorized GEOS kernels. The exact geometric rules
+        of the retained implementation are unchanged: only pairs with j > i are
+        considered, endpoint-only touches are ignored, overlapping/colinear
+        segments raise, and duplicate coordinates collapse through the same
+        ``set[(x, y)]`` representation before crossing IDs are assigned.
+        """
+        segment_list = PDCode._explode_to_segments(multilines)
+        if len(segment_list) < 2:
+            return []
+
+        segments = np.asarray(segment_list, dtype=object)
         tree = STRtree(segments)
+        pairs = tree.query(segments)
+        left = pairs[0].astype(np.intp, copy=False)
+        right = pairs[1].astype(np.intp, copy=False)
+
+        # Match the legacy outer-loop rule exactly: each unordered pair is tested
+        # once, with the candidate index greater than the source segment index.
+        pair_mask = right > left
+        left = left[pair_mask]
+        right = right[pair_mask]
+        if not len(left):
+            return []
+
+        seg_a = segments[left]
+        seg_b = segments[right]
+        keep = ~shapely.touches(seg_a, seg_b)
+        seg_a = seg_a[keep]
+        seg_b = seg_b[keep]
+        if not len(seg_a):
+            return []
+
+        intersections = shapely.intersection(seg_a, seg_b)
         seen: Set[Tuple[float, float]] = set()
-        
-        for i, seg in enumerate(segments):
-            for idx in tree.query(seg):
-                idx = int(idx)
-                other_seg = tree.geometries.take(idx)
-                # STRtree already returns the segment index. Reusing it avoids
-                # a linear ``segments.index(...)`` search for every candidate.
-                if idx <= i or seg.touches(other_seg):
-                    continue
-                
-                inter = seg.intersection(other_seg)
-                if inter.is_empty:
-                    continue
-                
-                gtype = inter.geom_type
-                if gtype.startswith("Line") or gtype == "GeometryCollection":
-                    raise ValueError("Found overlapping (colinear) segments")
-                
-                if gtype == "Point":
-                    seen.add((inter.x, inter.y))
-                elif gtype == "MultiPoint":
-                    for p in inter.geoms:
-                        seen.add((p.x, p.y))
-        
+        for inter in intersections:
+            if inter.is_empty:
+                continue
+            gtype = inter.geom_type
+            if gtype.startswith("Line") or gtype == "GeometryCollection":
+                raise ValueError("Found overlapping (colinear) segments")
+            if gtype == "Point":
+                seen.add((inter.x, inter.y))
+            elif gtype == "MultiPoint":
+                for point in inter.geoms:
+                    seen.add((point.x, point.y))
+
         return [Point(xy) for xy in seen]
     
 
@@ -247,7 +269,6 @@ class PDCode:
                     intersections.append((total_dist, crossing_id))
             segment_start_dist += segment.length
         return sorted(set(intersections))
-
 
     def _process_edges(self, edge_lines: MultiLineString):
         """Process all edges, splitting at crossings."""
