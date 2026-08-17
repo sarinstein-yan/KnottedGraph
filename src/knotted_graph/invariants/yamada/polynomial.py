@@ -361,30 +361,26 @@ class Yamada:
         n_jobs: int = -1,
         method: str = "negami",
     ) -> sp.Expr:
-        """Compute the Yamada polynomial using exact compact arithmetic.
+        """Compute the Yamada polynomial using the fastest exact state path.
 
-        In the single-core path, the diagram's static arc connectivity and
-        crossing-port order are prepared once and every resolved state is traced
-        directly into an immutable integer multiplicity matrix. No NetworkX
-        graph and no SymPy expression is created inside the 3^c state loop.
+        Static diagram connectivity and crossing-port order are prepared once.
+        Every resolution is then traced directly into a compact immutable
+        multiplicity matrix and evaluated with exact integer Laurent arithmetic.
+        No NetworkX graph and no SymPy expression is created inside the 3^c
+        state loop.
 
-        The parallel path retains the reference NetworkX state generator for
-        thread compatibility. Both routes return the same SymPy expression.
+        ``n_jobs`` is retained for API compatibility. The former threaded path
+        constructed NetworkX state graphs and is substantially slower even on
+        multicore runners because state construction and the exact recurrence
+        are Python-bound. The compact shared-memo serial path is therefore used
+        for all ``n_jobs`` values; this changes scheduling only, never results.
         """
         if method not in {"negami", "recursive"}:
             raise ValueError("method must be either 'negami' or 'recursive'.")
 
         evaluator = _make_fast_evaluator(method)
-
-        if n_jobs == 1:
-            evaluated_states = (
-                _evaluate_fast_state(evaluator, graph, exponent)
-                for graph, exponent in self._iter_compact_states()
-            )
-        else:
-            evaluated_states = Parallel(n_jobs=n_jobs, prefer="threads")(
-                delayed(_evaluate_fast_state)(evaluator, graph, exponent)
-                for graph, exponent in self._iter_state_graphs()
-            )
-
+        evaluated_states = (
+            _evaluate_fast_state(evaluator, graph, exponent)
+            for graph, exponent in self._iter_compact_states()
+        )
         return _sum_laurent_states(evaluated_states, variable, normalize)
