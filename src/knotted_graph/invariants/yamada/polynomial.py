@@ -10,9 +10,11 @@ from joblib import Parallel, delayed
 from knotted_graph.projection.geom import Arc, Crossing, Vertex
 
 from .fast import (
+    ONE,
     FastNegamiSpecializedEvaluator,
     FastYamadaEvaluator,
     add as laurent_add,
+    multiply as laurent_multiply,
     normalize_yamada as normalize_laurent_yamada,
     shift as laurent_shift,
     to_sympy as laurent_to_sympy,
@@ -69,10 +71,15 @@ def _evaluate_fast_state(evaluator, graph, exponent: int):
     return exponent, evaluator.compute_laurent(graph)
 
 
-def _sum_laurent_states(evaluated_states, A: sp.Symbol, normalize: bool) -> sp.Expr:
+def _sum_laurent_states_raw(evaluated_states):
     total = ()
     for exponent, state_value in evaluated_states:
         total = laurent_add(total, laurent_shift(state_value, exponent))
+    return total
+
+
+def _sum_laurent_states(evaluated_states, A: sp.Symbol, normalize: bool) -> sp.Expr:
+    total = _sum_laurent_states_raw(evaluated_states)
     if normalize:
         total = normalize_laurent_yamada(total)
     return laurent_to_sympy(total, A)
@@ -354,6 +361,84 @@ class Yamada:
         for config in itertools.product([0, 1, 2], repeat=len(self.crossings)):
             yield prepared.build(config), config.count(0) - config.count(1)
 
+    def _diagram_blocks(self) -> list["Yamada"]:
+        """Partition the PD diagram into exact crossing-interaction blocks.
+
+        Crossings are treated conservatively as interaction terminals joining
+        all incident arcs. Therefore two graph components that cross in the
+        projection remain in the same block; only pieces with no shared vertex
+        and no shared projection crossing are factored. The Yamada state sum is
+        exactly multiplicative across the resulting blocks.
+        """
+        parent: dict[tuple[str, int], tuple[str, int]] = {}
+
+        def add(node: tuple[str, int]) -> None:
+            parent.setdefault(node, node)
+
+        def find(node: tuple[str, int]) -> tuple[str, int]:
+            root = node
+            while parent[root] != root:
+                root = parent[root]
+            while parent[node] != node:
+                nxt = parent[node]
+                parent[node] = root
+                node = nxt
+            return root
+
+        def union(left: tuple[str, int], right: tuple[str, int]) -> None:
+            add(left)
+            add(right)
+            root_left = find(left)
+            root_right = find(right)
+            if root_left != root_right:
+                parent[root_right] = root_left
+
+        for vertex in self.vertices:
+            add(("v", int(vertex.id)))
+        for crossing in self.crossings:
+            add(("x", int(crossing.id)))
+        for arc in self.arcs:
+            start = (str(arc.start_type), int(arc.start_id))
+            end = (str(arc.end_type), int(arc.end_id))
+            union(start, end)
+
+        if not parent:
+            return [self]
+
+        roots = {node: find(node) for node in parent}
+        unique_roots = sorted(set(roots.values()))
+        if len(unique_roots) <= 1:
+            return [self]
+
+        blocks: list[Yamada] = []
+        for root in unique_roots:
+            vertex_ids = {
+                node_id
+                for (kind, node_id), node_root in roots.items()
+                if node_root == root and kind == "v"
+            }
+            crossing_ids = {
+                node_id
+                for (kind, node_id), node_root in roots.items()
+                if node_root == root and kind == "x"
+            }
+            block_vertices = [v for v in self.vertices if int(v.id) in vertex_ids]
+            block_crossings = [x for x in self.crossings if int(x.id) in crossing_ids]
+            block_arcs = [
+                arc
+                for arc in self.arcs
+                if roots[(str(arc.start_type), int(arc.start_id))] == root
+            ]
+            blocks.append(Yamada(block_vertices, block_crossings, block_arcs))
+        return blocks
+
+    def _compute_laurent_block(self, evaluator):
+        evaluated_states = (
+            _evaluate_fast_state(evaluator, graph, exponent)
+            for graph, exponent in self._iter_compact_states()
+        )
+        return _sum_laurent_states_raw(evaluated_states)
+
     def compute(
         self,
         variable: sp.Symbol,
@@ -363,11 +448,12 @@ class Yamada:
     ) -> sp.Expr:
         """Compute the Yamada polynomial using the fastest exact state path.
 
-        Static diagram connectivity and crossing-port order are prepared once.
-        Every resolution is then traced directly into a compact immutable
-        multiplicity matrix and evaluated with exact integer Laurent arithmetic.
-        No NetworkX graph and no SymPy expression is created inside the 3^c
-        state loop.
+        Independent crossing-interaction blocks are factored before state
+        expansion. Within each block, static diagram connectivity and crossing
+        port order are prepared once; every resolution is traced directly into
+        a compact immutable multiplicity matrix and evaluated with exact integer
+        Laurent arithmetic. No NetworkX graph and no SymPy expression is
+        created inside the 3^c state loop.
 
         ``n_jobs`` is retained for API compatibility. The former threaded path
         constructed NetworkX state graphs and is substantially slower even on
@@ -379,8 +465,11 @@ class Yamada:
             raise ValueError("method must be either 'negami' or 'recursive'.")
 
         evaluator = _make_fast_evaluator(method)
-        evaluated_states = (
-            _evaluate_fast_state(evaluator, graph, exponent)
-            for graph, exponent in self._iter_compact_states()
-        )
-        return _sum_laurent_states(evaluated_states, variable, normalize)
+        blocks = self._diagram_blocks()
+        total = ONE
+        for block in blocks:
+            total = laurent_multiply(total, block._compute_laurent_block(evaluator))
+
+        if normalize:
+            total = normalize_laurent_yamada(total)
+        return laurent_to_sympy(total, variable)
