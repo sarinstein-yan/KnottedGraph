@@ -1,11 +1,11 @@
-from __future__ import annotations
-
 """Exact integer-Laurent kernels for Yamada evaluation.
 
-The public API continues to return SymPy expressions.  This module only replaces
-hot-loop symbolic algebra with an exact sparse Laurent representation.  All
+The public API continues to return SymPy expressions. This module only replaces
+hot-loop symbolic algebra with an exact sparse Laurent representation. All
 coefficients are Python integers and all operations are algebraically exact.
 """
+
+from __future__ import annotations
 
 import threading
 from typing import TypeAlias
@@ -109,7 +109,7 @@ def fast_graph_key_normalized(G: nx.MultiGraph):
     """Exact key for an already deterministically relabelled multigraph.
 
     Unlike ``multigraph_key`` this intentionally does not solve graph
-    isomorphism.  Equality of these keys still implies equality of the labelled
+    isomorphism. Equality of these keys still implies equality of the labelled
     multigraph, so correctness is unchanged; the tradeoff is only potentially
     fewer cache hits in exchange for O(E log E) key construction.
     """
@@ -212,11 +212,7 @@ class FastYamadaEvaluator(_BaseFastEvaluator):
 
 
 class FastNegamiSpecializedEvaluator(_BaseFastEvaluator):
-    """Negami recursion specialized exactly at x=-1, y=-A-2-A^-1.
-
-    This preserves the public Negami route while avoiding construction and
-    simplification of a bivariate SymPy expression at every recursive state.
-    """
+    """Negami recursion specialized exactly at x=-1, y=-A-2-A^-1."""
 
     def _rec(self, H: nx.MultiGraph) -> Laurent:
         H = _r.normalize_multigraph(H)
@@ -228,7 +224,6 @@ class FastNegamiSpecializedEvaluator(_BaseFastEvaluator):
         n_vertices = H.number_of_nodes()
         n_edges = H.number_of_edges()
 
-        # x^n at x=-1
         if n_edges == 0:
             return self._set(key, constant((-1) ** n_vertices))
 
@@ -244,7 +239,6 @@ class FastNegamiSpecializedEvaluator(_BaseFastEvaluator):
 
         loop = _r._pick_loop_edge(H)
         if loop is not None:
-            # y - x^-1 -> -A-1-A^-1 = -sigma
             value = multiply_sigma(
                 self._rec(_r.delete_multigraph_edge(H, loop)), sign=-1
             )
@@ -252,7 +246,6 @@ class FastNegamiSpecializedEvaluator(_BaseFastEvaluator):
 
         parts = _r._split_at_articulation(H)
         if parts is not None:
-            # x^(-(k-1)) at x=-1 gives (-1)^(k-1)
             value = ONE
             for part in parts:
                 value = multiply(value, self._rec(part))
@@ -264,7 +257,6 @@ class FastNegamiSpecializedEvaluator(_BaseFastEvaluator):
         if edge is None:
             return self._set(key, constant((-1) ** n_vertices))
 
-        # h(G)=h(G/e)-x^-1 h(G-e), and -x^-1=+1 at x=-1.
         value = add(
             self._rec(_r.contract_multigraph_edge(H, edge)),
             self._rec(_r.delete_multigraph_edge(H, edge)),
