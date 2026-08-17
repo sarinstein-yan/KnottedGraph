@@ -21,9 +21,9 @@ jobs:
           - User_guide/applications/01_physics_applications.ipynb
           - User_guide/applications/02_mathematics_applications.ipynb
           - User_guide/applications/03_protein_applications.ipynb
-          - User_guide/benchmarks/Sanity_checks.ipynb
-          - User_guide/benchmarks/03_application_output_regression.ipynb
-          - User_guide/benchmarks/04_knottedgraph_vs_topoly_fair.ipynb
+          - User_guide/benchmarks/01_sanity_checks.ipynb
+          - User_guide/benchmarks/02_application_output_regression.ipynb
+          - User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb
 
     steps:
       - name: Check out optimization branch
