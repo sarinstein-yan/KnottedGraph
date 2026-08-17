@@ -12,8 +12,8 @@ from knotted_graph.invariants.yamada.compact import (
     CompactYamadaEvaluator,
 )
 from knotted_graph.invariants.yamada.fast import (
-    FastNegamiSpecializedEvaluator,
-    FastYamadaEvaluator,
+    NetworkxLaurentNegamiSpecializedEvaluator,
+    NetworkxLaurentYamadaEvaluator,
 )
 from knotted_graph.invariants.yamada.recursive import (
     NegamiRecursiveEvaluator,
@@ -61,20 +61,22 @@ def main():
         vertex_count = graph.number_of_nodes()
 
         old_t, old = timed(lambda: YamadaRecursiveEvaluator(A).compute(graph))
-        fast_t, fast = timed(lambda: FastYamadaEvaluator().compute(graph, A))
+        laurent_t, laurent = timed(
+            lambda: NetworkxLaurentYamadaEvaluator().compute(graph, A)
+        )
         compact_t, compact = timed(lambda: CompactYamadaEvaluator().compute(graph, A))
-        if not equal(old, fast) or not equal(old, compact):
+        if not equal(old, laurent) or not equal(old, compact):
             raise AssertionError(f"direct mismatch for {name}")
 
         oldn_t, oldh = timed(lambda: NegamiRecursiveEvaluator(X, Y).compute(graph))
         oldn = sp.expand(oldh.xreplace({X: -1, Y: -A - 2 - A**-1}))
-        fastn_t, fastn = timed(
-            lambda: FastNegamiSpecializedEvaluator().compute(graph, A)
+        laurentn_t, laurentn = timed(
+            lambda: NetworkxLaurentNegamiSpecializedEvaluator().compute(graph, A)
         )
         compactn_t, compactn = timed(
             lambda: CompactNegamiSpecializedEvaluator().compute(graph, A)
         )
-        if not equal(oldn, fastn) or not equal(oldn, compactn):
+        if not equal(oldn, laurentn) or not equal(oldn, compactn):
             raise AssertionError(f"Negami mismatch for {name}")
 
         row = dict(
@@ -82,14 +84,14 @@ def main():
             V=vertex_count,
             E=edge_count,
             old_direct_s=old_t,
-            fast_direct_s=fast_t,
+            networkx_laurent_direct_s=laurent_t,
             compact_direct_s=compact_t,
-            laurent_direct_speedup=old_t / fast_t,
+            laurent_direct_speedup=old_t / laurent_t,
             compact_direct_speedup=old_t / compact_t,
             old_negami_s=oldn_t,
-            fast_negami_s=fastn_t,
+            networkx_laurent_negami_s=laurentn_t,
             compact_negami_s=compactn_t,
-            laurent_negami_speedup=oldn_t / fastn_t,
+            laurent_negami_speedup=oldn_t / laurentn_t,
             compact_negami_speedup=oldn_t / compactn_t,
         )
         rows.append(row)
