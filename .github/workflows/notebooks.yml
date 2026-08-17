@@ -18,11 +18,10 @@ jobs:
           - User_guide/01_getting_started.ipynb
           - User_guide/02_core_workflows.ipynb
           - User_guide/03_advanced_and_reproduction.ipynb
-          - User_guide/Sanity_checks.ipynb
           - User_guide/applications/01_physics_applications.ipynb
           - User_guide/applications/02_mathematics_applications.ipynb
           - User_guide/applications/03_protein_applications.ipynb
-          - User_guide/benchmarks/02_yamada_latest_optimization_validation.ipynb
+          - User_guide/benchmarks/Sanity_checks.ipynb
           - User_guide/benchmarks/03_application_output_regression.ipynb
           - User_guide/benchmarks/04_knottedgraph_vs_topoly_fair.ipynb
 
