@@ -55,28 +55,19 @@ def multi_crossing_theta(component_count=5):
     return graph
 
 
-def find_connected_projection(graph, target_min=2, target_max=5):
-    for ay in range(0, 180, 15):
-        for ax in range(0, 180, 15):
-            p = PDCode(graph)
-            try:
-                p.compute(rotation_angles=(float(ax), float(ay), 0.0))
-            except (ValueError, RuntimeError):
-                continue
-            c = len(p.crossings)
-            if target_min <= c <= target_max and len(Yamada.from_PDCode(p)._diagram_blocks()) == 1:
-                return (float(ax), float(ay), 0.0), c
-    raise RuntimeError("No bounded connected projection found")
-
-
-def measure_case(name, graph, rotation):
+def measure_case(name, graph, rotation, expected_crossings):
     def projection_only():
         processor = PDCode(graph)
         processor.compute(rotation_angles=rotation)
         return processor
 
     projection_s, processor = median(projection_only, 7)
-    calculator = Yamada.from_PDCode(processor)
+    crossings = len(processor.crossings)
+    if crossings != expected_crossings:
+        raise AssertionError(f"{name}: expected {expected_crossings} crossings, got {crossings}")
+    if len(Yamada.from_PDCode(processor)._diagram_blocks()) != (5 if name == "decomposable_c5" else 1):
+        raise AssertionError(f"{name}: unexpected block factorization")
+
     invariant_s, polynomial = median(
         lambda: Yamada.from_PDCode(processor).compute(A, normalize=False, n_jobs=1, method="negami"),
         7,
@@ -94,7 +85,7 @@ def measure_case(name, graph, rotation):
         "case": name,
         "V": graph.number_of_nodes(),
         "E": graph.number_of_edges(),
-        "crossings": len(processor.crossings),
+        "crossings": crossings,
         "projection_s": projection_s,
         "invariant_s": invariant_s,
         "total_s": total_s,
@@ -107,16 +98,20 @@ def measure_case(name, graph, rotation):
 
 def main():
     rows = []
-    decomposable = multi_crossing_theta(5)
-    rows.append(measure_case("decomposable_c5", decomposable, (0.0, 0.0, 0.0)))
+    rows.append(measure_case("decomposable_c5", multi_crossing_theta(5), (0.0, 0.0, 0.0), 5))
 
     k4 = spring_embedding(nx.complete_graph(4), 7)
-    rotation, _ = find_connected_projection(k4)
-    rows.append(measure_case("connected_K4", k4, rotation))
+    rows.append(measure_case("connected_K4", k4, (0.0, 89.70158313251306, 0.0), 1))
 
     petersen = spring_embedding(nx.petersen_graph(), 9)
-    rotation, _ = find_connected_projection(petersen, 2, 4)
-    rows.append(measure_case("connected_petersen", petersen, rotation))
+    rows.append(
+        measure_case(
+            "connected_petersen",
+            petersen,
+            (-134.58074129795634, 55.40942502382338, 0.0),
+            6,
+        )
+    )
     print("SUMMARY=" + json.dumps(rows, separators=(",", ":")))
 
 
