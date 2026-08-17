@@ -17,6 +17,7 @@ from .fast import (
     shift as laurent_shift,
     to_sympy as laurent_to_sympy,
 )
+from .state_compact import PreparedCompactStateBuilder
 
 
 __all__ = [
@@ -33,7 +34,7 @@ def compute_negami(G: nx.MultiGraph, x: sp.Symbol, y: sp.Symbol) -> sp.Expr:
     """Compute the bivariate Negami polynomial by its defining edge-subset sum.
 
     This explicit implementation is intentionally retained as an independent
-    reference implementation.  The public ``method="negami"`` Yamada backend
+    reference implementation. The public ``method="negami"`` Yamada backend
     uses an exact specialization of the equivalent recursive Negami evaluator.
     """
 
@@ -64,7 +65,7 @@ def _make_fast_evaluator(method: str):
     raise ValueError("method must be either 'negami' or 'recursive'.")
 
 
-def _evaluate_fast_state(evaluator, graph: nx.MultiGraph, exponent: int):
+def _evaluate_fast_state(evaluator, graph, exponent: int):
     return exponent, evaluator.compute_laurent(graph)
 
 
@@ -85,12 +86,11 @@ def compute_yamada_from_states(
     n_jobs: int = -1,
     method: str = "negami",
 ) -> sp.Expr:
-    """Compute the Yamada polynomial from resolved diagram states.
+    """Compute the Yamada polynomial from already-resolved diagram states.
 
-    The public result and recurrence are unchanged, but state values are now
-    represented internally as exact integer Laurent polynomials.  Conversion
-    to SymPy occurs once, after all states have been summed.  This removes
-    repeated general-purpose symbolic simplification from the hot loop.
+    The public result and recurrence are unchanged. State values are represented
+    internally as exact integer Laurent polynomials and converted to SymPy only
+    once, after summation.
     """
 
     if len(state_graphs) != len(exponents):
@@ -205,7 +205,7 @@ def _build_state_graph_from_ports(
     plus_pairs: tuple[tuple[int, int], tuple[int, int]] = ((0, 3), (1, 2)),
     minus_pairs: tuple[tuple[int, int], tuple[int, int]] = ((0, 1), (2, 3)),
 ) -> nx.MultiGraph:
-    """Build a resolved state graph by tracing half-edge ports globally."""
+    """Reference NetworkX state builder retained for diagnostics/regression tests."""
 
     if len(state) != len(crossings):
         raise ValueError("State length must match the number of crossings.")
@@ -323,6 +323,7 @@ class Yamada:
         )
 
     def _iter_state_graphs(self):
+        """Reference NetworkX state iterator retained for compatibility."""
         for config in itertools.product([0, 1, 2], repeat=len(self.crossings)):
             yield (
                 _build_state_graph_from_ports(
@@ -342,6 +343,17 @@ class Yamada:
             [exponent for _, exponent in states],
         )
 
+    def _iter_compact_states(self):
+        """Trace all resolutions directly into compact multigraphs."""
+        prepared = PreparedCompactStateBuilder.prepare(
+            self.vertices,
+            self.crossings,
+            self.arcs,
+            _ordered_crossing_ports,
+        )
+        for config in itertools.product([0, 1, 2], repeat=len(self.crossings)):
+            yield prepared.build(config), config.count(0) - config.count(1)
+
     def compute(
         self,
         variable: sp.Symbol,
@@ -349,27 +361,30 @@ class Yamada:
         n_jobs: int = -1,
         method: str = "negami",
     ) -> sp.Expr:
-        """Compute the Yamada polynomial using exact Laurent arithmetic.
+        """Compute the Yamada polynomial using exact compact arithmetic.
 
-        State generation is unchanged.  The expensive crossing-free recurrence
-        now stays in sparse integer Laurent form until the final return value.
-        For ``n_jobs=1`` the joblib scheduling layer is bypassed entirely.
+        In the single-core path, the diagram's static arc connectivity and
+        crossing-port order are prepared once and every resolved state is traced
+        directly into an immutable integer multiplicity matrix. No NetworkX
+        graph and no SymPy expression is created inside the 3^c state loop.
+
+        The parallel path retains the reference NetworkX state generator for
+        thread compatibility. Both routes return the same SymPy expression.
         """
         if method not in {"negami", "recursive"}:
             raise ValueError("method must be either 'negami' or 'recursive'.")
 
         evaluator = _make_fast_evaluator(method)
-        state_iter = self._iter_state_graphs()
 
         if n_jobs == 1:
             evaluated_states = (
                 _evaluate_fast_state(evaluator, graph, exponent)
-                for graph, exponent in state_iter
+                for graph, exponent in self._iter_compact_states()
             )
         else:
             evaluated_states = Parallel(n_jobs=n_jobs, prefer="threads")(
                 delayed(_evaluate_fast_state)(evaluator, graph, exponent)
-                for graph, exponent in state_iter
+                for graph, exponent in self._iter_state_graphs()
             )
 
         return _sum_laurent_states(evaluated_states, variable, normalize)
