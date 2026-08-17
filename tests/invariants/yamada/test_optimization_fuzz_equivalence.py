@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-import itertools
 import random
 
 import networkx as nx
 import sympy as sp
 
 from knotted_graph.invariants.yamada.compact import (
+    CompactGraph,
     CompactNegamiSpecializedEvaluator,
     CompactYamadaEvaluator,
-    compact_graph_from_networkx,
 )
 from knotted_graph.invariants.yamada.recursive import YamadaRecursiveEvaluator
 
@@ -40,7 +39,7 @@ def test_compact_kernels_match_retained_sympy_reference_on_random_multigraphs():
 
     for seed in range(120):
         graph = _random_multigraph(10000 + seed)
-        compact = compact_graph_from_networkx(graph)
+        compact = CompactGraph.from_networkx(graph)
         expected = reference.compute(graph)
         _equal(direct.compute(compact, A), expected)
         _equal(negami.compute(compact, A), expected)
@@ -52,7 +51,7 @@ def test_compact_kernels_agree_after_all_single_edge_mutations():
 
     for seed in range(40):
         graph = _random_multigraph(20000 + seed)
-        compact = compact_graph_from_networkx(graph)
+        compact = CompactGraph.from_networkx(graph)
         candidates = [compact]
         loop = compact.first_loop()
         if loop is not None:
