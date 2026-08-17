@@ -216,6 +216,38 @@ class PDCode:
         # Sort by distance and remove duplicates
         return sorted(set(intersections))
 
+    @staticmethod
+    def _project_crossings_on_edge_indexed(
+            edge: LineString,
+            crossings: List[Point],
+            crossing_tree: STRtree,
+            tolerance: float = 1e-8,
+        ) -> List[Tuple[float, int]]:
+        """Indexed equivalent of :meth:`_project_crossings_on_edge`.
+
+        Candidate discovery uses a single STRtree prepared for the complete
+        projection. The exact legacy distance predicate is still applied to
+        every returned candidate, and candidate IDs are sorted before testing,
+        so output ordering and tolerance semantics are unchanged.
+        """
+        intersections = []
+        coords = list(edge.coords)
+        segment_start_dist = 0.0
+        for i in range(len(coords) - 1):
+            segment = LineString([coords[i], coords[i + 1]])
+            # Buffer only controls candidate selection. The exact legacy test
+            # below remains authoritative, including for tolerance-near points.
+            query_geometry = segment.buffer(tolerance)
+            candidate_ids = sorted(int(idx) for idx in crossing_tree.query(query_geometry))
+            for crossing_id in candidate_ids:
+                crossing_pt = crossings[crossing_id]
+                if segment.distance(crossing_pt) < tolerance:
+                    dist_local = segment.project(crossing_pt)
+                    total_dist = segment_start_dist + dist_local
+                    intersections.append((total_dist, crossing_id))
+            segment_start_dist += segment.length
+        return sorted(set(intersections))
+
 
     def _process_edges(self, edge_lines: MultiLineString):
         """Process all edges, splitting at crossings."""
@@ -223,6 +255,7 @@ class PDCode:
         edge_keys = list(self.skeleton_graph.edges.keys())
         crossing_list = list(self.crossings.values())
         crossing_points = [c.point for c in crossing_list]
+        crossing_tree = STRtree(crossing_points) if crossing_points else None
         
         for i, (edge_line, edge_key) in enumerate(zip(edge_lines.geoms, edge_keys)):
             self.edge_key_to_index[edge_key] = i
@@ -232,10 +265,17 @@ class PDCode:
             start_vertex_id = self.node_key_to_vertex_id[u]
             end_vertex_id = self.node_key_to_vertex_id[v]
             
-            # Find all crossings on this edge
-            intersections = PDCode._project_crossings_on_edge(
-                edge_line, crossing_points, tolerance=self.tolerance
-            )
+            # Find all crossings on this edge. A single crossing-point STRtree
+            # is reused across every edge/segment in the projection.
+            if crossing_tree is None:
+                intersections = []
+            else:
+                intersections = PDCode._project_crossings_on_edge_indexed(
+                    edge_line,
+                    crossing_points,
+                    crossing_tree,
+                    tolerance=self.tolerance,
+                )
             
             if not intersections:
                 # No crossings - single arc from u to v
@@ -517,7 +557,6 @@ def select_projection(
         enumerate(projections),
         key=lambda indexed: (indexed[1].num_crossings, indexed[0]),
     )[1]
-
 
 def compute_yamada_polynomial(
         skeleton_graph: nx.MultiGraph, 
