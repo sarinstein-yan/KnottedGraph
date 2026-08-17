@@ -11,6 +11,7 @@ on:
       - "dev/benchmark_state_dedup.py"
       - "dev/benchmark_projection_index.py"
       - "dev/benchmark_crossing_bulk_query.py"
+      - "dev/benchmark_crossing_vectorized.py"
       - "dev/yamada_output_fingerprint.py"
       - "dev/benchmark_topoly_identical_pd.py"
       - "dev/benchmark_topoly_connected_pd.py"
@@ -41,6 +42,8 @@ jobs:
         run: uv run --no-sync python dev/benchmark_projection_index.py
       - name: Benchmark bulk crossing candidate query
         run: uv run --no-sync python dev/benchmark_crossing_bulk_query.py
+      - name: Benchmark vectorized crossing candidate processing
+        run: uv run --no-sync python dev/benchmark_crossing_vectorized.py
 
   output-equivalence:
     runs-on: ubuntu-latest
