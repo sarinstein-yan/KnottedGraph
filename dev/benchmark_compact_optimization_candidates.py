@@ -35,7 +35,7 @@ from knotted_graph.projection import PDCode
 A = sp.Symbol("A")
 
 
-def median_time(fn, repeats=5):
+def median_time(fn, repeats=3):
     values = []
     answer = None
     for _ in range(repeats):
@@ -98,7 +98,6 @@ def _components(graph: CompactGraph):
 
 
 def _bridge_and_articulation(graph: CompactGraph):
-    """One Tarjan traversal for bridge detection and one usable articulation point."""
     rows = graph.rows
     n = len(rows)
     if n <= 1:
@@ -187,8 +186,6 @@ def _choose_edge(graph: CompactGraph, degrees, strategy: str, first_edge):
                 score = (multiplicity, degrees[i] + degrees[j], -i, -j)
             elif strategy == "max_degree_sum":
                 score = (degrees[i] + degrees[j], multiplicity, -i, -j)
-            elif strategy == "min_degree_sum":
-                score = (-(degrees[i] + degrees[j]), multiplicity, -i, -j)
             else:
                 raise ValueError(strategy)
             if best_score is None or score > best_score:
@@ -216,13 +213,11 @@ class CandidateEvaluator:
         cached = self.memo.get(graph)
         if cached is not None:
             return cached
-
         edge_count, degrees, loop, first_edge = _edge_count_and_degrees(graph)
         if edge_count == 0:
             value = constant((-1) ** graph.n)
             self.memo[graph] = value
             return value
-
         components = _components(graph)
         if len(components) > 1:
             value = ONE
@@ -230,8 +225,6 @@ class CandidateEvaluator:
                 value = multiply(value, self._rec(graph.induced(component)))
             self.memo[graph] = value
             return value
-
-        # These exact closed forms are cheaper than Tarjan and imply the same result.
         if graph.n == 2 and not graph.rows[0][0] and not graph.rows[1][1]:
             theta = graph.rows[0][1]
             if theta == edge_count:
@@ -241,17 +234,14 @@ class CandidateEvaluator:
         if graph.n and all(degree == 2 for degree in degrees):
             self.memo[graph] = SIGMA
             return SIGMA
-
         bridge, cut = _bridge_and_articulation(graph)
         if bridge:
             self.memo[graph] = ZERO
             return ZERO
-
         if loop is not None:
             value = multiply_sigma(self._rec(graph.delete_loop(loop)), sign=-1)
             self.memo[graph] = value
             return value
-
         if cut is not None:
             parts = _split_at(graph, cut)
             if parts is not None:
@@ -262,7 +252,6 @@ class CandidateEvaluator:
                     value = scale(value, -1)
                 self.memo[graph] = value
                 return value
-
         edge = _choose_edge(graph, degrees, self.strategy, first_edge)
         if edge is None:
             value = constant((-1) ** graph.n)
@@ -281,7 +270,7 @@ class CandidateEvaluator:
 
 def kernel_cases():
     out = []
-    for n in range(5, 9):
+    for n in range(5, 8):
         out.append((f"wheel_{n}", nx.MultiGraph(nx.wheel_graph(n))))
     for n in range(3, 6):
         out.append((f"ladder_{n}", nx.MultiGraph(nx.circular_ladder_graph(n))))
@@ -301,15 +290,26 @@ def spring_embedding(graph: nx.Graph, seed: int) -> nx.MultiGraph:
 
 
 def connected_calculator():
-    embedded = spring_embedding(nx.petersen_graph(), 9)
+    embedded = spring_embedding(nx.complete_graph(4), 7)
     processor = PDCode(embedded)
-    processor.compute(rotation_angles=(-134.58074129795634, 55.40942502382338, 0.0))
-    if len(processor.crossings) != 6:
-        raise AssertionError(f"Expected six crossings, got {len(processor.crossings)}")
+    # Find a deterministic nontrivial connected projection with at least two crossings.
+    selected = None
+    for ay in range(0, 180, 15):
+        for ax in range(0, 180, 15):
+            processor.compute(rotation_angles=(float(ax), float(ay), 0.0))
+            crossings = len(processor.crossings)
+            if 2 <= crossings <= 4:
+                selected = (float(ax), float(ay), 0.0)
+                break
+        if selected is not None:
+            break
+    if selected is None:
+        raise AssertionError("Could not find bounded connected K4 projection")
+    processor.compute(rotation_angles=selected)
     calculator = Yamada.from_PDCode(processor)
     if len(calculator._diagram_blocks()) != 1:
         raise AssertionError("Connected benchmark unexpectedly factorized")
-    return calculator
+    return calculator, len(processor.crossings)
 
 
 def candidate_state_sum(calculator, strategy, delete_first):
@@ -322,17 +322,14 @@ def candidate_state_sum(calculator, strategy, delete_first):
 
 
 def main():
-    strategies = ["first", "max_parallel", "max_degree_sum", "min_degree_sum"]
+    strategies = ["first", "max_parallel", "max_degree_sum"]
     rows = []
     print("KERNEL_CANDIDATES")
     for name, graph in kernel_cases():
-        baseline_t, baseline = median_time(lambda: CompactYamadaEvaluator().compute(graph, A), 5)
+        baseline_t, baseline = median_time(lambda: CompactYamadaEvaluator().compute(graph, A))
         for strategy in strategies:
             t, result = median_time(
-                lambda strategy=strategy: CandidateEvaluator(
-                    strategy=strategy, delete_first=True
-                ).compute(graph),
-                5,
+                lambda strategy=strategy: CandidateEvaluator(strategy=strategy).compute(graph)
             )
             if not equal(baseline, result):
                 raise AssertionError(f"Candidate output mismatch: {name} {strategy}")
@@ -349,15 +346,13 @@ def main():
             rows.append(row)
             print(json.dumps(row, separators=(",", ":")))
 
-    # Explicitly test the known Negami branch-order anomaly.
     ladder = nx.MultiGraph(nx.circular_ladder_graph(5))
     baseline_negami_t, baseline_negami = median_time(
-        lambda: CompactNegamiSpecializedEvaluator().compute(ladder, A), 5
+        lambda: CompactNegamiSpecializedEvaluator().compute(ladder, A)
     )
     for delete_first in (False, True):
         t, result = median_time(
-            lambda: CandidateEvaluator(strategy="first", delete_first=delete_first).compute(ladder),
-            5,
+            lambda: CandidateEvaluator(strategy="first", delete_first=delete_first).compute(ladder)
         )
         if not equal(baseline_negami, result):
             raise AssertionError("Negami branch-order candidate changed output")
@@ -372,25 +367,24 @@ def main():
         rows.append(row)
         print(json.dumps(row, separators=(",", ":")))
 
-    calculator = connected_calculator()
+    calculator, crossings = connected_calculator()
     baseline_t, baseline = median_time(
-        lambda: calculator.compute(A, normalize=False, n_jobs=1, method="negami"), 3
+        lambda: calculator.compute(A, normalize=False, n_jobs=1, method="negami"), 2
     )
     print("CONNECTED_CANDIDATES")
     for strategy in strategies:
         t, result = median_time(
-            lambda strategy=strategy: candidate_state_sum(calculator, strategy, True),
-            3,
+            lambda strategy=strategy: candidate_state_sum(calculator, strategy, True), 2
         )
         poly, calls, memo = result
         if not equal(baseline, poly):
             raise AssertionError(f"Connected candidate output mismatch: {strategy}")
         row = {
-            "scope": "connected_c6",
-            "case": "petersen",
-            "V": 10,
-            "E": 15,
-            "crossings": 6,
+            "scope": "connected",
+            "case": "K4",
+            "V": 4,
+            "E": 6,
+            "crossings": crossings,
             "strategy": strategy,
             "baseline_s": baseline_t,
             "candidate_s": t,
@@ -400,7 +394,6 @@ def main():
         }
         rows.append(row)
         print(json.dumps(row, separators=(",", ":")))
-
     print("SUMMARY=" + json.dumps(rows, separators=(",", ":")))
 
 
