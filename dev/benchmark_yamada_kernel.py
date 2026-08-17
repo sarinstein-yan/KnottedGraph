@@ -29,16 +29,16 @@ def equal(left, right):
 
 
 def cases():
+    """Small/medium CI suite; the paper notebook handles timeout-frontier sweeps."""
     out = []
-    for n in range(5, 10):
+    for n in range(5, 9):
         out.append((f"wheel_{n}", nx.MultiGraph(nx.wheel_graph(n))))
-    for n in range(3, 7):
+    for n in range(3, 6):
         out.append((f"ladder_{n}", nx.MultiGraph(nx.circular_ladder_graph(n))))
-    for n in (6, 8, 10, 12):
-        for seed in range(2):
-            g = nx.random_regular_graph(3, n, seed=1000 + 10 * n + seed)
-            if nx.is_connected(g) and not list(nx.bridges(g)):
-                out.append((f"random3_{n}_{seed}", nx.MultiGraph(g)))
+    for n in (6, 8):
+        g = nx.random_regular_graph(3, n, seed=1000 + 10 * n)
+        if nx.is_connected(g) and not list(nx.bridges(g)):
+            out.append((f"random3_{n}", nx.MultiGraph(g)))
     out.append(("K33", nx.MultiGraph(nx.complete_bipartite_graph(3, 3))))
     out.append(("K4", nx.MultiGraph(nx.complete_graph(4))))
     return out
@@ -57,8 +57,8 @@ def timed(fn, repeats=2):
 def main():
     rows = []
     for name, graph in cases():
-        E = graph.number_of_edges()
-        V = graph.number_of_nodes()
+        edge_count = graph.number_of_edges()
+        vertex_count = graph.number_of_nodes()
 
         old_t, old = timed(lambda: YamadaRecursiveEvaluator(A).compute(graph))
         fast_t, fast = timed(lambda: FastYamadaEvaluator().compute(graph, A))
@@ -79,8 +79,8 @@ def main():
 
         row = dict(
             case=name,
-            V=V,
-            E=E,
+            V=vertex_count,
+            E=edge_count,
             old_direct_s=old_t,
             fast_direct_s=fast_t,
             compact_direct_s=compact_t,
