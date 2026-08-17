@@ -8,6 +8,7 @@ on:
       - "dev/benchmark_yamada_kernel.py"
       - "dev/benchmark_yamada_end_to_end.py"
       - "dev/benchmark_yamada_dispatch.py"
+      - "dev/benchmark_state_dedup.py"
       - "dev/benchmark_topoly_common.py"
       - "dev/benchmark_topoly_pd_adapter.py"
       - "dev/diagnose_topoly_common.py"
@@ -31,6 +32,8 @@ jobs:
         run: uv run --no-sync python dev/benchmark_yamada_kernel.py
       - name: Compare public dispatch with compact serial
         run: uv run --no-sync python dev/benchmark_yamada_dispatch.py
+      - name: Measure repeated compact states
+        run: uv run --no-sync python dev/benchmark_state_dedup.py
 
   end-to-end:
     runs-on: ubuntu-latest
