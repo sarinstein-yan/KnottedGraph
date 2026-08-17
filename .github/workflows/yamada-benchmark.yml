@@ -19,9 +19,8 @@ on:
       - "dev/native_yamada_candidate.cpp"
       - "dev/yamada_output_fingerprint.py"
       - "dev/application_yamada_regression.py"
-      - "dev/benchmark_topoly_identical_pd.py"
-      - "dev/benchmark_topoly_connected_pd.py"
-      - "dev/diagnose_topoly_polynomial.py"
+      - "dev/run_yamada_sanity_checks.py"
+      - "dev/benchmark_topoly_extended_scaling.py"
       - ".github/workflows/yamada-benchmark.yml"
 
 permissions:
@@ -85,6 +84,8 @@ jobs:
         run: |
           diff -u /tmp/reference-fingerprint.json /tmp/optimized-fingerprint.json
           echo "All cross-branch PD codes, crossing counts, and Yamada polynomial strings match."
+      - name: Run published/independent sanity checks
+        run: uv run --no-sync python dev/run_yamada_sanity_checks.py
 
   end-to-end:
     runs-on: ubuntu-latest
@@ -115,6 +116,7 @@ jobs:
 
   topoly-comparison:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -125,9 +127,5 @@ jobs:
         run: |
           uv sync --group dev
           uv pip install topoly
-      - name: Inspect Topoly normalization on identical PD codes
-        run: uv run --no-sync python dev/diagnose_topoly_polynomial.py
-      - name: Benchmark decomposable identical PD diagrams with cold memo tables
-        run: uv run --no-sync python dev/benchmark_topoly_identical_pd.py
-      - name: Benchmark connected identical PD diagrams with cold memo tables
-        run: uv run --no-sync python dev/benchmark_topoly_connected_pd.py
+      - name: Extended identical-PD scaling through high c, E and V
+        run: uv run --no-sync python dev/benchmark_topoly_extended_scaling.py --timeout 10
