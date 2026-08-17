@@ -1,0 +1,90 @@
+from __future__ import annotations
+
+import json
+import statistics
+import time
+
+import networkx as nx
+import sympy as sp
+
+from knotted_graph.invariants.yamada.fast import (
+    FastNegamiSpecializedEvaluator,
+    FastYamadaEvaluator,
+)
+from knotted_graph.invariants.yamada.recursive import (
+    NegamiRecursiveEvaluator,
+    YamadaRecursiveEvaluator,
+)
+
+A = sp.Symbol("A")
+X, Y = sp.symbols("x y")
+
+
+def equal(left, right):
+    return sp.simplify(sp.together(sp.expand(left - right))) == 0
+
+
+def cases():
+    out = []
+    for n in range(5, 10):
+        out.append((f"wheel_{n}", nx.MultiGraph(nx.wheel_graph(n))))
+    for n in range(3, 7):
+        out.append((f"ladder_{n}", nx.MultiGraph(nx.circular_ladder_graph(n))))
+    for n in (6, 8, 10, 12):
+        for seed in range(2):
+            g = nx.random_regular_graph(3, n, seed=1000 + 10*n + seed)
+            if nx.is_connected(g) and not list(nx.bridges(g)):
+                out.append((f"random3_{n}_{seed}", nx.MultiGraph(g)))
+    out.append(("K33", nx.MultiGraph(nx.complete_bipartite_graph(3, 3))))
+    out.append(("K4", nx.MultiGraph(nx.complete_graph(4))))
+    return out
+
+
+def timed(fn, repeats=2):
+    vals = []
+    value = None
+    for _ in range(repeats):
+        t0 = time.perf_counter()
+        value = fn()
+        vals.append(time.perf_counter() - t0)
+    return statistics.median(vals), value
+
+
+def main():
+    rows = []
+    for name, graph in cases():
+        E = graph.number_of_edges()
+        V = graph.number_of_nodes()
+
+        old_t, old = timed(lambda: YamadaRecursiveEvaluator(A).compute(graph))
+        fast_t, fast = timed(lambda: FastYamadaEvaluator().compute(graph, A))
+        if not equal(old, fast):
+            raise AssertionError(f"direct mismatch for {name}")
+
+        oldn_t, oldh = timed(lambda: NegamiRecursiveEvaluator(X, Y).compute(graph))
+        oldn = sp.expand(oldh.xreplace({X: -1, Y: -A - 2 - A**-1}))
+        fastn_t, fastn = timed(
+            lambda: FastNegamiSpecializedEvaluator().compute(graph, A)
+        )
+        if not equal(oldn, fastn):
+            raise AssertionError(f"Negami mismatch for {name}")
+
+        row = dict(
+            case=name,
+            V=V,
+            E=E,
+            old_direct_s=old_t,
+            fast_direct_s=fast_t,
+            direct_speedup=old_t/fast_t,
+            old_negami_s=oldn_t,
+            fast_negami_s=fastn_t,
+            negami_speedup=oldn_t/fastn_t,
+        )
+        rows.append(row)
+        print(json.dumps(row, separators=(",", ":")))
+
+    print("SUMMARY=" + json.dumps(rows, separators=(",", ":")))
+
+
+if __name__ == "__main__":
+    main()
