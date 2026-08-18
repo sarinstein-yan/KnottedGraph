@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import subprocess
+
+from promote_native_prepared import main as promote_native_prepared
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -104,8 +107,8 @@ def update_benchmark_workflow() -> None:
         '      - "dev/benchmark_data/topoly_random_cubic_v1.jsonl"\n',
     )
     old = """          uv sync --group dev\n          uv pip install topoly\n"""
-    assert text.count(old) == 1
-    text = text.replace(old, "          uv sync --group dev --group benchmark\n")
+    if old in text:
+        text = text.replace(old, "          uv sync --group dev --group benchmark\n")
     path.write_text(text)
 
 
@@ -113,16 +116,11 @@ def update_notebook_workflow() -> None:
     path = ROOT / ".github/workflows/notebooks.yml"
     text = path.read_text()
     old = """          uv sync --extra all --group dev --group docs\n          uv pip install topoly\n"""
-    assert text.count(old) == 1
-    text = text.replace(
-        old,
-        "          uv sync --extra all --group dev --group docs --group benchmark\n",
-    )
-    install_anchor = """      - name: Verify branch-local import\n"""
-    assert text.count(install_anchor) == 1
-    mesa = """      - name: Install headless VTK runtime\n        run: |\n          sudo apt-get update\n          sudo apt-get install -y libegl1 libosmesa6\n\n"""
-    if "Install headless VTK runtime" not in text:
-        text = text.replace(install_anchor, mesa + install_anchor)
+    if old in text:
+        text = text.replace(
+            old,
+            "          uv sync --extra all --group dev --group docs --group benchmark\n",
+        )
     path.write_text(text)
 
 
@@ -131,13 +129,47 @@ def remove_temporary_migration_files() -> None:
         ".github/workflows/oneoff-integrate-nodal-memory.yml",
         "dev/oneoff_quality_upgrade.py",
         "dev/oneoff_finalize_quality.py",
+        "dev/promote_native_prepared.py",
     ):
         path = ROOT / relative
         if path.exists():
             path.unlink()
 
 
+def validate_promoted_native_path() -> None:
+    """Apply the pre-benchmarked native path and gate it before any commit."""
+    promote_native_prepared()
+    subprocess.run(
+        [
+            "uv",
+            "sync",
+            "--reinstall-package",
+            "knotted-graph",
+            "--all-extras",
+            "--group",
+            "dev",
+            "--group",
+            "docs",
+            "--group",
+            "benchmark",
+        ],
+        check=True,
+        cwd=ROOT,
+    )
+    subprocess.run(
+        ["uv", "run", "--no-sync", "pytest", "-q"],
+        check=True,
+        cwd=ROOT,
+    )
+    subprocess.run(
+        ["uv", "run", "--no-sync", "python", "dev/run_yamada_sanity_checks.py"],
+        check=True,
+        cwd=ROOT,
+    )
+
+
 def main() -> None:
+    validate_promoted_native_path()
     threshold = update_tests_workflow()
     update_benchmark_workflow()
     update_notebook_workflow()
