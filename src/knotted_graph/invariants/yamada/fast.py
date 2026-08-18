@@ -196,6 +196,10 @@ class _BaseFastEvaluator:
             self.memo[key] = value
         return value
 
+    def _rec(self, G: nx.MultiGraph) -> Laurent:
+        """Evaluate one recurrence state; implemented by concrete evaluators."""
+        raise NotImplementedError
+
     def compute_laurent(self, G: nx.MultiGraph) -> Laurent:
         return self._rec(G)
 
