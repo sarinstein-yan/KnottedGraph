@@ -1,8 +1,9 @@
 """Compact exact multigraph kernels for Yamada evaluation.
 
-The recursion in this module never mutates the caller's NetworkX graph and does
-not use NetworkX or SymPy inside the hot loop. A multigraph is represented by
-a symmetric integer multiplicity matrix. Loops live on the diagonal.
+The Python recurrence in this module never mutates the caller's NetworkX graph
+and does not use NetworkX or SymPy inside the hot loop. Production constructors
+select the compiled C++ recurrence when available and transparently retain this
+arbitrary-precision Python implementation as the exact fallback.
 """
 
 from __future__ import annotations
@@ -354,9 +355,27 @@ class _CompactBase:
         return value
 
 
-class CompactYamadaEvaluator(_CompactBase):
-    """Exact compact evaluator for the direct Yamada recurrence."""
+class PythonCompactYamadaEvaluator(_CompactBase):
+    """Explicit pure-Python exact evaluator, retained for testing/fallback."""
 
 
-class CompactNegamiSpecializedEvaluator(_CompactBase):
-    """Exact specialized Negami evaluator with the same optimized recurrence."""
+class PythonCompactNegamiSpecializedEvaluator(_CompactBase):
+    """Explicit pure-Python specialized Negami evaluator for testing/fallback."""
+
+
+class CompactYamadaEvaluator:
+    """Fastest available exact direct-Yamada evaluator."""
+
+    def __new__(cls):
+        from .native import make_native_or_python_evaluator
+
+        return make_native_or_python_evaluator(PythonCompactYamadaEvaluator)
+
+
+class CompactNegamiSpecializedEvaluator:
+    """Fastest available exact specialized-Negami evaluator."""
+
+    def __new__(cls):
+        from .native import make_native_or_python_evaluator
+
+        return make_native_or_python_evaluator(PythonCompactNegamiSpecializedEvaluator)
