@@ -5,15 +5,14 @@ import importlib
 import json
 import re
 import subprocess
-import sys
 import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+SELF = Path("dev/check_repository_consistency.py")
 
 STALE_TEXT = {
-    "User_guide/Sanity_checks.ipynb",
-    "User_guide/benchmarks/Sanity_checks.ipynb",
+    "Sanity_checks.ipynb",
     "User_guide/benchmarks/03_application_output_regression.ipynb",
     "User_guide/benchmarks/04_knottedgraph_vs_topoly_fair.ipynb",
     "doc/user_guide/inspection_pipeline.md",
@@ -41,9 +40,7 @@ TEXT_SUFFIXES = {
 
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 HTML_LINK_RE = re.compile(r"(?:href|src)=[\"']([^\"']+)[\"']")
-INLINE_PATH_RE = re.compile(
-    r"`((?:User_guide|doc|src|tests|scripts|dev)/[^`]+)`"
-)
+INLINE_PATH_RE = re.compile(r"`((?:User_guide|doc|src|tests|scripts|dev)/[^`]+)`")
 EXTRA_RE = re.compile(r"knotted_graph\[([A-Za-z0-9_-]+)\]")
 ABSOLUTE_LOCAL_RE = re.compile(
     r"(?:/Users/[^\s\"'`]+|/home/[^\s\"'`]+|[A-Za-z]:\\\\Users\\\\[^\s\"'`]+)"
@@ -151,7 +148,6 @@ def check_toctrees(source: Path, text: str, failures: list[str]) -> None:
 
 def check_inline_paths(source: Path, text: str, failures: list[str]) -> None:
     for path_text in INLINE_PATH_RE.findall(text):
-        # Ignore examples containing shell wildcards, substitutions, arrows or prose.
         if any(token in path_text for token in ("*", "$", "{", "}", " -> ", "<", ">")):
             continue
         candidate = ROOT / path_text.rstrip(".,:;")
@@ -217,15 +213,18 @@ def main() -> None:
         texts[path] = text
         relative = path.relative_to(ROOT)
 
-        for stale in sorted(STALE_TEXT):
-            if stale in text:
-                failures.append(f"superseded path/name in {relative}: {stale}")
+        # The audit necessarily contains the stale tokens it is designed to
+        # reject, so do not audit its own rule declarations as repository prose.
+        if relative != SELF:
+            for stale in sorted(STALE_TEXT):
+                if stale in text:
+                    failures.append(f"superseded path/name in {relative}: {stale}")
 
-        local_match = ABSOLUTE_LOCAL_RE.search(text)
-        if local_match:
-            failures.append(
-                f"machine-specific absolute path in {relative}: {local_match.group(0)}"
-            )
+            local_match = ABSOLUTE_LOCAL_RE.search(text)
+            if local_match:
+                failures.append(
+                    f"machine-specific absolute path in {relative}: {local_match.group(0)}"
+                )
 
         if path.suffix in {".md", ".ipynb"}:
             check_links(path, text, failures)
@@ -280,9 +279,7 @@ def main() -> None:
     conf = texts[ROOT / "doc" / "conf.py"]
     docs_match = re.search(r'^release\s*=\s*[\"\']([^\"\']+)', conf, re.M)
     if not package_match or package_match.group(1) != version:
-        failures.append(
-            f"package __version__ does not match pyproject version {version}"
-        )
+        failures.append(f"package __version__ does not match pyproject version {version}")
     if not docs_match or docs_match.group(1) != version:
         failures.append(f"doc release does not match pyproject version {version}")
 
