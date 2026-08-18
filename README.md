@@ -31,7 +31,10 @@ Optional Python extras are split by workflow:
 
 ```bash
 pip install "knotted_graph[nodal]"
+pip install "knotted_graph[surface]"
+pip install "knotted_graph[viz]"
 pip install "knotted_graph[repulsion]"
+pip install "knotted_graph[notebook]"
 pip install "knotted_graph[all]"
 ```
 
@@ -140,6 +143,6 @@ Build it locally with:
 uv run --group docs python -m sphinx -b html -W --keep-going doc doc/_build/html
 ```
 
-The root README intentionally stays generic. Physics-specific figures and the
-legacy nodal-skeleton walkthrough live under `doc/applications/` and
-`doc/assets/nodal/`.
+The root README intentionally stays generic. Physics-specific runnable examples
+live in `User_guide/applications/01_physics_applications.ipynb`; website figures
+used by the current Sphinx pages live under `doc/assets/site_figures/`.
