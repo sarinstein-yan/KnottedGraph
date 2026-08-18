@@ -88,7 +88,10 @@ def _sparse_bloch(model: NodalSkeleton):
 
 
 def _crop_slices(mask: np.ndarray):
-    occupied = [np.flatnonzero(mask.any(axis=axes)) for axes in ((1, 2), (0, 2), (0, 1))]
+    occupied = [
+        np.flatnonzero(mask.any(axis=axes))
+        for axes in ((1, 2), (0, 2), (0, 1))
+    ]
     if any(len(indices) == 0 for indices in occupied):
         return None
     bounds = []
@@ -108,6 +111,20 @@ def _cropped_lee(mask: np.ndarray):
     out = np.zeros_like(mask, dtype=bool)
     out[slices] = skeleton_crop
     return out, int(crop.size)
+
+
+def _reference_skeleton_graph(model: NodalSkeleton):
+    """Pre-optimization pipeline retained here as an exact benchmark oracle."""
+    dense_bloch = _dense_bloch(model)
+    spectrum = np.sqrt(np.sum(dense_bloch**2, axis=0))
+    mask = spectrum.real == 0
+    image = morph.skeletonize(mask, method="lee")
+    if np.sum(image) == 0:
+        raise ValueError("reference skeleton image is empty")
+    graph = skeleton_image_to_graph(image)
+    graph = remove_leaf_nodes(graph)
+    graph = simplify_edges(graph)
+    return smooth_edges(graph, epsilon=2, copy=False)
 
 
 def _graph_summary(graph):
@@ -139,15 +156,14 @@ def main():
         dense_t, dense = _median(lambda: _dense_bloch(model), repeats=2)
         sparse_t, sparse = _median(lambda: _sparse_bloch(model), repeats=2)
         grid_equal = np.array_equal(dense, sparse)
+        production_grid_equal = np.array_equal(dense, model._bloch_vec_grid)
         grid_max_abs = float(np.max(np.abs(dense - sparse)))
-        if not grid_equal:
+        if not grid_equal or not production_grid_equal:
             raise AssertionError(
-                f"{case_name}: sparse Bloch-grid evaluation is not byte-identical; "
+                f"{case_name}: optimized Bloch-grid evaluation is not byte-identical; "
                 f"max_abs={grid_max_abs}"
             )
 
-        # Use the production field calculation for the skeleton candidate so
-        # this comparison isolates only the Lee skeletonization stage.
         mask_t, mask = _median(lambda: model._interior_mask, repeats=2)
         full_t, full_skeleton = _median(
             lambda: morph.skeletonize(mask, method="lee"), repeats=3
@@ -155,10 +171,15 @@ def main():
         crop_t, crop_result = _median(lambda: _cropped_lee(mask), repeats=3)
         cropped_skeleton, crop_voxels = crop_result
         skeleton_equal = np.array_equal(full_skeleton, cropped_skeleton)
-        if not skeleton_equal:
-            mismatch = int(np.count_nonzero(full_skeleton != cropped_skeleton))
+        production_skeleton_equal = np.array_equal(
+            full_skeleton, model._skeleton_image
+        )
+        if not skeleton_equal or not production_skeleton_equal:
+            mismatch = int(
+                np.count_nonzero(full_skeleton != model._skeleton_image)
+            )
             raise AssertionError(
-                f"{case_name}: cropped Lee skeleton changed {mismatch} voxels"
+                f"{case_name}: production Lee skeleton changed {mismatch} voxels"
             )
 
         raw_t, raw_graph = _median(
@@ -174,18 +195,26 @@ def main():
             lambda: smooth_edges(simplified, epsilon=2, copy=True), repeats=3
         )
 
-        # Compare the explicit staged graph with the public skeleton_graph path.
-        public_model = _model(builder, dimension=dimension)
-        public_t, public_graph = _median(
-            lambda: public_model.skeleton_graph(
+        reference_model = _model(builder, dimension=dimension)
+        reference_t, reference_graph = _median(
+            lambda: _reference_skeleton_graph(reference_model), repeats=1
+        )
+        production_model = _model(builder, dimension=dimension)
+        production_t, production_graph = _median(
+            lambda: production_model.skeleton_graph(
                 simplify=True, smooth_epsilon=2
             ),
             repeats=1,
         )
-        graph_equal = _graph_summary(smoothed) == _graph_summary(public_graph)
+
+        graph_equal = (
+            _graph_summary(reference_graph)
+            == _graph_summary(production_graph)
+            == _graph_summary(smoothed)
+        )
         if not graph_equal:
             raise AssertionError(
-                f"{case_name}: staged skeleton graph differs from public output"
+                f"{case_name}: production skeleton graph differs from exact reference"
             )
 
         row = {
@@ -199,22 +228,24 @@ def main():
             "dense_bloch_s": dense_t,
             "sparse_bloch_s": sparse_t,
             "sparse_bloch_speedup": dense_t / sparse_t,
-            "bloch_grid_exact": grid_equal,
+            "bloch_grid_exact": grid_equal and production_grid_equal,
             "mask_access_s": mask_t,
             "full_lee_s": full_t,
             "cropped_lee_s": crop_t,
             "cropped_lee_speedup": full_t / crop_t,
-            "skeleton_exact": skeleton_equal,
+            "skeleton_exact": skeleton_equal and production_skeleton_equal,
             "raw_graph_s": raw_t,
             "remove_leaf_s": leaf_t,
             "simplify_edges_s": simplify_t,
             "smooth_edges_s": smooth_t,
-            "public_skeleton_graph_s": public_t,
+            "reference_skeleton_graph_s": reference_t,
+            "production_skeleton_graph_s": production_t,
+            "end_to_end_speedup": reference_t / production_t,
             "graph_exact": graph_equal,
             "raw_nodes": raw_graph.number_of_nodes(),
             "raw_edges": raw_graph.number_of_edges(),
-            "final_nodes": public_graph.number_of_nodes(),
-            "final_edges": public_graph.number_of_edges(),
+            "final_nodes": production_graph.number_of_nodes(),
+            "final_edges": production_graph.number_of_edges(),
         }
         rows.append(row)
         print(json.dumps(row, separators=(",", ":")), flush=True)
