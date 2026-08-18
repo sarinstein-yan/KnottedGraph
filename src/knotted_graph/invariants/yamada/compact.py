@@ -4,6 +4,17 @@ The Python recurrence in this module never mutates the caller's NetworkX graph
 and does not use NetworkX or SymPy inside the hot loop. Production constructors
 select the compiled C++ recurrence when available and transparently retain this
 arbitrary-precision Python implementation as the exact fallback.
+
+Literature provenance for the exact graph identities used below:
+- S. Yamada, "An invariant of spatial graphs", J. Graph Theory 13 (1989),
+  537-551. https://doi.org/10.1002/jgt.3190130503
+- M. Li, F. Lei, F. Li, A. Vesnin, "The Yamada polynomial of spatial graphs
+  obtained by edge replacements", J. Knot Theory Ramifications 27 (2018).
+  https://doi.org/10.1142/S021821651842004X
+
+The implementation-specific compact representation, memoization layout and
+native dispatch are KnottedGraph engineering choices rather than claims taken
+from those papers.
 """
 
 from __future__ import annotations
@@ -342,6 +353,8 @@ def _theta_value(theta: int) -> Laurent:
 
 
 def _negative_sigma_power(power: int) -> Laurent:
+    # Yamada loop identity H(G) = -sigma H(G-e), applied in one batch.
+    # https://doi.org/10.1142/S021821651842004X (Sec. 2, property (3)).
     value = ONE
     for _ in range(power):
         value = multiply_sigma(value, sign=-1)
@@ -349,7 +362,12 @@ def _negative_sigma_power(power: int) -> Laurent:
 
 
 def _parallel_factor(multiplicity: int) -> Laurent:
-    """Return 1 + (-sigma) + ... + (-sigma)^(multiplicity-1)."""
+    """Return 1 + (-sigma) + ... + (-sigma)^(multiplicity-1).
+
+    This is the closed form obtained by repeatedly combining Yamada's exact
+    deletion-contraction and loop identities, avoiding one recurrence branch per
+    parallel edge. See https://doi.org/10.1142/S021821651842004X, Sec. 2.
+    """
     total = ZERO
     power = ONE
     for _ in range(multiplicity):
@@ -370,7 +388,14 @@ class _CompactBase:
         return to_sympy(self.compute_laurent(graph), variable)
 
     def _reduce_homeomorphic(self, graph: CompactGraph) -> tuple[CompactGraph, Laurent]:
-        """Batch loops and suppress all loopless degree-two vertices exactly."""
+        """Batch loops and suppress all loopless degree-two vertices exactly.
+
+        The loop factor is the Yamada graph identity above. Degree-two
+        suppression follows because H(C_n)=sigma for every cycle length and the
+        graph polynomial is invariant under edge subdivision/homeomorphism in
+        this crossing-free recurrence; see Lemma 2.3 of
+        https://doi.org/10.1142/S021821651842004X.
+        """
         factor = ONE
         while True:
             graph, loop_count = graph.without_loops()
@@ -418,12 +443,16 @@ class _CompactBase:
         if graph.n == 2 and not graph.rows[0][0] and not graph.rows[1][1]:
             theta = graph.rows[0][1]
             if theta == edge_count:
+                # Closed theta value: Lemma 2.3(iv) of
+                # https://doi.org/10.1142/S021821651842004X.
                 value = _theta_value(theta)
                 self.memo[graph] = value
                 return value
 
         # After loop removal and homeomorphic suppression, any connected graph
         # with cyclomatic number <= 1 is either trivial or contains an isthmus.
+        # Yamada's bridge/isthmus identity gives H(G)=0; see Sec. 2, property (6)
+        # of https://doi.org/10.1142/S021821651842004X.
         if edge_count <= graph.n:
             self.memo[graph] = ZERO
             return ZERO
@@ -436,6 +465,8 @@ class _CompactBase:
         if articulation is not None:
             parts = graph.articulation_parts_at(articulation)
             if parts is not None:
+                # One-point-union identity H(G1.G2)=-H(G1)H(G2), applied to
+                # all articulation factors. Same reference, Sec. 2, property (5).
                 value = ONE
                 for part in parts:
                     value = multiply(value, self._rec(part))
@@ -468,6 +499,9 @@ class _CompactBase:
             value = constant((-1) ** graph.n)
         else:
             i, j = edge
+            # Exact deletion-contraction identity for a non-loop edge:
+            # H(G)=H(G/e)+H(G-e). See Sec. 2, property (2) of
+            # https://doi.org/10.1142/S021821651842004X.
             value = add(
                 self._rec(graph.delete_edge(i, j)),
                 self._rec(graph.contract_edge(i, j)),
