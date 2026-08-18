@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import networkx as nx
+import numpy as np
 
 import benchmark_topoly_random_cubic_ensemble as bench
 
@@ -16,11 +17,37 @@ DEFAULT_OUTPUT = (
 )
 
 
-def _record(sample, abstract: nx.Graph, embedded, processor, pdcode: str, embedding_attempt: int):
+def _canonical_embedded(abstract: nx.Graph, embedded: nx.MultiGraph):
+    """Rebuild a benchmark embedding in graph6's deterministic edge order."""
+    canonical = nx.MultiGraph()
     nodes = sorted(abstract.nodes())
-    edge_order = list(abstract.edges())
-    edges = sorted((min(u, v), max(u, v)) for u, v in edge_order)
+    for node in nodes:
+        canonical.add_node(node, pos=np.asarray(embedded.nodes[node]["pos"], dtype=float))
+
+    edges = sorted((min(u, v), max(u, v)) for u, v in abstract.edges())
+    for u, v in edges:
+        canonical.add_edge(
+            u,
+            v,
+            pts=np.vstack([canonical.nodes[u]["pos"], canonical.nodes[v]["pos"]]),
+        )
+    return canonical, edges
+
+
+def _record(sample, abstract: nx.Graph, embedded, processor, pdcode: str, embedding_attempt: int):
+    del processor, pdcode  # Stored PD data is derived from the canonical reconstruction.
+    canonical, edges = _canonical_embedded(abstract, embedded)
+    canonical_processor = bench.PDCode(canonical)
+    canonical_pdcode = canonical_processor.compute(rotation_angles=(0.0, 0.0, 0.0))
     graph6 = nx.to_graph6_bytes(abstract, header=False).decode("ascii").strip()
+
+    # graph6 decoding inserts nodes in numerical order and produces this same
+    # lexicographic undirected edge order. Assert that assumption here so the
+    # committed PD representation cannot silently depend on NetworkX internals.
+    reconstructed = nx.from_graph6_bytes(graph6.encode("ascii"))
+    reconstructed_edges = list(reconstructed.edges())
+    assert reconstructed_edges == edges, (reconstructed_edges, edges)
+
     return {
         "schema_version": 2,
         "family": "random_cubic",
@@ -32,15 +59,15 @@ def _record(sample, abstract: nx.Graph, embedded, processor, pdcode: str, embedd
         "embedding_attempt": embedding_attempt,
         "graph6": graph6,
         "edge_list": [[int(u), int(v)] for u, v in edges],
-        "embedding_edge_order": [[int(u), int(v)] for u, v in edge_order],
+        "embedding_edge_order": [[int(u), int(v)] for u, v in edges],
         "node_positions": {
-            str(int(node)): [float(x) for x in embedded.nodes[node]["pos"]]
-            for node in nodes
+            str(int(node)): [float(x) for x in canonical.nodes[node]["pos"]]
+            for node in sorted(canonical.nodes())
         },
-        "pdcode": pdcode,
-        "crossings": len(processor.crossings),
+        "pdcode": canonical_pdcode,
+        "crossings": len(canonical_processor.crossings),
         "topology_instance_hash": bench._abstract_hash(abstract),
-        "embedding_hash": bench._embedding_hash(embedded),
+        "embedding_hash": bench._embedding_hash(canonical),
     }
 
 
@@ -54,19 +81,18 @@ def generate(output: Path, *, base_seed: int, samples_per_v: int) -> list[dict]:
                 abstract,
                 base_seed,
             )
-            rows.append(
-                _record(
-                    sample,
-                    abstract,
-                    embedded,
-                    processor,
-                    pdcode,
-                    embedding_attempt,
-                )
+            row = _record(
+                sample,
+                abstract,
+                embedded,
+                processor,
+                pdcode,
+                embedding_attempt,
             )
+            rows.append(row)
             print(
                 f"V={vertex_count} sample={sample.sample_index + 1}/{samples_per_v} "
-                f"crossings={len(processor.crossings)}",
+                f"crossings={row['crossings']}",
                 flush=True,
             )
 
