@@ -16,7 +16,6 @@ import sympy as sp
 from .fast import (
     Laurent,
     ONE,
-    SIGMA,
     ZERO,
     add,
     constant,
