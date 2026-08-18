@@ -27,6 +27,9 @@ on:
       - "dev/application_yamada_regression.py"
       - "dev/run_yamada_sanity_checks.py"
       - "dev/benchmark_topoly_extended_scaling.py"
+      - "dev/plot_topoly_scaling.py"
+      - "tests/benchmarks/test_topoly_paper_setup.py"
+      - "User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb"
       - ".github/workflows/yamada-benchmark.yml"
 
 permissions:
@@ -177,5 +180,7 @@ jobs:
           from knotted_graph.invariants.yamada.native import native_available
           assert native_available()
           PY
-      - name: Extended identical-PD scaling through high c, E and V
-        run: uv run --no-sync python dev/benchmark_topoly_extended_scaling.py --timeout 10
+      - name: Validate paper benchmark design
+        run: uv run --no-sync pytest -q tests/benchmarks/test_topoly_paper_setup.py
+      - name: Smoke-test identical-PD ensemble scaling
+        run: uv run --no-sync python dev/benchmark_topoly_extended_scaling.py --profile smoke --embeddings 2 --timeout 10
