@@ -23,6 +23,11 @@ STALE_TEXT = {
     "src/knotted_graph/yamada/",
 }
 
+GENERATED_PATHS = {
+    "doc/_build/",
+    "site_preview/",
+}
+
 TEXT_SUFFIXES = {
     ".md",
     ".py",
@@ -148,9 +153,14 @@ def check_toctrees(source: Path, text: str, failures: list[str]) -> None:
 
 def check_inline_paths(source: Path, text: str, failures: list[str]) -> None:
     for path_text in INLINE_PATH_RE.findall(text):
+        if path_text in GENERATED_PATHS:
+            continue
         if any(token in path_text for token in ("*", "$", "{", "}", " -> ", "<", ">")):
             continue
-        candidate = ROOT / path_text.rstrip(".,:;")
+        # Code-navigation prose may append a Python symbol anchor using
+        # file.py::Class.method. Validate the file portion only.
+        path_only = path_text.split("::", 1)[0].rstrip(".,:;")
+        candidate = ROOT / path_only
         if not candidate.exists():
             failures.append(
                 f"stale repository path in {source.relative_to(ROOT)}: `{path_text}`"
