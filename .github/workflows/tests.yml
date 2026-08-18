@@ -39,6 +39,14 @@ jobs:
       - name: Install core development environment
         run: uv sync --group dev
 
+      - name: Require compiled Yamada backend
+        run: |
+          uv run --no-sync python - <<'PY'
+          from knotted_graph.invariants.yamada.native import native_available
+          print("native Yamada backend:", native_available())
+          assert native_available(), "CI compiler is available but native extension was not built"
+          PY
+
       - name: Run base-dependency tests
         run: >
           uv run --no-sync pytest -q
@@ -67,6 +75,13 @@ jobs:
       - name: Install all Python extras
         run: uv sync --group dev --all-extras
 
+      - name: Require compiled Yamada backend
+        run: |
+          uv run --no-sync python - <<'PY'
+          from knotted_graph.invariants.yamada.native import native_available
+          assert native_available()
+          PY
+
       - name: Run complete Python test suite
         run: uv run --no-sync pytest -q
 
@@ -91,17 +106,20 @@ jobs:
         run: python -m venv wheel-test
       - name: Install built wheel
         run: wheel-test/bin/pip install dist/*.whl
-      - name: Smoke-test installed wheel
+      - name: Smoke-test installed wheel and native backend
         run: |
           wheel-test/bin/python - <<'PY'
           import sympy as sp
           import knotted_graph
           from knotted_graph.core import ThetaGraph
           from knotted_graph.invariants.yamada import compute_yamada_polynomial_recursive
+          from knotted_graph.invariants.yamada.native import native_available
           A = sp.Symbol("A")
           result = compute_yamada_polynomial_recursive(ThetaGraph(3), A)
           print("version:", knotted_graph.__version__)
+          print("native Yamada backend:", native_available())
           print("Theta_3:", result)
+          assert native_available(), "built wheel does not contain native Yamada extension"
           assert result != 0
           PY
 
