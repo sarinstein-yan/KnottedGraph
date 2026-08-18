@@ -51,19 +51,13 @@ def test_skeleton_graph_converts_external_image_to_graph(monkeypatch):
 
     assert result is converted
     assert captured["image"].dtype == bool
-    assert np.array_equal(
-        captured["image"],
-        image.astype(bool),
-    )
+    assert np.array_equal(captured["image"], image.astype(bool))
 
 
 def test_skeleton_graph_rejects_non_3d_external_image():
     model = _bare_nodal_skeleton()
 
-    with pytest.raises(
-        ValueError,
-        match="three-dimensional",
-    ):
+    with pytest.raises(ValueError, match="three-dimensional"):
         model.skeleton_graph(
             simplify=False,
             smooth_epsilon=0,
@@ -72,11 +66,7 @@ def test_skeleton_graph_rejects_non_3d_external_image():
 
 
 def test_fields_pv_does_not_require_supported_berry_curvature():
-    kx, ky, kz = sp.symbols(
-        "kx ky kz",
-        real=True,
-    )
-
+    kx, ky, kz = sp.symbols("kx ky kz", real=True)
     model = NodalSkeleton(
         (kx, ky, kz),
         k_symbols=(kx, ky, kz),
@@ -85,9 +75,7 @@ def test_fields_pv_does_not_require_supported_berry_curvature():
     )
 
     assert not model._berry_prerequisites["valid"]
-
     fields = model.fields_pv
-
     assert "real" in fields.point_data
     assert "imag" in fields.point_data
     assert "gap" in fields.point_data
@@ -164,6 +152,25 @@ def test_coordinate_grids_are_lazy_but_preserve_legacy_arrays():
         assert got.flags.c_contiguous
 
 
+def test_lazy_grid_preserves_assignment_and_deletion_semantics():
+    kx, ky, kz = sp.symbols("kx ky kz", real=True)
+    model = NodalSkeleton(
+        (kx, ky, sp.I / 5 + kz),
+        k_symbols=(kx, ky, kz),
+        dimension=5,
+    )
+
+    model.kx_grid = None
+    assert model.kx_grid is None
+    del model.kx_grid
+    assert "kx_grid" not in model.__dict__
+    regenerated = model.kx_grid
+    expected = np.meshgrid(
+        model.kx_vals, model.ky_vals, model.kz_vals, indexing="ij"
+    )[0]
+    assert np.array_equal(regenerated, expected)
+
+
 def test_streamed_spectrum_is_byte_identical_to_stacked_bloch_grid():
     kx, ky, kz = sp.symbols("kx ky kz", real=True)
     model = NodalSkeleton(
@@ -178,7 +185,6 @@ def test_streamed_spectrum_is_byte_identical_to_stacked_bloch_grid():
 
     streamed = model.spectrum.copy()
     reference = np.sqrt(np.sum(model._bloch_vec_grid**2, axis=0))
-
     assert np.array_equal(streamed, reference)
 
 
@@ -195,6 +201,38 @@ def test_skeleton_workflow_does_not_materialize_dense_coordinate_grids():
     )
 
     _ = model._skeleton_image
+    assert all(
+        name not in model.__dict__
+        for name in ("kx_grid", "ky_grid", "kz_grid")
+    )
+
+
+def test_skeleton_coords_match_legacy_dense_grid_formula_exactly():
+    kx, ky, kz = sp.symbols("kx ky kz", real=True)
+    model = NodalSkeleton(
+        (
+            sp.cos(kx) + sp.cos(ky) + sp.cos(kz),
+            sp.I * sp.Rational(1, 2),
+            sp.sin(kx),
+        ),
+        k_symbols=(kx, ky, kz),
+        dimension=17,
+    )
+
+    indices = np.where(model._skeleton_image)
+    expected_grids = np.meshgrid(
+        model.kx_vals,
+        model.ky_vals,
+        model.kz_vals,
+        indexing="ij",
+    )
+    expected = np.asarray(
+        [grid[indices] for grid in expected_grids]
+    ).T
+
+    assert np.array_equal(model.skeleton_coords, expected)
+    # The optimized property itself must not force the public dense grids into
+    # memory merely to obtain skeleton coordinates.
     assert all(
         name not in model.__dict__
         for name in ("kx_grid", "ky_grid", "kz_grid")
