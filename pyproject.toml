@@ -79,6 +79,9 @@ repulsion = [
 notebook = [
     "jupyterlab",
 ]
+benchmark = [
+    "topoly==1.1.0",
+]
 all = [
     "biopython",
     "igraph",
@@ -93,6 +96,7 @@ all = [
     "pdf2image",
     "pillow",
     "pymupdf",
+    "topoly==1.1.0",
 ]
 
 [project.scripts]
