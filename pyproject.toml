@@ -1,6 +1,9 @@
 [build-system]
-requires = ["uv_build>=0.9.18,<0.13.0"]
-build-backend = "uv_build"
+requires = [
+    "scikit-build-core>=0.10,<1.0",
+    "pybind11>=2.12,<4",
+]
+build-backend = "scikit_build_core.build"
 
 [project]
 name = "knotted_graph"
@@ -37,6 +40,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: C++",
 ]
 dependencies = [
     "numpy",
@@ -115,6 +119,13 @@ docs = [
     "sphinx-copybutton",
     "sphinx-design",
 ]
+
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+wheel.packages = ["src/knotted_graph"]
+
+[tool.scikit-build.cmake]
+build-type = "Release"
 
 [tool.ruff.lint.per-file-ignores]
 "src/knotted_graph/__init__.py" = ["F403"]
