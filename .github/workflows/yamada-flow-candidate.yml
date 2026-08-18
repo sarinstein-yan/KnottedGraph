@@ -20,6 +20,8 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install environment
-        run: uv sync --group dev
+        run: |
+          uv sync --group dev
+          uv pip install pybind11
       - name: Benchmark exact native prepared-diagram candidate
         run: uv run --no-sync python dev/benchmark_native_prepared_candidate.py
