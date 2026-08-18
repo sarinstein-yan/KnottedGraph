@@ -9,7 +9,7 @@ import numpy as np
 import sympy as sp
 
 from knotted_graph.applications.nodal import NodalSkeleton
-from knotted_graph.applications.nodal._memory import _streamed_spectrum
+from knotted_graph.applications.nodal._memory import install_memory_optimizations
 from knotted_graph.applications.nodal.models import (
     hopf_link_bloch_vector,
     pq_torus_knot_bloch_vector,
@@ -18,6 +18,13 @@ from knotted_graph.applications.nodal.models import (
 )
 
 kx, ky, kz = sp.symbols("k_x k_y k_z", real=True)
+
+
+class CandidateNodalSkeleton(NodalSkeleton):
+    """Isolated candidate so production NodalSkeleton remains untouched."""
+
+
+install_memory_optimizations(CandidateNodalSkeleton)
 
 
 def _specs():
@@ -32,8 +39,8 @@ def _specs():
     ]
 
 
-def _model(builder, dimension):
-    return NodalSkeleton(
+def _model(cls, builder, dimension):
+    return cls(
         builder(),
         k_symbols=(kx, ky, kz),
         dimension=dimension,
@@ -84,10 +91,28 @@ def main():
 
     for case_name, builder in _specs():
         print(f"CASE={case_name}", flush=True)
-        model = _model(builder, dimension)
+        reference = _model(NodalSkeleton, builder, dimension)
+        candidate = _model(CandidateNodalSkeleton, builder, dimension)
 
-        stacked_t, stacked = _median(lambda: _stacked_spectrum(model), repeats=3)
-        streamed_t, streamed = _median(lambda: _streamed_spectrum(model), repeats=3)
+        # Candidate constructor must not materialize any of the legacy dense
+        # coordinate grids.
+        for name in ("kx_grid", "ky_grid", "kz_grid"):
+            if name in candidate.__dict__:
+                raise AssertionError(f"{case_name}: {name} was eagerly allocated")
+
+        stacked_t, stacked = _median(lambda: _stacked_spectrum(reference), repeats=3)
+        streamed_t, streamed = _median(lambda: candidate.spectrum, repeats=1)
+        # cached_property timing above would become zero after first access, so
+        # use fresh candidates for the repeated timing samples.
+        streamed_samples = []
+        streamed = None
+        for _ in range(3):
+            fresh = _model(CandidateNodalSkeleton, builder, dimension)
+            gc.collect()
+            start = time.perf_counter()
+            streamed = fresh.spectrum
+            streamed_samples.append(time.perf_counter() - start)
+        streamed_t = statistics.median(streamed_samples)
 
         exact = np.array_equal(stacked, streamed)
         max_abs = float(np.max(np.abs(stacked - streamed)))
@@ -97,12 +122,21 @@ def main():
             )
 
         # No RAM optimization is accepted if it makes the actual spectrum hot
-        # path slower.  A 2% tolerance is only to avoid rejecting equal-speed
-        # implementations due CI timer jitter; reported ratios remain raw.
+        # path slower. A 2% tolerance is solely CI timer jitter.
         if streamed_t > stacked_t * 1.02:
             raise AssertionError(
                 f"{case_name}: streamed spectrum regressed runtime: "
                 f"stacked={stacked_t:.6g}s streamed={streamed_t:.6g}s"
+            )
+
+        # Skeleton output must also be exactly unchanged before production use.
+        reference_image = reference._skeleton_image
+        candidate_image = candidate._skeleton_image
+        skeleton_exact = np.array_equal(reference_image, candidate_image)
+        if not skeleton_exact:
+            mismatch = int(np.count_nonzero(reference_image != candidate_image))
+            raise AssertionError(
+                f"{case_name}: memory candidate changed {mismatch} skeleton voxels"
             )
 
         row = {
@@ -112,6 +146,7 @@ def main():
             "streamed_spectrum_s": streamed_t,
             "streamed_speedup": stacked_t / streamed_t,
             "spectrum_exact": exact,
+            "skeleton_exact": skeleton_exact,
             "legacy_dense_coordinate_grid_bytes": _legacy_grid_bytes(dimension),
             "legacy_bloch_stack_bytes": _bloch_stack_bytes(dimension),
             "lazy_grid_bytes_avoided_until_access": _legacy_grid_bytes(dimension),
@@ -120,14 +155,19 @@ def main():
         rows.append(row)
         print(json.dumps(row, separators=(",", ":")), flush=True)
 
-    # Public compatibility of coordinate arrays: values, shape, dtype,
-    # writability and C-contiguity must remain those of np.meshgrid.
-    model = _model(_specs()[0][1], 32)
+    # Public coordinate-grid compatibility of the actual candidate descriptor:
+    # same values, dtype, shape, writability and C-contiguity as np.meshgrid.
+    candidate = _model(CandidateNodalSkeleton, _specs()[0][1], 32)
+    assert all(name not in candidate.__dict__ for name in ("kx_grid", "ky_grid", "kz_grid"))
     expected = np.meshgrid(
-        model.kx_vals, model.ky_vals, model.kz_vals, indexing="ij"
+        candidate.kx_vals,
+        candidate.ky_vals,
+        candidate.kz_vals,
+        indexing="ij",
     )
     for name, want in zip(("kx_grid", "ky_grid", "kz_grid"), expected):
-        got = getattr(model, name)
+        got = getattr(candidate, name)
+        assert name in candidate.__dict__
         assert np.array_equal(got, want)
         assert got.dtype == want.dtype
         assert got.shape == want.shape
