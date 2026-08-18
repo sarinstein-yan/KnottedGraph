@@ -22,6 +22,7 @@ on:
       - "dev/benchmark_laurent_arithmetic_candidates.py"
       - "dev/benchmark_native_yamada_candidate.py"
       - "dev/benchmark_skeletonization_candidates.py"
+      - "dev/benchmark_nodal_memory_candidates.py"
       - "dev/yamada_output_fingerprint.py"
       - "dev/application_yamada_regression.py"
       - "dev/run_yamada_sanity_checks.py"
@@ -85,6 +86,8 @@ jobs:
         run: uv sync --extra all --group dev
       - name: Benchmark exact skeletonization candidates
         run: uv run --no-sync python dev/benchmark_skeletonization_candidates.py
+      - name: Benchmark lazy-grid and streamed-spectrum memory candidates
+        run: uv run --no-sync python dev/benchmark_nodal_memory_candidates.py
       - name: Run nodal regression tests
         run: uv run --no-sync pytest -q tests/applications/test_nodal_regressions.py
       - name: Run application output regression notebook
