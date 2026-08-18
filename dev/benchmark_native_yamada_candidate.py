@@ -1,68 +1,26 @@
 from __future__ import annotations
 
-import importlib.util
 import json
-import os
-from pathlib import Path
 import random
-import shlex
 import statistics
-import subprocess
-import sys
-import sysconfig
-import tempfile
 import time
 
 import networkx as nx
 import numpy as np
-import sympy as sp
 
 from knotted_graph.invariants.yamada.compact import (
     CompactGraph,
-    CompactNegamiSpecializedEvaluator,
     CompactYamadaEvaluator,
+    PythonCompactNegamiSpecializedEvaluator,
+    PythonCompactYamadaEvaluator,
 )
 from knotted_graph.invariants.yamada.fast import add, shift
+from knotted_graph.invariants.yamada.native import (
+    NativeCompactEvaluator,
+    native_available,
+)
 from knotted_graph.invariants.yamada.polynomial import Yamada
 from knotted_graph.projection import PDCode
-
-A = sp.Symbol("A")
-ROOT = Path(__file__).resolve().parents[1]
-
-
-def compile_candidate() -> object:
-    build = Path(tempfile.mkdtemp(prefix="kg-native-yamada-"))
-    suffix = sysconfig.get_config_var("EXT_SUFFIX")
-    if not suffix:
-        raise RuntimeError("Python extension suffix unavailable")
-    output = build / f"_kg_native_candidate{suffix}"
-    includes = subprocess.check_output(
-        [sys.executable, "-m", "pybind11", "--includes"], text=True
-    ).strip()
-    compiler = os.environ.get("CXX", "c++")
-    command = [
-        compiler,
-        "-O3",
-        "-DNDEBUG",
-        "-shared",
-        "-std=c++17",
-        "-fPIC",
-        *shlex.split(includes),
-        str(ROOT / "dev" / "native_yamada_candidate.cpp"),
-        "-o",
-        str(output),
-    ]
-    subprocess.run(command, check=True)
-    spec = importlib.util.spec_from_file_location("_kg_native_candidate", output)
-    if spec is None or spec.loader is None:
-        raise RuntimeError("Could not load compiled native candidate")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def rows(graph: CompactGraph) -> list[list[int]]:
-    return [list(row) for row in graph.rows]
 
 
 def med(fn, repeats=5):
@@ -76,22 +34,18 @@ def med(fn, repeats=5):
 
 
 def python_state_sum(states):
-    evaluator = CompactNegamiSpecializedEvaluator()
+    evaluator = PythonCompactNegamiSpecializedEvaluator()
     total = ()
     for graph, exponent in states:
         total = add(total, shift(evaluator.compute_laurent(graph), exponent))
     return total, len(evaluator.memo)
 
 
-def native_state_sum(module, states):
-    evaluator = module.NativeEvaluator()
-    total = tuple(
-        tuple(term)
-        for term in evaluator.compute_many(
-            [rows(graph) for graph, _ in states],
-            [exponent for _, exponent in states],
-        )
-    )
+def production_native_state_sum(states):
+    evaluator = CompactYamadaEvaluator()
+    if not isinstance(evaluator, NativeCompactEvaluator):
+        raise AssertionError("production compact evaluator did not select native backend")
+    total = evaluator.compute_many_laurent(states)
     return total, evaluator.memo_size
 
 
@@ -105,7 +59,9 @@ def spring_embedding(graph: nx.Graph, seed: int) -> nx.MultiGraph:
     return embedded
 
 
-def fuzz_gate(module):
+def fuzz_gate():
+    if not native_available():
+        raise AssertionError("native extension is not active")
     rng = random.Random(20260818)
     checked = 0
     for _ in range(120):
@@ -113,23 +69,21 @@ def fuzz_gate(module):
         graph = nx.MultiGraph()
         graph.add_nodes_from(range(n))
         for _ in range(rng.randint(0, 15)):
-            u = rng.randrange(n)
-            v = rng.randrange(n)
-            graph.add_edge(u, v)
+            graph.add_edge(rng.randrange(n), rng.randrange(n))
         compact = CompactGraph.from_networkx(graph)
-        expected = CompactYamadaEvaluator().compute_laurent(compact)
-        native = module.NativeEvaluator()
-        actual = tuple(tuple(term) for term in native.compute(rows(compact)))
+        expected = PythonCompactYamadaEvaluator().compute_laurent(compact)
+        selected = CompactYamadaEvaluator()
+        actual = selected.compute_laurent(compact)
         if expected != actual:
             raise AssertionError(
-                f"native candidate mismatch on fuzz graph {checked}: "
+                f"production native mismatch on fuzz graph {checked}: "
                 f"expected={expected}, actual={actual}, rows={compact.rows}"
             )
         checked += 1
-    print(f"native fuzz equality gate: {checked} graphs PASS")
+    print(f"production native fuzz equality gate: {checked} graphs PASS")
 
 
-def kernel_benchmarks(module):
+def kernel_benchmarks():
     cases = [
         ("wheel8", nx.MultiGraph(nx.wheel_graph(8))),
         ("ladder5", nx.MultiGraph(nx.circular_ladder_graph(5))),
@@ -140,16 +94,13 @@ def kernel_benchmarks(module):
     for name, graph in cases:
         compact = CompactGraph.from_networkx(graph)
         python_t, expected = med(
-            lambda: CompactYamadaEvaluator().compute_laurent(compact), 9
+            lambda: PythonCompactYamadaEvaluator().compute_laurent(compact), 9
         )
         native_t, actual = med(
-            lambda: tuple(
-                tuple(term) for term in module.NativeEvaluator().compute(rows(compact))
-            ),
-            9,
+            lambda: CompactYamadaEvaluator().compute_laurent(compact), 9
         )
         if expected != actual:
-            raise AssertionError(f"native kernel mismatch: {name}")
+            raise AssertionError(f"production native kernel mismatch: {name}")
         row = {
             "scope": "crossing_free_kernel",
             "case": name,
@@ -164,7 +115,7 @@ def kernel_benchmarks(module):
     return out
 
 
-def connected_petersen_benchmark(module):
+def connected_petersen_benchmark():
     embedded = spring_embedding(nx.petersen_graph(), 9)
     processor = PDCode(embedded)
     rotation = (-134.58074129795634, 55.40942502382338, 0.0)
@@ -179,10 +130,10 @@ def connected_petersen_benchmark(module):
         raise AssertionError(f"expected 729 states, got {len(states)}")
 
     python_t, python_result = med(lambda: python_state_sum(states), 3)
-    native_t, native_result = med(lambda: native_state_sum(module, states), 5)
+    native_t, native_result = med(lambda: production_native_state_sum(states), 5)
     if python_result[0] != native_result[0]:
         raise AssertionError(
-            "native connected state sum changed exact Laurent output: "
+            "production native connected state sum changed exact Laurent output: "
             f"python={python_result[0]}, native={native_result[0]}"
         )
     row = {
@@ -202,11 +153,23 @@ def connected_petersen_benchmark(module):
     return row
 
 
+def overflow_fallback_gate():
+    compact = CompactGraph(((0, 70), (70, 0)))
+    expected = PythonCompactYamadaEvaluator().compute_laurent(compact)
+    evaluator = CompactYamadaEvaluator()
+    actual = evaluator.compute_laurent(compact)
+    if actual != expected:
+        raise AssertionError("native overflow fallback changed exact theta_70 output")
+    if not isinstance(evaluator, NativeCompactEvaluator) or evaluator.fallback_calls != 1:
+        raise AssertionError("theta_70 did not exercise native overflow fallback")
+    print("native int64 overflow -> arbitrary-precision Python fallback: PASS")
+
+
 def main():
-    module = compile_candidate()
-    fuzz_gate(module)
-    results = kernel_benchmarks(module)
-    results.append(connected_petersen_benchmark(module))
+    fuzz_gate()
+    overflow_fallback_gate()
+    results = kernel_benchmarks()
+    results.append(connected_petersen_benchmark())
     print("SUMMARY=" + json.dumps(results, separators=(",", ":")))
 
 
