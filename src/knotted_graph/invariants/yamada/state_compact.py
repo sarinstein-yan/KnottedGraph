@@ -5,6 +5,14 @@ avoiding creation of a NetworkX MultiGraph for every one of the 3^c states.
 Static arc connectivity and crossing port order are compiled once per diagram.
 The hot state loop uses dense integer port tables and bytearrays rather than
 Python tuple/dict/set lookups.
+
+The Reidemeister-II preprocessing below uses the regular-isotopy invariance of
+Yamada's spatial-graph polynomial. Primary reference:
+S. Yamada, "An invariant of spatial graphs", J. Graph Theory 13 (1989),
+537-551. https://doi.org/10.1002/jgt.3190130503
+
+The integer-port representation and conservative bigon detector are
+KnottedGraph implementation choices; they are not copied from that paper.
 """
 
 from __future__ import annotations
@@ -105,6 +113,9 @@ class PreparedCompactStateBuilder:
         A removable bigon consists of two crossings joined by exactly two
         physical arcs. Those arcs occupy adjacent cyclic positions at both
         crossings and preserve over/under parity between their endpoints.
+
+        Mathematical justification: invariance under Reidemeister II is part of
+        Yamada regular isotopy; https://doi.org/10.1002/jgt.3190130503.
         """
         arc_partner = self.arc_partner
 
@@ -232,7 +243,8 @@ class PreparedCompactStateBuilder:
 
         The returned builder represents the same regular-isotopy class while
         containing two fewer crossings per accepted move. The original builder
-        is not mutated.
+        is not mutated. See https://doi.org/10.1002/jgt.3190130503 for the
+        underlying regular-isotopy invariance.
         """
         current = self
         count = 0
