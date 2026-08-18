@@ -3,11 +3,12 @@ from __future__ import annotations
 import gc
 import json
 import multiprocessing as mp
-import resource
 import statistics
+import threading
 import time
 
 import numpy as np
+import psutil
 import sympy as sp
 
 from knotted_graph.applications.nodal import NodalSkeleton
@@ -91,31 +92,50 @@ def _bloch_stack_bytes(dimension: int) -> int:
     return 3 * dimension**3 * np.dtype(np.complex128).itemsize
 
 
-def _rss_bytes() -> int:
-    # Linux reports ru_maxrss in KiB; this benchmark is a Linux CI gate.
-    return int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss) * 1024
-
-
 def _process_worker(kind: str, case_name: str, dimension: int, queue):
     try:
         builder = _builder(case_name)
         char = builder()
         cls = NodalSkeleton if kind == "reference" else CandidateNodalSkeleton
         gc.collect()
+
+        process = psutil.Process()
+        baseline_rss = process.memory_info().rss
+        peak_rss = [baseline_rss]
+        stop = threading.Event()
+
+        def sample_rss():
+            while not stop.is_set():
+                rss = process.memory_info().rss
+                if rss > peak_rss[0]:
+                    peak_rss[0] = rss
+                time.sleep(0.001)
+
+        sampler = threading.Thread(target=sample_rss, daemon=True)
+        sampler.start()
         start = time.perf_counter()
-        model = cls(
-            char,
-            k_symbols=(kx, ky, kz),
-            dimension=dimension,
-            axis_scale=(1.0, 1.0, 1.5),
-        )
-        image = model._skeleton_image
-        elapsed = time.perf_counter() - start
+        try:
+            model = cls(
+                char,
+                k_symbols=(kx, ky, kz),
+                dimension=dimension,
+                axis_scale=(1.0, 1.0, 1.5),
+            )
+            image = model._skeleton_image
+            elapsed = time.perf_counter() - start
+            current_rss = process.memory_info().rss
+            peak_rss[0] = max(peak_rss[0], current_rss)
+        finally:
+            stop.set()
+            sampler.join(timeout=1.0)
+
         queue.put(
             {
                 "status": "ok",
                 "time_s": elapsed,
-                "peak_rss_bytes": _rss_bytes(),
+                "baseline_rss_bytes": baseline_rss,
+                "peak_rss_bytes": peak_rss[0],
+                "incremental_peak_rss_bytes": max(0, peak_rss[0] - baseline_rss),
                 "skeleton_voxels": int(np.count_nonzero(image)),
                 "grids_materialized": [
                     name in model.__dict__
@@ -195,8 +215,6 @@ def main():
                 f"{case_name}: memory candidate changed {mismatch} skeleton voxels"
             )
 
-        # Fresh-process measurements make peak RSS comparable and prevent prior
-        # NumPy allocations in this benchmark process from contaminating it.
         reference_runs = [
             _fresh_process_measure("reference", case_name, dimension)
             for _ in range(2)
@@ -205,18 +223,20 @@ def main():
             _fresh_process_measure("candidate", case_name, dimension)
             for _ in range(2)
         ]
-        reference_peak = min(run["peak_rss_bytes"] for run in reference_runs)
-        candidate_peak = min(run["peak_rss_bytes"] for run in candidate_runs)
+        reference_peak = min(
+            run["incremental_peak_rss_bytes"] for run in reference_runs
+        )
+        candidate_peak = min(
+            run["incremental_peak_rss_bytes"] for run in candidate_runs
+        )
         reference_e2e = statistics.median(run["time_s"] for run in reference_runs)
         candidate_e2e = statistics.median(run["time_s"] for run in candidate_runs)
 
         if candidate_peak >= reference_peak:
             raise AssertionError(
-                f"{case_name}: candidate did not reduce peak RSS: "
+                f"{case_name}: candidate did not reduce incremental peak RSS: "
                 f"reference={reference_peak} candidate={candidate_peak}"
             )
-        # 3% is a CI process-scheduling tolerance, not an accepted performance
-        # loss. Raw timings and ratios are always reported for inspection.
         if candidate_e2e > reference_e2e * 1.03:
             raise AssertionError(
                 f"{case_name}: candidate regressed construction->skeleton time: "
@@ -242,10 +262,10 @@ def main():
             "reference_pipeline_s": reference_e2e,
             "candidate_pipeline_s": candidate_e2e,
             "pipeline_speedup": reference_e2e / candidate_e2e,
-            "reference_peak_rss_bytes": reference_peak,
-            "candidate_peak_rss_bytes": candidate_peak,
-            "peak_rss_reduction_bytes": reference_peak - candidate_peak,
-            "peak_rss_reduction_fraction": 1.0 - candidate_peak / reference_peak,
+            "reference_incremental_peak_rss_bytes": reference_peak,
+            "candidate_incremental_peak_rss_bytes": candidate_peak,
+            "incremental_peak_rss_reduction_bytes": reference_peak - candidate_peak,
+            "incremental_peak_rss_reduction_fraction": 1.0 - candidate_peak / reference_peak,
             "legacy_dense_coordinate_grid_bytes": _legacy_grid_bytes(dimension),
             "legacy_bloch_stack_bytes": _bloch_stack_bytes(dimension),
             "lazy_grid_bytes_avoided_until_access": _legacy_grid_bytes(dimension),
