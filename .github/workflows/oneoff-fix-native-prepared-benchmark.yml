@@ -1,0 +1,48 @@
+name: One-off fix native prepared benchmark
+
+on:
+  push:
+    branches:
+      - perf/yamada-max-optimization
+    paths:
+      - .github/workflows/oneoff-fix-native-prepared-benchmark.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/yamada-max-optimization
+      - name: Make native candidate comparison self-contained
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('dev/benchmark_native_prepared_candidate.py')
+          text = path.read_text()
+          text = text.replace(
+              'from knotted_graph.invariants.yamada.compact import CompactYamadaEvaluator\n',
+              '',
+          )
+          old = '''def _production(prepared):\n    evaluator = CompactYamadaEvaluator()\n    states = (\n        (prepared.build(config), config.count(0) - config.count(1))\n        for config in itertools.product((0, 1, 2), repeat=len(prepared.crossing_ids))\n    )\n    start = time.perf_counter()\n    value = evaluator.compute_many_laurent(states)\n    elapsed = time.perf_counter() - start\n    return value, elapsed, evaluator.memo_size\n'''
+          new = '''def _production(module, prepared):\n    evaluator = module.NativeEvaluator()\n    start = time.perf_counter()\n    graphs = []\n    exponents = []\n    for config in itertools.product((0, 1, 2), repeat=len(prepared.crossing_ids)):\n        graph = prepared.build(config)\n        graphs.append([list(row) for row in graph.rows])\n        exponents.append(config.count(0) - config.count(1))\n    value = tuple(\n        (int(power), int(coefficient))\n        for power, coefficient in evaluator.compute_many(graphs, exponents)\n    )\n    elapsed = time.perf_counter() - start\n    return value, elapsed, int(evaluator.memo_size)\n'''
+          assert old in text
+          text = text.replace(old, new)
+          old_call = '    expected, production_s, production_memo = _production(prepared)\n'
+          new_call = '    expected, production_s, production_memo = _production(module, prepared)\n'
+          assert old_call in text
+          text = text.replace(old_call, new_call)
+          path.write_text(text)
+          PY
+          git rm .github/workflows/oneoff-fix-native-prepared-benchmark.yml
+          git diff --check
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dev/benchmark_native_prepared_candidate.py
+          git commit -m "Make native prepared benchmark self-contained"
+          git push origin HEAD:perf/yamada-max-optimization
