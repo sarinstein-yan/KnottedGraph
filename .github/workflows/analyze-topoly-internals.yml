@@ -1,0 +1,92 @@
+name: Analyze Topoly Yamada internals
+
+on:
+  push:
+    branches:
+      - analysis/topoly-yamada-internals-20260818
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install benchmark environment
+        run: |
+          uv sync --group dev --all-extras
+          uv pip install topoly==1.1.0
+      - name: Inspect Topoly modules and Yamada implementation
+        run: |
+          uv run --no-sync python - <<'PY'
+          import dis
+          import inspect
+          import json
+          import pkgutil
+          import pathlib
+          import topoly
+          import topoly.invariants as inv
+
+          print('TOPOLY_FILE=', topoly.__file__)
+          print('INVARIANTS_FILE=', inv.__file__)
+          print('TOPOLY_VERSION=', getattr(topoly, '__version__', None))
+          print('MODULES=', [m.name for m in pkgutil.walk_packages(topoly.__path__, topoly.__name__ + '.') if 'yamada' in m.name.lower() or 'invariant' in m.name.lower()])
+          print('YAMADA_CLASS=', inv.YamadaGraph)
+          print('YAMADA_MODULE=', inv.YamadaGraph.__module__)
+          for objname in ['YamadaGraph', 'Invariant']:
+              obj = getattr(inv, objname)
+              try:
+                  print(f'SOURCE_{objname}=')
+                  print(inspect.getsource(obj))
+              except Exception as exc:
+                  print(f'SOURCE_{objname}_ERROR=', repr(exc))
+          try:
+              print('POINT_SIGNATURE=', inspect.signature(inv.YamadaGraph.point))
+          except Exception as exc:
+              print('POINT_SIGNATURE_ERROR=', repr(exc))
+          try:
+              print('POINT_SOURCE=')
+              print(inspect.getsource(inv.YamadaGraph.point))
+          except Exception as exc:
+              print('POINT_SOURCE_ERROR=', repr(exc))
+          try:
+              print('POINT_DIS=')
+              dis.dis(inv.YamadaGraph.point)
+          except Exception as exc:
+              print('POINT_DIS_ERROR=', repr(exc))
+
+          root = pathlib.Path(topoly.__file__).parent
+          print('FILES=')
+          for p in sorted(root.rglob('*')):
+              if p.is_file() and ('yamada' in p.name.lower() or 'invariant' in str(p).lower() or p.suffix in {'.so','.py'}):
+                  print(p.relative_to(root), p.stat().st_size)
+          PY
+      - name: Profile fixed crossing family
+        run: |
+          uv run --no-sync python - <<'PY'
+          import cProfile
+          import pstats
+          import io
+          from dev.benchmark_topoly_extended_scaling import Case, _prepare, _seed_for
+          from topoly.invariants import Invariant, YamadaGraph
+
+          for c in [4, 8, 12, 20, 40, 80]:
+              case = Case('crossings_fixed', c)
+              seed = _seed_for(20260818, case.family, case.size, 0)
+              graph, processor, pd = _prepare(case, seed)
+              print(f'CASE c={c} V={graph.number_of_nodes()} E={graph.number_of_edges()} crossings={len(processor.crossings)} pdlen={len(pd)}')
+              Invariant.known['Yamada'] = {}
+              prof = cProfile.Profile()
+              prof.enable()
+              result = YamadaGraph(pd).point(max_cross=5000)
+              prof.disable()
+              stream = io.StringIO()
+              pstats.Stats(prof, stream=stream).sort_stats('cumtime').print_stats(40)
+              print(stream.getvalue())
+              print('RESULT_TERMS=', len(result.term))
+          PY
