@@ -19,7 +19,6 @@ from benchmark_topoly_random_cubic_ensemble import (
     prepare_sample,
     topology_ensemble,
 )
-from knotted_graph.invariants.yamada.compact import CompactYamadaEvaluator
 from knotted_graph.invariants.yamada.polynomial import Yamada, _ordered_crossing_ports
 from knotted_graph.invariants.yamada.state_compact import PreparedCompactStateBuilder
 from knotted_graph.projection import PDCode
@@ -261,16 +260,21 @@ def _prepared(calculator: Yamada):
     return prepared.reduce_reidemeister_ii()[0]
 
 
-def _production(prepared):
-    evaluator = CompactYamadaEvaluator()
-    states = (
-        (prepared.build(config), config.count(0) - config.count(1))
-        for config in itertools.product((0, 1, 2), repeat=len(prepared.crossing_ids))
-    )
+def _production(module, prepared):
+    evaluator = module.NativeEvaluator()
     start = time.perf_counter()
-    value = evaluator.compute_many_laurent(states)
+    graphs = []
+    exponents = []
+    for config in itertools.product((0, 1, 2), repeat=len(prepared.crossing_ids)):
+        graph = prepared.build(config)
+        graphs.append([list(row) for row in graph.rows])
+        exponents.append(config.count(0) - config.count(1))
+    value = tuple(
+        (int(power), int(coefficient))
+        for power, coefficient in evaluator.compute_many(graphs, exponents)
+    )
     elapsed = time.perf_counter() - start
-    return value, elapsed, evaluator.memo_size
+    return value, elapsed, int(evaluator.memo_size)
 
 
 def _candidate(module, prepared):
@@ -316,7 +320,7 @@ def _random_cubic(vertex_count: int, sample_index: int):
 
 def _benchmark(module, name: str, calculator: Yamada):
     prepared = _prepared(calculator)
-    expected, production_s, production_memo = _production(prepared)
+    expected, production_s, production_memo = _production(module, prepared)
     actual, candidate_s, candidate_memo = _candidate(module, prepared)
     if expected != actual:
         raise AssertionError(
