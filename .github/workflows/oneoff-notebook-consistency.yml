@@ -1,0 +1,67 @@
+name: One-off notebook consistency fix
+
+on:
+  push:
+    branches:
+      - perf/yamada-max-optimization
+
+permissions:
+  contents: write
+
+jobs:
+  fix-physics-notebook-prose:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/yamada-max-optimization
+          fetch-depth: 0
+      - name: Correct stale resolution prose without changing code cells
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('User_guide/applications/01_physics_applications.ipynb')
+          data = json.loads(path.read_text(encoding='utf-8'))
+
+          replacements = {
+              "Every `NodalSkeleton` example in this user guide uses **`dimension=300`** so that the\nsampling resolution is consistent from one example to another.":
+                  "The main worked model and the model gallery use **`dimension=300`**. A few targeted\ncustom-model and parameter-scan examples deliberately use `dimension=200` to keep those\nsecondary demonstrations lighter; each such code cell states its sampling resolution explicitly.",
+              "The surface gallery and graph gallery are shown as **separate figures**, so a\nsemi-transparent surface cannot obscure its extracted graph.  All models use\n`dimension=300`.":
+                  "The surface gallery and graph gallery are shown as **separate figures**, so a\nsemi-transparent surface cannot obscure its extracted graph.  The gallery models use\n`dimension=300`.",
+              "All `NodalSkeleton` calculations use `dimension=300`.":
+                  "The primary gallery calculations use `dimension=300`; targeted secondary examples use\nthe resolution stated in their code cells (including `dimension=200` where noted).",
+          }
+
+          counts = {old: 0 for old in replacements}
+          for cell in data.get('cells', []):
+              if cell.get('cell_type') != 'markdown':
+                  continue
+              source = cell.get('source', '')
+              is_list = isinstance(source, list)
+              text = ''.join(source) if is_list else source
+              for old, new in replacements.items():
+                  if old in text:
+                      counts[old] += text.count(old)
+                      text = text.replace(old, new)
+              cell['source'] = text.splitlines(keepends=True) if is_list else text
+
+          missing = [old for old, count in counts.items() if count != 1]
+          if missing:
+              raise SystemExit(f'Expected exactly one occurrence of each stale statement; counts={list(counts.values())}')
+
+          path.write_text(json.dumps(data, indent=1, ensure_ascii=False) + '\n', encoding='utf-8')
+          PY
+      - name: Commit notebook-only prose correction
+        run: |
+          if git diff --quiet -- User_guide/applications/01_physics_applications.ipynb; then
+            echo "No notebook changes produced"
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add User_guide/applications/01_physics_applications.ipynb
+          git commit -m "Fix stale physics notebook resolution prose"
+          git push origin HEAD:perf/yamada-max-optimization
