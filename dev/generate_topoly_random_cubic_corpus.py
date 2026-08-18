@@ -18,10 +18,11 @@ DEFAULT_OUTPUT = (
 
 def _record(sample, abstract: nx.Graph, embedded, processor, pdcode: str, embedding_attempt: int):
     nodes = sorted(abstract.nodes())
-    edges = sorted((min(u, v), max(u, v)) for u, v in abstract.edges())
+    edge_order = list(abstract.edges())
+    edges = sorted((min(u, v), max(u, v)) for u, v in edge_order)
     graph6 = nx.to_graph6_bytes(abstract, header=False).decode("ascii").strip()
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "family": "random_cubic",
         "V": abstract.number_of_nodes(),
         "E": abstract.number_of_edges(),
@@ -31,6 +32,7 @@ def _record(sample, abstract: nx.Graph, embedded, processor, pdcode: str, embedd
         "embedding_attempt": embedding_attempt,
         "graph6": graph6,
         "edge_list": [[int(u), int(v)] for u, v in edges],
+        "embedding_edge_order": [[int(u), int(v)] for u, v in edge_order],
         "node_positions": {
             str(int(node)): [float(x) for x in embedded.nodes[node]["pos"]]
             for node in nodes
