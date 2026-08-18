@@ -1,6 +1,6 @@
 name: One-off finalize optimization branch
 
-# Retrigger after repairing the promoted native regression embedding fixture.
+# Retrigger after fixing the cleanup audit for intentional staged deletions.
 on:
   pull_request:
     branches: [Latest_Workplace]
@@ -125,7 +125,9 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}/src
           PYTHONNOUSERSITE: "1"
-        run: uv run --no-sync python dev/check_repository_consistency.py
+        run: |
+          git add -u
+          uv run --no-sync python dev/check_repository_consistency.py
 
       - name: Remove this one-off workflow
         run: git rm .github/workflows/oneoff-finalize-optimization.yml
