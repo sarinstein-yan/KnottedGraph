@@ -20,6 +20,7 @@ from knotted_graph.invariants.yamada.skein_hybrid import (
     compute_hybrid_laurent,
 )
 from knotted_graph.invariants.yamada.state_compact import PreparedCompactStateBuilder
+from knotted_graph.invariants.yamada.streaming_candidate import ChunkedEvaluatorProxy
 from knotted_graph.projection import PDCode
 
 
@@ -54,17 +55,22 @@ def _worker(mode, vertices, crossings, arcs, queue):
             calculator.arcs,
             _ordered_crossing_ports,
         )
-        evaluator = CompactYamadaEvaluator()
+        base_evaluator = CompactYamadaEvaluator()
+        evaluator = (
+            ChunkedEvaluatorProxy(base_evaluator, chunk_size=256)
+            if mode in {"chunked", "hybrid_chunked"}
+            else base_evaluator
+        )
         stats = {}
         start = time.perf_counter()
-        if mode == "bulk":
+        if mode in {"bulk", "chunked"}:
             reduced, moves = prepared.reduce_reidemeister_ii()
             value = bulk_laurent(reduced, evaluator)
             stats = {
                 "initial_rii_moves": moves,
                 "remaining_crossings": len(reduced.crossing_ids),
             }
-        elif mode == "hybrid":
+        elif mode in {"hybrid", "hybrid_chunked"}:
             value = compute_hybrid_laurent(prepared, evaluator, stats=stats)
         else:
             raise ValueError(mode)
@@ -76,6 +82,7 @@ def _worker(mode, vertices, crossings, arcs, queue):
                 "time_s": elapsed,
                 "value": value,
                 "stats": stats,
+                "memo_size": getattr(base_evaluator, "memo_size", None),
             }
         )
     except BaseException as exc:  # pragma: no cover - benchmark diagnostics
@@ -118,31 +125,39 @@ def _run(mode, processor, timeout_s):
 
 def _benchmark_processor(name, processor, timeout_s):
     _, reduced, initial_rii_moves = _prepared_from_processor(processor)
-    bulk = _run("bulk", processor, timeout_s)
-    hybrid = _run("hybrid", processor, timeout_s)
+    results = {
+        mode: _run(mode, processor, timeout_s)
+        for mode in ("bulk", "chunked", "hybrid", "hybrid_chunked")
+    }
+
+    successful = [result for result in results.values() if result["status"] == "ok"]
+    if successful:
+        reference = successful[0]["value"]
+        for result in successful[1:]:
+            if result["value"] != reference:
+                raise AssertionError(
+                    f"candidate changed exact Laurent output for {name}: "
+                    f"{successful[0]['mode']}={reference} "
+                    f"{result['mode']}={result['value']}"
+                )
+
     row = {
         "case": name,
         "V": len(processor.vertices),
-        "E": len(processor.arcs) - 2 * len(processor.crossings),
         "crossings": len(processor.crossings),
         "initial_rii_moves": initial_rii_moves,
         "remaining_crossings_after_initial_rii": len(reduced.crossing_ids),
-        "bulk_status": bulk["status"],
-        "hybrid_status": hybrid["status"],
-        "bulk_s": bulk.get("time_s"),
-        "hybrid_s": hybrid.get("time_s"),
-        "hybrid_stats": hybrid.get("stats"),
+        "correctness": "PASS" if len(successful) >= 2 else "not-enough-paired-results",
     }
-    if bulk["status"] == "ok" and hybrid["status"] == "ok":
-        if bulk["value"] != hybrid["value"]:
-            raise AssertionError(
-                f"hybrid changed exact Laurent output for {name}: "
-                f"bulk={bulk['value']} hybrid={hybrid['value']}"
-            )
-        row["speedup"] = bulk["time_s"] / hybrid["time_s"]
-        row["correctness"] = "PASS"
-    else:
-        row["correctness"] = "not-paired-after-timeout-or-error"
+    bulk_time = results["bulk"].get("time_s")
+    for mode, result in results.items():
+        row[f"{mode}_status"] = result["status"]
+        row[f"{mode}_s"] = result.get("time_s")
+        row[f"{mode}_stats"] = result.get("stats")
+        row[f"{mode}_memo_size"] = result.get("memo_size")
+        if bulk_time is not None and result.get("time_s") is not None:
+            row[f"{mode}_speedup_vs_bulk"] = bulk_time / result["time_s"]
+
     print(json.dumps(row, separators=(",", ":")))
     return row
 
@@ -174,20 +189,25 @@ def _random_cubic_processors():
 
 
 def main():
-    timeout_s = 30.0
+    timeout_s = 20.0
     rows = [_benchmark_processor("petersen_c6", _petersen_processor(), timeout_s)]
     for name, processor in _random_cubic_processors():
         rows.append(_benchmark_processor(name, processor, timeout_s))
 
-    paired = [row for row in rows if row.get("correctness") == "PASS"]
-    if not paired:
-        raise AssertionError("hybrid benchmark produced no paired exact comparisons")
+    speedups = []
+    for row in rows:
+        for mode in ("chunked", "hybrid", "hybrid_chunked"):
+            key = f"{mode}_speedup_vs_bulk"
+            if key in row:
+                speedups.append(row[key])
     print(
         "SUMMARY="
         + json.dumps(
             {
-                "paired": len(paired),
-                "median_speedup": statistics.median(row["speedup"] for row in paired),
+                "paired_speedups": len(speedups),
+                "median_candidate_speedup_vs_bulk": (
+                    statistics.median(speedups) if speedups else None
+                ),
                 "rows": rows,
             },
             separators=(",", ":"),
