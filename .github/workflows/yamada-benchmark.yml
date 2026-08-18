@@ -21,6 +21,7 @@ on:
       - "dev/benchmark_compact_optimization_candidates.py"
       - "dev/benchmark_laurent_arithmetic_candidates.py"
       - "dev/benchmark_native_yamada_candidate.py"
+      - "dev/benchmark_skein_hybrid_candidate.py"
       - "dev/benchmark_skeletonization_candidates.py"
       - "dev/benchmark_nodal_memory_candidates.py"
       - "dev/yamada_output_fingerprint.py"
@@ -39,6 +40,7 @@ permissions:
 jobs:
   kernel-benchmark:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -62,6 +64,8 @@ jobs:
         run: uv run --no-sync python dev/benchmark_laurent_arithmetic_candidates.py
       - name: Benchmark production C++ backend with exact fuzz, overflow and state-sum gates
         run: uv run --no-sync python dev/benchmark_native_yamada_candidate.py
+      - name: Benchmark guarded hybrid skein candidate on irreducible diagrams
+        run: uv run --no-sync python dev/benchmark_skein_hybrid_candidate.py
       - name: Profile remaining projection and invariant costs
         run: uv run --no-sync python dev/benchmark_yamada_pipeline_breakdown.py
       - name: Compare public dispatch with compact serial
