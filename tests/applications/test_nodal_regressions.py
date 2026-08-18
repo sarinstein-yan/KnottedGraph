@@ -77,8 +77,6 @@ def test_fields_pv_does_not_require_supported_berry_curvature():
         real=True,
     )
 
-    # Three real Bloch-vector components deliberately do not satisfy the
-    # specialized Berry-curvature prerequisites used by NodalSkeleton.
     model = NodalSkeleton(
         (kx, ky, kz),
         k_symbols=(kx, ky, kz),
@@ -94,9 +92,6 @@ def test_fields_pv_does_not_require_supported_berry_curvature():
     assert "imag" in fields.point_data
     assert "gap" in fields.point_data
     assert "ES_helper" in fields.point_data
-
-    # Unsupported Berry curvature should simply mean that Berry fields are
-    # absent; ordinary field visualization must remain usable.
     assert "berry" not in fields.point_data
     assert "|berry|" not in fields.point_data
 
@@ -140,3 +135,67 @@ def test_cropped_lee_skeleton_is_byte_identical_to_full_volume():
     optimized = NodalSkeleton._skeleton_image.func(stub)
 
     assert np.array_equal(optimized, reference)
+
+
+def test_coordinate_grids_are_lazy_but_preserve_legacy_arrays():
+    kx, ky, kz = sp.symbols("kx ky kz", real=True)
+    model = NodalSkeleton(
+        (sp.sin(kx), sp.cos(ky), sp.I / 5 + sp.cos(kz)),
+        k_symbols=(kx, ky, kz),
+        dimension=9,
+    )
+
+    grid_names = ("kx_grid", "ky_grid", "kz_grid")
+    assert all(name not in model.__dict__ for name in grid_names)
+
+    expected = np.meshgrid(
+        model.kx_vals,
+        model.ky_vals,
+        model.kz_vals,
+        indexing="ij",
+    )
+    for name, want in zip(grid_names, expected):
+        got = getattr(model, name)
+        assert name in model.__dict__
+        assert np.array_equal(got, want)
+        assert got.dtype == want.dtype
+        assert got.shape == want.shape
+        assert got.flags.writeable
+        assert got.flags.c_contiguous
+
+
+def test_streamed_spectrum_is_byte_identical_to_stacked_bloch_grid():
+    kx, ky, kz = sp.symbols("kx ky kz", real=True)
+    model = NodalSkeleton(
+        (
+            sp.sin(kx) + sp.cos(ky),
+            sp.I * sp.Rational(1, 5),
+            sp.cos(kz) + sp.sin(kx + ky),
+        ),
+        k_symbols=(kx, ky, kz),
+        dimension=13,
+    )
+
+    streamed = model.spectrum.copy()
+    reference = np.sqrt(np.sum(model._bloch_vec_grid**2, axis=0))
+
+    assert np.array_equal(streamed, reference)
+
+
+def test_skeleton_workflow_does_not_materialize_dense_coordinate_grids():
+    kx, ky, kz = sp.symbols("kx ky kz", real=True)
+    model = NodalSkeleton(
+        (
+            sp.cos(kx) + sp.cos(ky) + sp.cos(kz),
+            sp.I * sp.Rational(1, 2),
+            sp.sin(kx),
+        ),
+        k_symbols=(kx, ky, kz),
+        dimension=17,
+    )
+
+    _ = model._skeleton_image
+    assert all(
+        name not in model.__dict__
+        for name in ("kx_grid", "ky_grid", "kz_grid")
+    )
