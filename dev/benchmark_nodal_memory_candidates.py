@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import gc
 import json
+import multiprocessing as mp
+import resource
 import statistics
 import time
 
@@ -37,6 +39,10 @@ def _specs():
         ),
         ("solomon_1.00", lambda: solomon_bloch_vector(1.00, k_symbols=(kx, ky, kz))),
     ]
+
+
+def _builder(case_name: str):
+    return dict(_specs())[case_name]
 
 
 def _model(cls, builder, dimension):
@@ -85,6 +91,65 @@ def _bloch_stack_bytes(dimension: int) -> int:
     return 3 * dimension**3 * np.dtype(np.complex128).itemsize
 
 
+def _rss_bytes() -> int:
+    # Linux reports ru_maxrss in KiB; this benchmark is a Linux CI gate.
+    return int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss) * 1024
+
+
+def _process_worker(kind: str, case_name: str, dimension: int, queue):
+    try:
+        builder = _builder(case_name)
+        char = builder()
+        cls = NodalSkeleton if kind == "reference" else CandidateNodalSkeleton
+        gc.collect()
+        start = time.perf_counter()
+        model = cls(
+            char,
+            k_symbols=(kx, ky, kz),
+            dimension=dimension,
+            axis_scale=(1.0, 1.0, 1.5),
+        )
+        image = model._skeleton_image
+        elapsed = time.perf_counter() - start
+        queue.put(
+            {
+                "status": "ok",
+                "time_s": elapsed,
+                "peak_rss_bytes": _rss_bytes(),
+                "skeleton_voxels": int(np.count_nonzero(image)),
+                "grids_materialized": [
+                    name in model.__dict__
+                    for name in ("kx_grid", "ky_grid", "kz_grid")
+                ],
+            }
+        )
+    except BaseException as exc:  # pragma: no cover - benchmark diagnostics
+        queue.put({"status": "error", "error": f"{type(exc).__name__}: {exc}"})
+
+
+def _fresh_process_measure(kind: str, case_name: str, dimension: int):
+    context = mp.get_context("spawn")
+    queue = context.Queue()
+    process = context.Process(
+        target=_process_worker,
+        args=(kind, case_name, dimension, queue),
+    )
+    process.start()
+    process.join(120.0)
+    if process.is_alive():
+        process.terminate()
+        process.join(5.0)
+        raise AssertionError(f"{case_name}/{kind}: memory worker timed out")
+    if queue.empty():
+        raise AssertionError(
+            f"{case_name}/{kind}: worker exited {process.exitcode} without data"
+        )
+    result = queue.get()
+    if result["status"] != "ok":
+        raise AssertionError(f"{case_name}/{kind}: {result['error']}")
+    return result
+
+
 def main():
     dimension = 160
     rows = []
@@ -94,16 +159,11 @@ def main():
         reference = _model(NodalSkeleton, builder, dimension)
         candidate = _model(CandidateNodalSkeleton, builder, dimension)
 
-        # Candidate constructor must not materialize any of the legacy dense
-        # coordinate grids.
         for name in ("kx_grid", "ky_grid", "kz_grid"):
             if name in candidate.__dict__:
                 raise AssertionError(f"{case_name}: {name} was eagerly allocated")
 
         stacked_t, stacked = _median(lambda: _stacked_spectrum(reference), repeats=3)
-        streamed_t, streamed = _median(lambda: candidate.spectrum, repeats=1)
-        # cached_property timing above would become zero after first access, so
-        # use fresh candidates for the repeated timing samples.
         streamed_samples = []
         streamed = None
         for _ in range(3):
@@ -120,16 +180,12 @@ def main():
             raise AssertionError(
                 f"{case_name}: streamed spectrum changed values; max_abs={max_abs}"
             )
-
-        # No RAM optimization is accepted if it makes the actual spectrum hot
-        # path slower. A 2% tolerance is solely CI timer jitter.
         if streamed_t > stacked_t * 1.02:
             raise AssertionError(
                 f"{case_name}: streamed spectrum regressed runtime: "
                 f"stacked={stacked_t:.6g}s streamed={streamed_t:.6g}s"
             )
 
-        # Skeleton output must also be exactly unchanged before production use.
         reference_image = reference._skeleton_image
         candidate_image = candidate._skeleton_image
         skeleton_exact = np.array_equal(reference_image, candidate_image)
@@ -139,6 +195,42 @@ def main():
                 f"{case_name}: memory candidate changed {mismatch} skeleton voxels"
             )
 
+        # Fresh-process measurements make peak RSS comparable and prevent prior
+        # NumPy allocations in this benchmark process from contaminating it.
+        reference_runs = [
+            _fresh_process_measure("reference", case_name, dimension)
+            for _ in range(2)
+        ]
+        candidate_runs = [
+            _fresh_process_measure("candidate", case_name, dimension)
+            for _ in range(2)
+        ]
+        reference_peak = min(run["peak_rss_bytes"] for run in reference_runs)
+        candidate_peak = min(run["peak_rss_bytes"] for run in candidate_runs)
+        reference_e2e = statistics.median(run["time_s"] for run in reference_runs)
+        candidate_e2e = statistics.median(run["time_s"] for run in candidate_runs)
+
+        if candidate_peak >= reference_peak:
+            raise AssertionError(
+                f"{case_name}: candidate did not reduce peak RSS: "
+                f"reference={reference_peak} candidate={candidate_peak}"
+            )
+        # 3% is a CI process-scheduling tolerance, not an accepted performance
+        # loss. Raw timings and ratios are always reported for inspection.
+        if candidate_e2e > reference_e2e * 1.03:
+            raise AssertionError(
+                f"{case_name}: candidate regressed construction->skeleton time: "
+                f"reference={reference_e2e:.6g}s candidate={candidate_e2e:.6g}s"
+            )
+        if any(candidate_runs[0]["grids_materialized"]):
+            raise AssertionError(
+                f"{case_name}: skeleton workflow unexpectedly materialized dense grids"
+            )
+        if {
+            run["skeleton_voxels"] for run in reference_runs + candidate_runs
+        } != {int(np.count_nonzero(reference_image))}:
+            raise AssertionError(f"{case_name}: fresh-process skeleton outputs changed")
+
         row = {
             "case": case_name,
             "dimension": dimension,
@@ -147,6 +239,13 @@ def main():
             "streamed_speedup": stacked_t / streamed_t,
             "spectrum_exact": exact,
             "skeleton_exact": skeleton_exact,
+            "reference_pipeline_s": reference_e2e,
+            "candidate_pipeline_s": candidate_e2e,
+            "pipeline_speedup": reference_e2e / candidate_e2e,
+            "reference_peak_rss_bytes": reference_peak,
+            "candidate_peak_rss_bytes": candidate_peak,
+            "peak_rss_reduction_bytes": reference_peak - candidate_peak,
+            "peak_rss_reduction_fraction": 1.0 - candidate_peak / reference_peak,
             "legacy_dense_coordinate_grid_bytes": _legacy_grid_bytes(dimension),
             "legacy_bloch_stack_bytes": _bloch_stack_bytes(dimension),
             "lazy_grid_bytes_avoided_until_access": _legacy_grid_bytes(dimension),
@@ -155,10 +254,11 @@ def main():
         rows.append(row)
         print(json.dumps(row, separators=(",", ":")), flush=True)
 
-    # Public coordinate-grid compatibility of the actual candidate descriptor:
-    # same values, dtype, shape, writability and C-contiguity as np.meshgrid.
     candidate = _model(CandidateNodalSkeleton, _specs()[0][1], 32)
-    assert all(name not in candidate.__dict__ for name in ("kx_grid", "ky_grid", "kz_grid"))
+    assert all(
+        name not in candidate.__dict__
+        for name in ("kx_grid", "ky_grid", "kz_grid")
+    )
     expected = np.meshgrid(
         candidate.kx_vals,
         candidate.ky_vals,
