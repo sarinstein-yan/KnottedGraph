@@ -40,7 +40,6 @@ def _divide_sigma_exact(poly):
     hi = max(source)
     quotient: dict[int, int] = {}
     for exponent in range(lo, hi + 1):
-        # [A^e](sigma*q) = q[e+1] + q[e] + q[e-1].
         value = source.get(exponent, 0)
         value -= quotient.get(exponent, 0)
         value -= quotient.get(exponent - 1, 0)
@@ -77,13 +76,21 @@ def _components_without_pair(graph: CompactGraph, left: int, right: int):
 
 
 def _find_clean_two_vertex_split(graph: CompactGraph):
-    """Find a two-vertex cut with no separator edge, yielding an unambiguous 2-sum."""
+    """Find a two-vertex cut whose separator owns no shared edges."""
     if graph.n < 4:
         return None
     best = None
     for left in range(graph.n):
         for right in range(left + 1, graph.n):
-            if graph.rows[left][right]:
+            # Inducing both sides would duplicate loops on separator vertices or
+            # an edge between the separators. Restrict this first exact candidate
+            # to edge-free separators; a generalized implementation can assign
+            # those separator-owned edges explicitly to one side.
+            if (
+                graph.rows[left][left]
+                or graph.rows[right][right]
+                or graph.rows[left][right]
+            ):
                 continue
             components = _components_without_pair(graph, left, right)
             if len(components) < 2:
@@ -91,7 +98,6 @@ def _find_clean_two_vertex_split(graph: CompactGraph):
             components.sort(key=len)
             first = components[0]
             rest = tuple(node for comp in components[1:] for node in comp)
-            # Prefer a balanced cut, which most strongly reduces recurrence size.
             score = max(len(first), len(rest))
             candidate = (score, left, right, first, rest)
             if best is None or candidate[0] < best[0]:
@@ -108,7 +114,6 @@ def _two_vertex_parts(graph: CompactGraph, split):
     nodes2 = (left, right, *rest)
     graph1 = graph.induced(nodes1)
     graph2 = graph.induced(nodes2)
-    # The separator vertices occupy local indices 0 and 1 by construction.
     identified1 = graph1.identify_vertices(0, 1)
     identified2 = graph2.identify_vertices(0, 1)
     return graph1, graph2, identified1, identified2
@@ -163,7 +168,7 @@ def _random_multigraph(seed: int) -> CompactGraph:
 
 def _fuzz_gate():
     splits = 0
-    for seed in range(160):
+    for seed in range(240):
         graph = _random_multigraph(31000 + seed)
         expected = PythonCompactYamadaEvaluator().compute_laurent(graph)
         evaluator = TwoVertexEvaluator()
@@ -173,7 +178,7 @@ def _fuzz_gate():
                 f"two-vertex formula mismatch seed={seed}: expected={expected}, actual={actual}, rows={graph.rows}"
             )
         splits += evaluator.splits
-    print(f"two-vertex exact fuzz gate: 160 graphs PASS; decompositions={splits}")
+    print(f"two-vertex exact fuzz gate: 240 graphs PASS; decompositions={splits}")
 
 
 def _state_sum(calculator: Yamada, evaluator):
