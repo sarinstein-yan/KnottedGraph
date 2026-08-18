@@ -71,16 +71,18 @@ def _union(partition: Partition, left: int, right: int) -> Partition:
     left_block = right_block = None
     others = []
     for block in partition:
-        if left in block:
+        has_left = left in block
+        has_right = right in block
+        if has_left and has_right:
+            return partition
+        if has_left:
             left_block = block
-        elif right in block:
+        elif has_right:
             right_block = block
         else:
             others.append(block)
     if left_block is None or right_block is None:
         raise RuntimeError("frontier edge endpoint was not introduced")
-    if left_block == right_block:
-        return partition
     return _normalize_partition((*others, tuple(set(left_block) | set(right_block))))
 
 
