@@ -1,0 +1,43 @@
+name: One-off fix frontier union
+
+on:
+  push:
+    branches:
+      - perf/yamada-max-optimization
+    paths:
+      - .github/workflows/oneoff-fix-frontier-union.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: oneoff-frontier-union
+  cancel-in-progress: true
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/yamada-max-optimization
+      - name: Correct same-block frontier union
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('dev/benchmark_frontier_flow_candidate.py')
+          text = path.read_text()
+          old = '''    for block in partition:\n        if left in block:\n            left_block = block\n        elif right in block:\n            right_block = block\n        else:\n            others.append(block)\n    if left_block is None or right_block is None:\n        raise RuntimeError("frontier edge endpoint was not introduced")\n    if left_block == right_block:\n        return partition\n'''
+          new = '''    for block in partition:\n        has_left = left in block\n        has_right = right in block\n        if has_left and has_right:\n            return partition\n        if has_left:\n            left_block = block\n        elif has_right:\n            right_block = block\n        else:\n            others.append(block)\n    if left_block is None or right_block is None:\n        raise RuntimeError("frontier edge endpoint was not introduced")\n'''
+          assert old in text
+          path.write_text(text.replace(old, new, 1))
+          PY
+          git rm .github/workflows/oneoff-fix-frontier-union.yml
+          git diff --check
+      - name: Commit correction
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dev/benchmark_frontier_flow_candidate.py
+          git commit -m "Fix frontier connectivity union benchmark"
+          git push origin HEAD:perf/yamada-max-optimization
