@@ -1,6 +1,6 @@
 """Memory-efficient internals for :class:`NodalSkeleton`.
 
-The public class lives in ``skeleton.py``.  Keeping these implementation
+The public class lives in ``skeleton.py``. Keeping these implementation
 helpers separate lets us benchmark the memory backend against the retained
 stacked/reference calculations without changing the public API.
 """
@@ -8,12 +8,14 @@ stacked/reference calculations without changing the public API.
 from __future__ import annotations
 
 from functools import cached_property
-from typing import Any, Sequence
+from typing import Sequence
 
 import numpy as np
 import sympy as sp
 
 from knotted_graph.applications.nodal.symmetry import is_PT_symmetric
+
+_MISSING = object()
 
 
 class _LazyGrid:
@@ -21,8 +23,8 @@ class _LazyGrid:
 
     The materialized value is a normal writable C-contiguous ndarray, matching
     ``np.meshgrid(..., indexing='ij')`` rather than exposing a read-only
-    broadcast view.  Assignment/deletion are supported to preserve the old
-    ordinary-instance-attribute behavior.
+    broadcast view. Assignment/deletion preserve the old ordinary-instance-
+    attribute behavior, including an explicitly assigned ``None`` value.
     """
 
     def __init__(self, axis: int, name: str):
@@ -32,8 +34,8 @@ class _LazyGrid:
     def __get__(self, instance, owner=None):
         if instance is None:
             return self
-        value = instance.__dict__.get(self.name)
-        if value is None:
+        value = instance.__dict__.get(self.name, _MISSING)
+        if value is _MISSING:
             shape = (instance.dimension,) * 3
             axis_values = (
                 instance.kx_vals,
@@ -42,9 +44,7 @@ class _LazyGrid:
             )[self.axis]
             reshape = [1, 1, 1]
             reshape[self.axis] = instance.dimension
-            value = np.broadcast_to(
-                axis_values.reshape(reshape), shape
-            ).copy()
+            value = np.broadcast_to(axis_values.reshape(reshape), shape).copy()
             instance.__dict__[self.name] = value
         return value
 
@@ -67,8 +67,7 @@ def _optimized_init(
     if isinstance(char, (sp.Matrix, sp.ImmutableMatrix)) and char.shape == (2, 2):
         self.h_k = char
         self.bloch_vec = tuple(
-            sp.simplify((char * s).trace() / 2)
-            for s in self.pauli_vec
+            sp.simplify((char * s).trace() / 2) for s in self.pauli_vec
         )
     elif isinstance(char, Sequence) and len(char) == 3:
         self.bloch_vec = tuple(c + sp.Integer(0) for c in char)
@@ -112,7 +111,7 @@ def _optimized_init(
         setattr(self, f"k{axis}_max", mx)
         setattr(self, f"k{axis}_vals", np.linspace(mn, mx, dimension))
 
-    # kx_grid / ky_grid / kz_grid are descriptors installed below.  They are
+    # kx_grid / ky_grid / kz_grid are descriptors installed below. They are
     # intentionally not touched here, avoiding 3 * dimension**3 float arrays.
 
     self.skeleton_graph_cache = None
@@ -140,13 +139,10 @@ def _streamed_spectrum(self):
         zip(self.bloch_vec, self.bloch_vec_funcs)
     ):
         component = _evaluated_component(self, expr, func)
-        # Reuse the component buffer for its square whenever possible.  Lambdify
-        # results converted to complex128 are ordinary writable arrays; scalar
-        # and lower-dimensional results remain cheap and broadcast naturally.
         if component.flags.writeable:
             np.multiply(component, component, out=component)
             squared = component
-        else:  # defensive fallback for unusual lambdify results
+        else:
             squared = np.multiply(component, component)
 
         if index == 0:
