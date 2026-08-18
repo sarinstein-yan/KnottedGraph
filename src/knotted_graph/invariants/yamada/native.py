@@ -37,6 +37,16 @@ def _as_laurent(value) -> tuple[tuple[int, int], ...]:
     return tuple((int(power), int(coefficient)) for power, coefficient in value)
 
 
+class _MemoSizeProxy:
+    """Compatibility object for internal callers that only inspect ``len(memo)``."""
+
+    def __init__(self, evaluator: "NativeCompactEvaluator"):
+        self._evaluator = evaluator
+
+    def __len__(self) -> int:
+        return self._evaluator.memo_size
+
+
 class NativeCompactEvaluator:
     """Native compact evaluator with exact arbitrary-precision Python fallback."""
 
@@ -46,6 +56,7 @@ class NativeCompactEvaluator:
         self._native = _yamada_native.NativeEvaluator() if native_available() else None
         self.native_calls = 0
         self.fallback_calls = 0
+        self.memo = _MemoSizeProxy(self)
 
     @property
     def backend(self) -> str:
