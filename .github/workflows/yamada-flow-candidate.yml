@@ -5,6 +5,7 @@ on:
     paths:
       - "dev/benchmark_native_prepared_candidate.py"
       - "dev/benchmark_native_discrete_canonical_candidate.py"
+      - "dev/benchmark_frontier_flow_candidate.py"
       - ".github/workflows/yamada-flow-candidate.yml"
 
 permissions:
@@ -13,7 +14,7 @@ permissions:
 jobs:
   exact-native-candidates:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -28,3 +29,5 @@ jobs:
         run: uv run --no-sync python dev/benchmark_native_prepared_candidate.py
       - name: Benchmark exact discrete-canonical memo candidate
         run: uv run --no-sync python dev/benchmark_native_discrete_canonical_candidate.py
+      - name: Benchmark bounded-frontier flow-polynomial candidate
+        run: uv run --no-sync python dev/benchmark_frontier_flow_candidate.py
