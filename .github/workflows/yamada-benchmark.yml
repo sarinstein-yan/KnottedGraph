@@ -3,6 +3,8 @@ name: Yamada benchmark
 on:
   pull_request:
     paths:
+      - "CMakeLists.txt"
+      - "pyproject.toml"
       - "src/knotted_graph/invariants/yamada/**"
       - "src/knotted_graph/projection/**"
       - "dev/benchmark_yamada_kernel.py"
@@ -16,7 +18,6 @@ on:
       - "dev/benchmark_compact_optimization_candidates.py"
       - "dev/benchmark_laurent_arithmetic_candidates.py"
       - "dev/benchmark_native_yamada_candidate.py"
-      - "dev/native_yamada_candidate.cpp"
       - "dev/yamada_output_fingerprint.py"
       - "dev/application_yamada_regression.py"
       - "dev/run_yamada_sanity_checks.py"
@@ -37,18 +38,21 @@ jobs:
           python-version: "3.12"
       - name: Install environment
         run: uv sync --group dev
+      - name: Require production native backend
+        run: |
+          uv run --no-sync python - <<'PY'
+          from knotted_graph.invariants.yamada.native import native_available
+          assert native_available(), "native backend was not built"
+          print("production native Yamada backend: active")
+          PY
       - name: Compare retained SymPy evaluators with exact Laurent kernels
         run: uv run --no-sync python dev/benchmark_yamada_kernel.py
       - name: Benchmark recurrence optimization candidates with exact equality gates
         run: uv run --no-sync python dev/benchmark_compact_optimization_candidates.py
       - name: Benchmark Laurent arithmetic candidates with exact equality gates
         run: uv run --no-sync python dev/benchmark_laurent_arithmetic_candidates.py
-      - name: Benchmark C++ recurrence candidate with exact fuzz and state-sum gates
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libboost-dev
-          uv pip install pybind11
-          uv run --no-sync python dev/benchmark_native_yamada_candidate.py
+      - name: Benchmark production C++ backend with exact fuzz, overflow and state-sum gates
+        run: uv run --no-sync python dev/benchmark_native_yamada_candidate.py
       - name: Profile remaining projection and invariant costs
         run: uv run --no-sync python dev/benchmark_yamada_pipeline_breakdown.py
       - name: Compare public dispatch with compact serial
@@ -75,6 +79,10 @@ jobs:
       - name: Fingerprint optimized branch
         run: |
           uv sync --group dev
+          uv run --no-sync python - <<'PY'
+          from knotted_graph.invariants.yamada.native import native_available
+          assert native_available(), "optimized fingerprint is not using native backend"
+          PY
           uv run --no-sync python dev/yamada_output_fingerprint.py > /tmp/optimized-fingerprint.json
       - name: Fingerprint Latest_Workplace
         run: |
@@ -102,6 +110,10 @@ jobs:
       - name: Benchmark optimized branch
         run: |
           uv sync --group dev
+          uv run --no-sync python - <<'PY'
+          from knotted_graph.invariants.yamada.native import native_available
+          assert native_available()
+          PY
           uv run --no-sync python dev/benchmark_yamada_end_to_end.py | tee /tmp/optimized.txt
       - name: Benchmark Latest_Workplace
         run: |
@@ -129,5 +141,11 @@ jobs:
         run: |
           uv sync --group dev
           uv pip install topoly
+      - name: Require production native backend
+        run: |
+          uv run --no-sync python - <<'PY'
+          from knotted_graph.invariants.yamada.native import native_available
+          assert native_available()
+          PY
       - name: Extended identical-PD scaling through high c, E and V
         run: uv run --no-sync python dev/benchmark_topoly_extended_scaling.py --timeout 10
