@@ -6,13 +6,14 @@ import multiprocessing as mp
 import statistics
 import threading
 import time
+from functools import cached_property
 
 import numpy as np
 import psutil
 import sympy as sp
 
 from knotted_graph.applications.nodal import NodalSkeleton
-from knotted_graph.applications.nodal._memory import install_memory_optimizations
+from knotted_graph.applications.nodal._memory import _optimized_init
 from knotted_graph.applications.nodal.models import (
     hopf_link_bloch_vector,
     pq_torus_knot_bloch_vector,
@@ -23,11 +24,36 @@ from knotted_graph.applications.nodal.models import (
 kx, ky, kz = sp.symbols("k_x k_y k_z", real=True)
 
 
-class CandidateNodalSkeleton(NodalSkeleton):
-    """Isolated candidate so production NodalSkeleton remains untouched."""
+class ReferenceNodalSkeleton(NodalSkeleton):
+    """Frozen implementation immediately before the memory optimizations."""
 
+    def __init__(
+        self,
+        char,
+        k_symbols=None,
+        span=((-np.pi, np.pi), (-np.pi, np.pi), (0, np.pi)),
+        dimension=200,
+        axis_scale=(1.0, 1.0, 2.0),
+    ):
+        _optimized_init(
+            self,
+            char,
+            k_symbols=k_symbols,
+            span=span,
+            dimension=dimension,
+            axis_scale=axis_scale,
+        )
+        self.kx_grid, self.ky_grid, self.kz_grid = np.meshgrid(
+            self.kx_vals,
+            self.ky_vals,
+            self.kz_vals,
+            indexing="ij",
+        )
 
-install_memory_optimizations(CandidateNodalSkeleton)
+    @cached_property
+    def spectrum(self):
+        return np.sqrt(np.sum(self._bloch_vec_grid**2, axis=0))
+
 
 
 def _specs():
@@ -96,7 +122,7 @@ def _process_worker(kind: str, case_name: str, dimension: int, queue):
     try:
         builder = _builder(case_name)
         char = builder()
-        cls = NodalSkeleton if kind == "reference" else CandidateNodalSkeleton
+        cls = ReferenceNodalSkeleton if kind == "reference" else NodalSkeleton
         gc.collect()
 
         process = psutil.Process()
@@ -176,8 +202,8 @@ def main():
 
     for case_name, builder in _specs():
         print(f"CASE={case_name}", flush=True)
-        reference = _model(NodalSkeleton, builder, dimension)
-        candidate = _model(CandidateNodalSkeleton, builder, dimension)
+        reference = _model(ReferenceNodalSkeleton, builder, dimension)
+        candidate = _model(NodalSkeleton, builder, dimension)
 
         for name in ("kx_grid", "ky_grid", "kz_grid"):
             if name in candidate.__dict__:
@@ -187,7 +213,7 @@ def main():
         streamed_samples = []
         streamed = None
         for _ in range(3):
-            fresh = _model(CandidateNodalSkeleton, builder, dimension)
+            fresh = _model(NodalSkeleton, builder, dimension)
             gc.collect()
             start = time.perf_counter()
             streamed = fresh.spectrum
@@ -274,7 +300,7 @@ def main():
         rows.append(row)
         print(json.dumps(row, separators=(",", ":")), flush=True)
 
-    candidate = _model(CandidateNodalSkeleton, _specs()[0][1], 32)
+    candidate = _model(NodalSkeleton, _specs()[0][1], 32)
     assert all(
         name not in candidate.__dict__
         for name in ("kx_grid", "ky_grid", "kz_grid")
