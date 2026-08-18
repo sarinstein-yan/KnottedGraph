@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 jobs:
-  inspect:
+  validate-rii-candidate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,61 +24,128 @@ jobs:
         run: |
           uv sync --group dev --all-extras
           uv pip install topoly==1.1.0
-      - name: Inspect Topoly Yamada and Reidemeister implementation
+      - name: Apply candidate in workspace
+        run: python dev/apply_rii_candidate.py
+      - name: Exact differential proof on fixed-crossing family
         run: |
           uv run --no-sync python - <<'PY'
-          import inspect
-          import topoly.invariants as inv
-          import topoly.graph as graph_module
+          import itertools
+          import sympy as sp
 
-          print('YAMADA_POINT=')
-          print(inspect.getsource(inv.YamadaGraph.point))
-          print('YAMADA_MAKE_SKEIN=')
-          print(inspect.getsource(inv.YamadaGraph.make_skein))
-          print('YAMADA_REMOVE_CROSSING=')
-          print(inspect.getsource(inv.YamadaGraph.remove_crossing))
-
-          Graph = graph_module.Graph
-          for name in [
-              'simplify_reidemeister',
-              'simplify_reidemeister_deterministic',
-              'find_reidemeister_2',
-              'reidemeister_2',
-              'find_reidemeister_1',
-              'reidemeister_1',
-              'find_reidemeister_1v',
-              'reidemeister_1v',
-              'find_reidemeister_2v',
-              'reidemeister_2v',
-              'find_reidemeister_4',
-              'reidemeister_4',
-              'find_reidemeister_5',
-              'reidemeister_5',
-          ]:
-              if hasattr(Graph, name):
-                  print(f'GRAPH_{name}=')
-                  print(inspect.getsource(getattr(Graph, name)))
-          PY
-      - name: Measure simplification on fixed crossing family
-        run: |
-          uv run --no-sync python - <<'PY'
           from dev.benchmark_topoly_extended_scaling import Case, _prepare, _seed_for
+          from knotted_graph.invariants.yamada.fast import (
+              FastNegamiSpecializedEvaluator,
+              FastYamadaEvaluator,
+              add,
+              shift,
+              to_sympy,
+          )
+          from knotted_graph.invariants.yamada.polynomial import (
+              Yamada,
+              _ordered_crossing_ports,
+          )
+          from knotted_graph.invariants.yamada.state_compact import PreparedCompactStateBuilder
+
+          A = sp.Symbol('A')
+
+          def state_sum(builder, evaluator):
+              total = ()
+              crossing_count = len(builder.crossing_ids)
+              for config in itertools.product([0, 1, 2], repeat=crossing_count):
+                  value = evaluator.compute_laurent(builder.build(config))
+                  exponent = config.count(0) - config.count(1)
+                  total = add(total, shift(value, exponent))
+              return sp.expand(to_sympy(total, A))
+
+          for method, evaluator_cls in [
+              ('negami', FastNegamiSpecializedEvaluator),
+              ('recursive', FastYamadaEvaluator),
+          ]:
+              for c in range(1, 11):
+                  for sample in range(3):
+                      case = Case('crossings_fixed', c)
+                      seed = _seed_for(20260818, case.family, case.size, sample)
+                      _, processor, pd = _prepare(case, seed)
+                      yamada = Yamada.from_PDCode(processor)
+                      original = PreparedCompactStateBuilder.prepare(
+                          yamada.vertices,
+                          yamada.crossings,
+                          yamada.arcs,
+                          _ordered_crossing_ports,
+                      )
+                      reduced, moves = original.reduce_reidemeister_ii()
+                      expected = state_sum(original, evaluator_cls())
+                      actual = state_sum(reduced, evaluator_cls())
+                      assert actual == expected, (
+                          method, c, sample, moves, expected, actual, pd
+                      )
+                      assert len(reduced.crossing_ids) == c % 2, (
+                          c, sample, moves, len(reduced.crossing_ids)
+                      )
+                      public = yamada.compute(
+                          A,
+                          normalize=False,
+                          n_jobs=1,
+                          method=method,
+                      )
+                      assert sp.expand(public) == expected
+                      print(
+                          f'PASS method={method} c={c} sample={sample} '
+                          f'RII={moves} reduced_c={len(reduced.crossing_ids)}'
+                      )
+          PY
+      - name: Existing Yamada regression and fuzz suites
+        run: uv run --no-sync pytest -q tests/invariants/yamada
+      - name: Complete Python test suite
+        run: uv run --no-sync pytest -q
+      - name: Compare exact outputs with Topoly and measure candidate runtime
+        run: |
+          uv run --no-sync python - <<'PY'
+          import statistics
+          import time
+          import sympy as sp
+
+          from dev.benchmark_topoly_extended_scaling import (
+              Case,
+              _prepare,
+              _seed_for,
+              _kg_terms,
+              _topoly_terms,
+              _validate_laurent_unit,
+          )
+          from knotted_graph.invariants.yamada.polynomial import Yamada, _ordered_crossing_ports
+          from knotted_graph.invariants.yamada.state_compact import PreparedCompactStateBuilder
           from topoly.invariants import Invariant, YamadaGraph
 
-          for c in [1, 2, 3, 4, 5, 8, 12, 20, 40, 80]:
-              case = Case('crossings_fixed', c)
-              seed = _seed_for(20260818, case.family, case.size, 0)
-              graph, processor, pd = _prepare(case, seed)
-              tg = YamadaGraph(pd)
-              before = len(tg.crossings)
-              n = tg.simplify_reidemeister(debug=False)
-              after = len(tg.crossings)
-              simplified_pd = tg.pdcode
-              Invariant.known['Yamada'] = {}
-              result = YamadaGraph(pd).point(max_cross=5000)
+          A = sp.Symbol('A')
+          for c in [4, 8, 12, 20, 40, 80, 160, 320]:
+              kg_times = []
+              tp_times = []
+              reduced_counts = []
+              for sample in range(3):
+                  case = Case('crossings_fixed', c)
+                  seed = _seed_for(20260818, case.family, case.size, sample)
+                  _, processor, pd = _prepare(case, seed)
+                  yamada = Yamada.from_PDCode(processor)
+                  prepared = PreparedCompactStateBuilder.prepare(
+                      yamada.vertices, yamada.crossings, yamada.arcs, _ordered_crossing_ports
+                  )
+                  reduced, _ = prepared.reduce_reidemeister_ii()
+                  reduced_counts.append(len(reduced.crossing_ids))
+
+                  start = time.perf_counter()
+                  kg = yamada.compute(A, normalize=False, n_jobs=1, method='negami')
+                  kg_times.append(time.perf_counter() - start)
+
+                  Invariant.known['Yamada'] = {}
+                  start = time.perf_counter()
+                  tp = YamadaGraph(pd).point(max_cross=5000)
+                  tp_times.append(time.perf_counter() - start)
+                  _validate_laurent_unit(_kg_terms(kg), _topoly_terms(tp))
+
               print(
-                  f'CASE c={c} before={before} after={after} R1_factor_count={n} '
-                  f'pd_before_len={len(pd)} pd_after_len={len(simplified_pd)} '
-                  f'terms={len(result.term)} simplified_pd={simplified_pd}'
+                  f'BENCH c={c} KG={statistics.median(kg_times):.9f} '
+                  f'Topoly={statistics.median(tp_times):.9f} '
+                  f'reduced={reduced_counts}'
               )
           PY
