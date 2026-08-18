@@ -1,6 +1,6 @@
-# Latest_Workplace Collaborator Handoff
+# KnottedGraph Collaborator Handoff
 
-This branch contains the current working version of the KnottedGraph library, the reorganized user-guide notebooks, and the Sphinx website source.
+This repository contains the current KnottedGraph library, the reorganized user-guide notebooks, and the Sphinx website source. Development branches should preserve the public interfaces and validate changes against the repository test and notebook workflows before integration.
 
 ## Where to Continue
 
@@ -10,27 +10,43 @@ This branch contains the current working version of the KnottedGraph library, th
   - `User_guide/applications/01_physics_applications.ipynb`
   - `User_guide/applications/02_mathematics_applications.ipynb`
   - `User_guide/applications/03_protein_applications.ipynb`
+- Correctness/performance notebooks:
+  - `User_guide/benchmarks/01_sanity_checks.ipynb`
+  - `User_guide/benchmarks/02_application_output_regression.ipynb`
+  - `User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb`
 - Website source: `doc/`
 
-## Why `site_preview/` May Not Appear On GitHub
+## Generated Website Output
 
-`site_preview/` is a generated Sphinx build directory and is ignored by Git. This avoids committing a large duplicate copy of the documentation, static assets, and Sphinx cache files. The reproducible source is `doc/` plus the figure assets under `doc/assets/`.
+`doc/_build/` and `site_preview/` are generated Sphinx build directories and are ignored by Git. This avoids committing duplicate HTML, static assets, and Sphinx caches. The reproducible website source is `doc/` together with the tracked figure assets under `doc/assets/`.
 
-## Rebuild The Local Website Preview
+## Rebuild the Local Website Preview
 
 From the repository root:
 
 ```bash
 uv sync --all-extras --group docs
-uv run --group docs python -m sphinx -b html doc site_preview
+uv run --group docs python -m sphinx -b html -W --keep-going doc site_preview
 open site_preview/index.html
 ```
 
 If an existing virtual environment is already installed:
 
 ```bash
-.venv/bin/python -m sphinx -b html doc site_preview
+.venv/bin/python -m sphinx -b html -W --keep-going doc site_preview
 open site_preview/index.html
 ```
 
-The built preview is local. To publish the website at the GitHub Pages URL, deploy the generated HTML through the repository's Pages workflow or `gh-pages` branch.
+The built preview is local. Publication to GitHub Pages is handled by `.github/workflows/docs.yml` on the configured deployment branch.
+
+## Validation Before Integration
+
+Run the complete test suite and the repository consistency audit before accepting a branch:
+
+```bash
+uv sync --all-extras --group dev --group docs
+uv run --no-sync pytest -q
+uv run --no-sync python dev/check_repository_consistency.py
+```
+
+For changes affecting application outputs, also execute `User_guide/benchmarks/02_application_output_regression.ipynb` through `dev/execute_notebook.py`.
