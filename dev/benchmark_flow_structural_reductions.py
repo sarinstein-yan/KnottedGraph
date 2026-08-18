@@ -99,30 +99,13 @@ def _identify_vertices(graph: CompactGraph, i: int, j: int) -> CompactGraph:
     return _add_edge(graph, i, j).contract_edge(i, j)
 
 
-def _reachable(graph: CompactGraph, start: int, target: int) -> bool:
-    if start == target:
-        return True
-    seen = bytearray(graph.n)
-    seen[start] = 1
-    stack = [start]
-    while stack:
-        node = stack.pop()
-        for other, multiplicity in enumerate(graph.rows[node]):
-            if other == node or not multiplicity or seen[other]:
-                continue
-            if other == target:
-                return True
-            seen[other] = 1
-            stack.append(other)
-    return False
-
-
-def _parallel_factor(multiplicity: int, include_constant: bool):
-    total = ONE if include_constant else ZERO
+def _parallel_factor(multiplicity: int):
+    """Return sum_{j=0}^{k-1} (-sigma)^j exactly."""
+    total = ZERO
     power = ONE
-    for exponent in range(1, multiplicity):
-        power = multiply_sigma(power, sign=-1)
+    for _ in range(multiplicity):
         total = add(total, power)
+        power = multiply_sigma(power, sign=-1)
     return total
 
 
@@ -206,7 +189,7 @@ class StructuralFlowEvaluator:
                 return value
 
         # A connected loopless graph with cyclomatic number <= 1 is either a
-        # cycle (already removed by homeomorphic reduction) or contains a bridge.
+        # cycle (removed by homeomorphic suppression) or contains a bridge.
         if edge_count <= graph.n:
             self.stats["low_cyclomatic_zeros"] += 1
             self.memo[graph] = ZERO
@@ -243,12 +226,11 @@ class StructuralFlowEvaluator:
         if parallel is not None:
             i, j, multiplicity = parallel
             remainder = _delete_parallel_class(graph, i, j)
-            endpoints_connected = _reachable(remainder, i, j)
             contracted = _identify_vertices(remainder, i, j)
-            factor_poly = _parallel_factor(multiplicity, endpoints_connected)
-            value = multiply(factor_poly, self._rec(contracted))
-            if endpoints_connected:
-                value = add(self._rec(remainder), value)
+            value = add(
+                self._rec(remainder),
+                multiply(_parallel_factor(multiplicity), self._rec(contracted)),
+            )
             self.stats["parallel_class_reductions"] += 1
             self.stats["parallel_edges_collapsed"] += multiplicity
             self.memo[graph] = value
@@ -280,11 +262,11 @@ def _med(fn, repeats: int = 3):
 def _fuzz_gate():
     rng = random.Random(20260818)
     checked = 0
-    for _ in range(100):
+    for _ in range(250):
         n = rng.randint(1, 8)
         graph = nx.MultiGraph()
         graph.add_nodes_from(range(n))
-        for _ in range(rng.randint(0, 14)):
+        for _ in range(rng.randint(0, 16)):
             graph.add_edge(rng.randrange(n), rng.randrange(n))
         compact = CompactGraph.from_networkx(graph)
         expected = PythonCompactYamadaEvaluator().compute_laurent(compact)
@@ -335,7 +317,7 @@ def _benchmark_state_case(name: str, calculator: Yamada, crossings: int):
     baseline_evaluator = PythonCompactYamadaEvaluator()
     candidate_evaluator = StructuralFlowEvaluator()
     baseline_s, expected = _med(
-        lambda: _state_sum(calculator, PythonCompactYamadaEvaluator()),
+        lambda: _state_sum(calculator, baseline_evaluator),
         1,
     )
     candidate_s, actual = _med(
@@ -373,9 +355,8 @@ def _subdivided_graph_benchmark():
             next_node += 1
         graph.add_edge(previous, v)
     compact = CompactGraph.from_networkx(graph)
-    baseline_s, expected = _med(
-        lambda: PythonCompactYamadaEvaluator().compute_laurent(compact), 3
-    )
+    baseline_eval = PythonCompactYamadaEvaluator()
+    baseline_s, expected = _med(lambda: baseline_eval.compute_laurent(compact), 3)
     candidate_eval = StructuralFlowEvaluator()
     candidate_s, actual = _med(lambda: candidate_eval.compute_laurent(compact), 3)
     if expected != actual:
