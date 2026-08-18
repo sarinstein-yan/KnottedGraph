@@ -97,7 +97,8 @@ def compute_yamada_from_states(
 
     The public result and recurrence are unchanged. State values are represented
     internally as exact integer Laurent polynomials and converted to SymPy only
-    once, after summation.
+    once, after summation. When the native backend is installed, the entire
+    state batch is evaluated and accumulated in one C++ call.
     """
 
     if len(state_graphs) != len(exponents):
@@ -106,6 +107,21 @@ def compute_yamada_from_states(
         raise ValueError("method must be either 'negami' or 'recursive'.")
 
     evaluator = _make_fast_evaluator(method)
+    compact_states = None
+    if hasattr(evaluator, "compute_many_laurent"):
+        from .compact import CompactGraph
+
+        compact_states = (
+            (
+                graph if isinstance(graph, CompactGraph) else CompactGraph.from_networkx(graph),
+                exponent,
+            )
+            for graph, exponent in zip(state_graphs, exponents)
+        )
+        total = evaluator.compute_many_laurent(compact_states)
+        if normalize:
+            total = normalize_laurent_yamada(total)
+        return laurent_to_sympy(total, A)
 
     if n_jobs == 1:
         evaluated_states = (
@@ -433,9 +449,12 @@ class Yamada:
         return blocks
 
     def _compute_laurent_block(self, evaluator):
+        states = self._iter_compact_states()
+        if hasattr(evaluator, "compute_many_laurent"):
+            return evaluator.compute_many_laurent(states)
         evaluated_states = (
             _evaluate_fast_state(evaluator, graph, exponent)
-            for graph, exponent in self._iter_compact_states()
+            for graph, exponent in states
         )
         return _sum_laurent_states_raw(evaluated_states)
 
@@ -451,15 +470,16 @@ class Yamada:
         Independent crossing-interaction blocks are factored before state
         expansion. Within each block, static diagram connectivity and crossing
         port order are prepared once; every resolution is traced directly into
-        a compact immutable multiplicity matrix and evaluated with exact integer
-        Laurent arithmetic. No NetworkX graph and no SymPy expression is
-        created inside the 3^c state loop.
+        a compact immutable multiplicity matrix. When the compiled native
+        extension is available, the complete block recurrence/state sum runs in
+        C++ and returns one exact Laurent tuple. If its checked int64 coefficient
+        path overflows, the block is transparently recomputed with arbitrary-
+        precision Python integers. No public interface or result convention is
+        changed.
 
-        ``n_jobs`` is retained for API compatibility. The former threaded path
-        constructed NetworkX state graphs and is substantially slower even on
-        multicore runners because state construction and the exact recurrence
-        are Python-bound. The compact shared-memo serial path is therefore used
-        for all ``n_jobs`` values; this changes scheduling only, never results.
+        ``n_jobs`` is retained for API compatibility. The compact shared-memo
+        path is used for all values; native code removes the former Python-bound
+        recurrence bottleneck without changing scheduling semantics.
         """
         if method not in {"negami", "recursive"}:
             raise ValueError("method must be either 'negami' or 'recursive'.")
