@@ -1,6 +1,10 @@
 name: One-off finalize optimization branch
 
 on:
+  pull_request:
+    branches: [Latest_Workplace]
+    paths:
+      - .github/workflows/oneoff-finalize-optimization.yml
   push:
     branches:
       - perf/yamada-max-optimization
@@ -43,9 +47,8 @@ jobs:
           import json
           from knotted_graph.applications.nodal import NodalSkeleton
 
-          signature = inspect.signature(NodalSkeleton.__init__)
           contract = []
-          for name, parameter in signature.parameters.items():
+          for name, parameter in inspect.signature(NodalSkeleton.__init__).parameters.items():
               if name == "self":
                   continue
               default = (
