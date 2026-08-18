@@ -1,6 +1,6 @@
 """Experimental exact crossing-recursion candidate for Yamada evaluation.
 
-This module is intentionally not wired into the public evaluator yet.  It is
+This module is intentionally not wired into the public evaluator yet. It is
 used by regression tests and benchmarks to validate a hybrid strategy before
 production dispatch changes: RII preprocessing, inversion look-ahead, exact
 skein recursion, memoization, and fallback to the current native bulk state
@@ -13,6 +13,15 @@ import itertools
 
 from .fast import add, scale, shift
 from .state_compact import PreparedCompactStateBuilder, _MINUS_PAIRS, _PLUS_PAIRS
+
+_STAT_KEYS = (
+    "calls",
+    "memo_hits",
+    "rii_moves",
+    "inversion_steps",
+    "resolution_steps",
+    "bulk_fallbacks",
+)
 
 
 def _resolution_tables(ordered_ports, port_count):
@@ -111,9 +120,7 @@ def resolve_crossing(prepared, crossing_index: int, spin: int):
     crossing_remap = {old: new for new, old in enumerate(surviving_crossings)}
 
     new_vertex_index = len(prepared.vertex_ids)
-    synthetic_id = max(
-        (*prepared.vertex_ids, *prepared.crossing_ids), default=-1
-    ) + 1
+    synthetic_id = max((*prepared.vertex_ids, *prepared.crossing_ids), default=-1) + 1
     fixed_terminal = list(prepared.fixed_terminal_index)
     crossing_for_port = list(prepared.crossing_for_port)
     for port in crossing_ports:
@@ -232,25 +239,25 @@ def _best_resolution(prepared):
     return best
 
 
+def _prepare_stats(stats):
+    if stats is None:
+        stats = {}
+    for key in _STAT_KEYS:
+        stats.setdefault(key, 0)
+    return stats
+
+
 def compute_hybrid_laurent(prepared, evaluator, *, memo=None, stats=None):
     """Evaluate a prepared diagram with exact guarded structural recursion.
 
     The candidate recurses only when an inversion or an ordinary resolution
-    exposes at least one additional RII cancellation.  Otherwise it immediately
-    falls back to the current native bulk evaluator.  This keeps the generic
+    exposes at least one additional RII cancellation. Otherwise it immediately
+    falls back to the current native bulk evaluator. This keeps the generic
     irreducible case on the already optimized production path.
     """
     if memo is None:
         memo = {}
-    if stats is None:
-        stats = {
-            "calls": 0,
-            "memo_hits": 0,
-            "rii_moves": 0,
-            "inversion_steps": 0,
-            "resolution_steps": 0,
-            "bulk_fallbacks": 0,
-        }
+    stats = _prepare_stats(stats)
     stats["calls"] += 1
 
     prepared, moves = prepared.reduce_reidemeister_ii()
