@@ -46,8 +46,7 @@ jobs:
 
       - name: Install full notebook environment
         run: |
-          uv sync --extra all --group dev --group docs
-          uv pip install topoly
+          uv sync --extra all --group dev --group docs --group benchmark
 
       - name: Verify branch-local import
         run: |

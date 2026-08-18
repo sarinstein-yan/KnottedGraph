@@ -92,12 +92,28 @@ jobs:
           PYTHONNOUSERSITE: '1'
         run: uv run --no-sync python dev/check_repository_consistency.py
 
-      - name: Run complete Python test suite
-        run: uv run --no-sync pytest -q
+      - name: Run complete Python test suite with coverage
+        run: >
+          uv run --no-sync pytest -q
+          --cov=knotted_graph
+          --cov-report=term-missing
+          --cov-report=xml
+          --cov-fail-under=61
+
 
   wheel:
-    name: Build and install wheel
-    runs-on: ubuntu-latest
+    name: Native wheel (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            venv-python: wheel-test/bin/python
+          - os: macos-latest
+            venv-python: wheel-test/bin/python
+          - os: windows-latest
+            venv-python: wheel-test/Scripts/python.exe
 
     steps:
       - name: Check out repository
@@ -113,17 +129,23 @@ jobs:
       - name: Build distribution
         run: uv build
       - name: Create clean wheel environment
+        shell: bash
         run: python -m venv wheel-test
       - name: Install built wheel
-        run: wheel-test/bin/pip install dist/*.whl
-      - name: Smoke-test installed wheel and native backend
+        shell: bash
         run: |
-          wheel-test/bin/python - <<'PY'
+          WHEEL=$(python -c "from pathlib import Path; print(next(Path('dist').glob('*.whl')))")
+          "${{ matrix.venv-python }}" -m pip install "$WHEEL"
+      - name: Smoke-test installed wheel and native backend
+        shell: bash
+        run: |
+          "${{ matrix.venv-python }}" - <<'PY'
           import sympy as sp
           import knotted_graph
           from knotted_graph.core import ThetaGraph
           from knotted_graph.invariants.yamada import compute_yamada_polynomial_recursive
           from knotted_graph.invariants.yamada.native import native_available
+
           A = sp.Symbol("A")
           result = compute_yamada_polynomial_recursive(ThetaGraph(3), A)
           print("version:", knotted_graph.__version__)
@@ -132,7 +154,6 @@ jobs:
           assert native_available(), "built wheel does not contain native Yamada extension"
           assert result != 0
           PY
-
   lint:
     name: Ruff (new review code)
     runs-on: ubuntu-latest
@@ -157,115 +178,5 @@ jobs:
       - name: Run Ruff
         run: uv run --no-sync ruff check src tests dev/check_repository_consistency.py
 
-  oneoff-quality-upgrade:
-    name: Guarded quality upgrade
-    if: github.event_name == 'pull_request' && github.head_ref == 'perf/yamada-max-optimization'
-    runs-on: ubuntu-latest
-    timeout-minutes: 180
-    permissions:
-      contents: write
-
-    steps:
-      - name: Check out optimization branch
-        uses: actions/checkout@v4
-        with:
-          ref: perf/yamada-max-optimization
-          fetch-depth: 0
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install pre-migration nodal environment
-        run: uv sync --extra nodal --group dev
-      - name: Record public NodalSkeleton calling contract
-        run: |
-          uv run --no-sync python - <<'PY'
-          import inspect
-          import json
-          from knotted_graph.applications.nodal import NodalSkeleton
-
-          signature = inspect.signature(NodalSkeleton.__init__)
-          contract = []
-          for name, parameter in signature.parameters.items():
-              if name == "self":
-                  continue
-              default = (
-                  "<required>"
-                  if parameter.default is inspect.Parameter.empty
-                  else repr(parameter.default)
-              )
-              contract.append([name, default, str(parameter.kind)])
-          print(contract)
-          with open("/tmp/nodal-api.json", "w") as handle:
-              json.dump(contract, handle)
-          PY
-      - name: Apply source and configuration migration
-        run: python dev/oneoff_quality_upgrade.py
-      - name: Lock pinned development and benchmark dependencies
-        run: uv lock
-      - name: Install migrated full environment
-        run: uv sync --all-extras --group dev --group docs --group benchmark
-      - name: Require unchanged NodalSkeleton calling contract
-        run: |
-          uv run --no-sync python - <<'PY'
-          import inspect
-          import json
-          from knotted_graph.applications.nodal import NodalSkeleton
-
-          with open("/tmp/nodal-api.json") as handle:
-              before = json.load(handle)
-          after = []
-          signature = inspect.signature(NodalSkeleton.__init__)
-          for name, parameter in signature.parameters.items():
-              if name == "self":
-                  continue
-              default = (
-                  "<required>"
-                  if parameter.default is inspect.Parameter.empty
-                  else repr(parameter.default)
-              )
-              after.append([name, default, str(parameter.kind)])
-          assert after == before, (before, after)
-          print("NodalSkeleton public calling contract unchanged:", after)
-          PY
-      - name: Run exact nodal regression suite
-        run: uv run --no-sync pytest -q tests/applications/test_nodal_regressions.py
-      - name: Generate versioned paper benchmark corpus
-        run: uv run --no-sync python dev/generate_topoly_random_cubic_corpus.py
-      - name: Validate benchmark design and committed corpus
-        run: uv run --no-sync pytest -q tests/benchmarks/test_topoly_paper_setup.py
-      - name: Run incremental static type checking
+      - name: Run incremental Pyright checks
         run: uv run --no-sync pyright
-      - name: Measure full-suite coverage baseline
-        run: >
-          uv run --no-sync pytest -q
-          --cov=knotted_graph
-          --cov-report=term-missing
-          --cov-report=json:coverage.json
-      - name: Run hard application-output regression
-        env:
-          MPLBACKEND: Agg
-          PYVISTA_OFF_SCREEN: "true"
-        run: >
-          uv run --no-sync python dev/execute_notebook.py
-          User_guide/benchmarks/02_application_output_regression.ipynb
-          --timeout 7200
-      - name: Convert temporary migration into permanent CI configuration
-        run: uv run --no-sync python dev/oneoff_finalize_quality.py
-      - name: Audit final repository consistency
-        env:
-          PYTHONPATH: ${{ github.workspace }}/src
-          PYTHONNOUSERSITE: '1'
-        run: uv run --no-sync python dev/check_repository_consistency.py
-      - name: Commit only after all regression gates pass
-        run: |
-          rm -f coverage.json
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git diff --cached --check
-          git status --short
-          git commit -m "Harden release quality without changing outputs"
-          git push origin HEAD:perf/yamada-max-optimization

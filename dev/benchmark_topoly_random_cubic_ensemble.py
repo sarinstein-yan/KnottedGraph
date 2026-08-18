@@ -8,6 +8,7 @@ import multiprocessing as mp
 import statistics
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 import networkx as nx
 import numpy as np
@@ -20,6 +21,11 @@ A = sp.Symbol("A")
 DEFAULT_TIMEOUT_S = 120.0
 DEFAULT_SAMPLES = 10
 DEFAULT_SEED = 20260818
+DEFAULT_CORPUS = (
+    Path(__file__).resolve().parent
+    / "benchmark_data"
+    / "topoly_random_cubic_v1.jsonl"
+)
 
 
 @dataclass(frozen=True)
@@ -47,6 +53,50 @@ def vertex_grid(profile: str) -> list[int]:
     if profile == "smoke":
         return _smoke_vertices()
     raise ValueError(profile)
+
+
+
+def load_committed_ensemble(
+    vertex_count: int,
+    n_samples: int,
+    corpus_path: Path = DEFAULT_CORPUS,
+) -> list[tuple[Sample, nx.Graph]]:
+    """Load the versioned paper corpus instead of regenerating graph topology."""
+    if not corpus_path.exists():
+        raise FileNotFoundError(
+            f"Committed benchmark corpus is missing: {corpus_path}. "
+            "Regenerate it only with dev/generate_topoly_random_cubic_corpus.py."
+        )
+    rows = [
+        json.loads(line)
+        for line in corpus_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    rows = sorted(
+        (row for row in rows if int(row["V"]) == vertex_count),
+        key=lambda row: int(row["sample"]),
+    )[:n_samples]
+    if len(rows) != n_samples:
+        raise AssertionError(
+            f"corpus has {len(rows)} samples at V={vertex_count}, expected {n_samples}"
+        )
+
+    ensemble = []
+    for row in rows:
+        abstract = nx.from_graph6_bytes(row["graph6"].encode("ascii"))
+        expected_edges = sorted(tuple(map(int, edge)) for edge in row["edge_list"])
+        actual_edges = sorted((min(u, v), max(u, v)) for u, v in abstract.edges())
+        if actual_edges != expected_edges:
+            raise AssertionError(f"graph6/edge-list mismatch at V={vertex_count}")
+        abstract.graph["_committed_benchmark"] = row
+        sample = Sample(
+            vertex_count=vertex_count,
+            sample_index=int(row["sample"]),
+            topology_seed=int(row["topology_seed"]),
+            topology_attempt=int(row["topology_attempt"]),
+        )
+        ensemble.append((sample, abstract))
+    return ensemble
 
 
 def _seed(*parts: object) -> int:
@@ -319,6 +369,35 @@ def prepare_sample(
     if abstract.number_of_edges() != 3 * sample.vertex_count // 2:
         raise AssertionError("cubic topology must satisfy E=3V/2")
 
+    committed = abstract.graph.get("_committed_benchmark")
+    if committed is not None:
+        embedded = nx.MultiGraph()
+        positions = committed["node_positions"]
+        for node in sorted(abstract.nodes()):
+            embedded.add_node(
+                node,
+                pos=np.asarray(positions[str(int(node))], dtype=float),
+            )
+        for u, v in abstract.edges():
+            embedded.add_edge(
+                u,
+                v,
+                pts=np.vstack([embedded.nodes[u]["pos"], embedded.nodes[v]["pos"]]),
+            )
+        processor = PDCode(embedded)
+        pdcode = processor.compute(rotation_angles=(0.0, 0.0, 0.0))
+        if pdcode != committed["pdcode"]:
+            raise AssertionError(
+                f"committed PD drift at V={sample.vertex_count}, sample={sample.sample_index}"
+            )
+        if len(processor.crossings) != int(committed["crossings"]):
+            raise AssertionError("committed crossing-count drift")
+        if _abstract_hash(abstract) != committed["topology_instance_hash"]:
+            raise AssertionError("committed topology hash drift")
+        if _embedding_hash(embedded) != committed["embedding_hash"]:
+            raise AssertionError("committed embedding hash drift")
+        return embedded, processor, pdcode, int(committed["embedding_attempt"])
+
     last_error = None
     for embedding_attempt in range(25):
         embedded = embed_topology(
@@ -568,7 +647,7 @@ def main(
 
     for vertex_count in vertices:
         print(f"FAMILY=random_cubic V={vertex_count}", flush=True)
-        ensemble = topology_ensemble(vertex_count, samples_per_v, base_seed)
+        ensemble = load_committed_ensemble(vertex_count, samples_per_v)
         # Repeat the exact ensemble-boundary guarantee using the same safe
         # invariant prefilter and exact collision fallback.
         profiles = [_isomorphism_profile(graph) for _, graph in ensemble]

@@ -366,15 +366,19 @@ class Yamada:
             [exponent for _, exponent in states],
         )
 
-    def _iter_compact_states(self):
-        """Trace all resolutions directly into compact multigraphs."""
+    def _prepare_compact_state_builder(self):
+        """Prepare and exactly RII-reduce the compact state tables once."""
         prepared = PreparedCompactStateBuilder.prepare(
             self.vertices,
             self.crossings,
             self.arcs,
             _ordered_crossing_ports,
         )
-        prepared, _ = prepared.reduce_reidemeister_ii()
+        return prepared.reduce_reidemeister_ii()[0]
+
+    def _iter_compact_states(self):
+        """Trace all resolutions directly into compact multigraphs."""
+        prepared = self._prepare_compact_state_builder()
         crossing_count = len(prepared.crossing_ids)
         for config in itertools.product([0, 1, 2], repeat=crossing_count):
             yield prepared.build(config), config.count(0) - config.count(1)
@@ -451,7 +455,15 @@ class Yamada:
         return blocks
 
     def _compute_laurent_block(self, evaluator):
-        states = self._iter_compact_states()
+        prepared = self._prepare_compact_state_builder()
+        if hasattr(evaluator, "compute_prepared_laurent"):
+            return evaluator.compute_prepared_laurent(prepared)
+
+        crossing_count = len(prepared.crossing_ids)
+        states = (
+            (prepared.build(config), config.count(0) - config.count(1))
+            for config in itertools.product([0, 1, 2], repeat=crossing_count)
+        )
         if hasattr(evaluator, "compute_many_laurent"):
             return evaluator.compute_many_laurent(states)
         evaluated_states = (

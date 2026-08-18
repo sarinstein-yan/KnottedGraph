@@ -111,6 +111,44 @@ class NativeCompactEvaluator:
             total = add(total, shift(evaluator.compute_laurent(graph), int(exponent)))
         return total
 
+    def compute_prepared_laurent(self, prepared):
+        """Evaluate a prepared diagram wholly in native code when available."""
+        if self._native is not None and hasattr(self._native, "compute_prepared"):
+            try:
+                self.native_calls += 1
+                return _as_laurent(
+                    self._native.compute_prepared(
+                        len(prepared.vertex_ids),
+                        len(prepared.crossing_ids),
+                        list(prepared.arc_partner),
+                        list(prepared.fixed_terminal_index),
+                        list(prepared.crossing_for_port),
+                        list(prepared.plus_partner),
+                        list(prepared.minus_partner),
+                    )
+                )
+            except OverflowError:
+                self.fallback_calls += 1
+
+        # Preserve exact arbitrary-precision behavior on non-native platforms or
+        # int64 overflow by evaluating the identical prepared state definition.
+        import itertools
+        from .fast import add, shift
+
+        evaluator = self._python()
+        total = ()
+        for config in itertools.product(
+            (0, 1, 2), repeat=len(prepared.crossing_ids)
+        ):
+            total = add(
+                total,
+                shift(
+                    evaluator.compute_laurent(prepared.build(config)),
+                    config.count(0) - config.count(1),
+                ),
+            )
+        return total
+
     def compute(self, graph, variable):
         from .fast import to_sympy
 

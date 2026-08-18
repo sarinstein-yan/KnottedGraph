@@ -237,3 +237,11 @@ def test_skeleton_coords_match_legacy_dense_grid_formula_exactly():
         name not in model.__dict__
         for name in ("kx_grid", "ky_grid", "kz_grid")
     )
+
+
+def test_memory_optimizations_are_native_class_implementation():
+    """Optimized behavior must not be installed by import-time monkeypatching."""
+    assert NodalSkeleton.__init__.__module__ == skeleton_module.__name__
+    assert NodalSkeleton.spectrum.func.__module__ == skeleton_module.__name__
+    assert NodalSkeleton.skeleton_coords.func.__module__ == skeleton_module.__name__
+    assert NodalSkeleton.kx_grid.__class__.__module__ == skeleton_module.__name__

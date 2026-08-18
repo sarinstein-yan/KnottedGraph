@@ -106,7 +106,12 @@ PyPI = "https://pypi.org/project/knotted_graph/"
 [dependency-groups]
 dev = [
     "pytest",
+    "pytest-cov",
+    "pyright",
     "ruff",
+]
+benchmark = [
+    "topoly==1.1.0",
 ]
 docs = [
     "jupytext",
@@ -134,3 +139,11 @@ build-type = "Release"
 "src/knotted_graph/applications/nodal/__init__.py" = ["F403"]
 "src/knotted_graph/visualization/__init__.py" = ["F403"]
 "src/knotted_graph/applications/materials.py" = ["F822"]
+
+[tool.pyright]
+include = [
+    "src/knotted_graph/invariants/yamada/fast.py",
+]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+reportMissingTypeStubs = false

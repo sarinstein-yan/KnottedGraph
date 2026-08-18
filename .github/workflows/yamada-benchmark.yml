@@ -21,7 +21,6 @@ on:
       - "dev/benchmark_compact_optimization_candidates.py"
       - "dev/benchmark_laurent_arithmetic_candidates.py"
       - "dev/benchmark_native_yamada_candidate.py"
-      - "dev/benchmark_skein_hybrid_candidate.py"
       - "dev/benchmark_flow_structural_reductions.py"
       - "dev/benchmark_skeletonization_candidates.py"
       - "dev/benchmark_nodal_memory_candidates.py"
@@ -30,6 +29,8 @@ on:
       - "dev/run_yamada_sanity_checks.py"
       - "dev/benchmark_topoly_extended_scaling.py"
       - "dev/benchmark_topoly_random_cubic_ensemble.py"
+      - "dev/generate_topoly_random_cubic_corpus.py"
+      - "dev/benchmark_data/topoly_random_cubic_v1.jsonl"
       - "dev/plot_topoly_scaling.py"
       - "tests/benchmarks/test_topoly_paper_setup.py"
       - "User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb"
@@ -69,8 +70,6 @@ jobs:
         run: uv run --no-sync python dev/benchmark_laurent_arithmetic_candidates.py
       - name: Benchmark production C++ backend with exact fuzz, overflow and state-sum gates
         run: uv run --no-sync python dev/benchmark_native_yamada_candidate.py
-      - name: Benchmark guarded hybrid skein candidate on irreducible diagrams
-        run: uv run --no-sync python dev/benchmark_skein_hybrid_candidate.py
       - name: Benchmark exact flow-structure reductions
         run: uv run --no-sync python dev/benchmark_flow_structural_reductions.py
       - name: Profile remaining projection and invariant costs
@@ -184,8 +183,7 @@ jobs:
           python-version: "3.12"
       - name: Install environment and Topoly
         run: |
-          uv sync --group dev
-          uv pip install topoly
+          uv sync --group dev --group benchmark
       - name: Require production native backend
         run: |
           uv run --no-sync python - <<'PY'

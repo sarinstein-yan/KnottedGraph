@@ -182,3 +182,33 @@ def test_random_cubic_pd_preparation_preserves_abstract_topology():
     assert isinstance(pdcode, str) and pdcode
     assert embedding_attempt >= 0
     assert len(processor.vertices) == abstract.number_of_nodes()
+
+
+def test_committed_random_cubic_corpus_is_complete_and_reconstructs_pd():
+    bench = _random_cubic()
+    corpus = bench.DEFAULT_CORPUS
+    assert corpus.exists()
+    rows = [
+        __import__("json").loads(line)
+        for line in corpus.read_text().splitlines()
+        if line.strip()
+    ]
+    assert len(rows) == len(bench.vertex_grid("paper")) * bench.DEFAULT_SAMPLES
+
+    for vertex_count in bench.vertex_grid("paper"):
+        group = [row for row in rows if int(row["V"]) == vertex_count]
+        assert len(group) == bench.DEFAULT_SAMPLES
+        assert len({row["graph6"] for row in group}) == bench.DEFAULT_SAMPLES
+        assert len({row["pdcode"] for row in group}) == bench.DEFAULT_SAMPLES
+
+    # Reconstruct representative small, middle and large committed instances.
+    for vertex_count in (10, 64, 200):
+        sample, abstract = bench.load_committed_ensemble(vertex_count, 1)[0]
+        embedded, processor, pdcode, _ = bench.prepare_sample(
+            sample, abstract, bench.DEFAULT_SEED
+        )
+        row = abstract.graph["_committed_benchmark"]
+        assert pdcode == row["pdcode"]
+        assert len(processor.crossings) == int(row["crossings"])
+        assert embedded.number_of_nodes() == vertex_count
+        assert embedded.number_of_edges() == 3 * vertex_count // 2

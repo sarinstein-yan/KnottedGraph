@@ -30,6 +30,45 @@ from numpy.typing import NDArray, ArrayLike
 # - [] from_graph_to_pd_code, from_pd_code_to_yamada, from_graph_to_yamada
 
 
+_MISSING_GRID = object()
+
+
+class _LazyCoordinateGrid:
+    """Legacy dense coordinate grid materialized only on explicit access.
+
+    The returned object is a normal writable C-contiguous ``ndarray`` matching
+    ``np.meshgrid(..., indexing="ij")``. Explicit assignment and deletion keep
+    the ordinary instance-attribute semantics of the historical API.
+    """
+
+    def __init__(self, axis: int, name: str):
+        self.axis = axis
+        self.name = name
+
+    def __get__(self, instance, owner=None):
+        if instance is None:
+            return self
+        value = instance.__dict__.get(self.name, _MISSING_GRID)
+        if value is _MISSING_GRID:
+            shape = (instance.dimension,) * 3
+            axis_values = (
+                instance.kx_vals,
+                instance.ky_vals,
+                instance.kz_vals,
+            )[self.axis]
+            reshape = [1, 1, 1]
+            reshape[self.axis] = instance.dimension
+            value = np.broadcast_to(axis_values.reshape(reshape), shape).copy()
+            instance.__dict__[self.name] = value
+        return value
+
+    def __set__(self, instance, value):
+        instance.__dict__[self.name] = value
+
+    def __delete__(self, instance):
+        instance.__dict__.pop(self.name, None)
+
+
 class NodalSkeleton:
     """Analyze a two-band non-Hermitian nodal-skeleton model.
 
@@ -55,6 +94,11 @@ class NodalSkeleton:
     pauli_y = sp.ImmutableDenseMatrix([[0, -sp.I], [sp.I, 0]])
     pauli_z = sp.ImmutableDenseMatrix([[1, 0], [0, -1]])
     pauli_vec = (pauli_x, pauli_y, pauli_z)
+
+    # Public compatibility arrays, now materialized lazily.
+    kx_grid = _LazyCoordinateGrid(0, "kx_grid")
+    ky_grid = _LazyCoordinateGrid(1, "ky_grid")
+    kz_grid = _LazyCoordinateGrid(2, "kz_grid")
 
     def __init__(
         self,
@@ -119,10 +163,8 @@ class NodalSkeleton:
             setattr(self, f'k{axis}_max', mx)
             setattr(self, f'k{axis}_vals', np.linspace(mn, mx, dimension))
 
-        self.kx_grid, self.ky_grid, self.kz_grid = np.meshgrid(
-            self.kx_vals, self.ky_vals, self.kz_vals,
-            indexing='ij'
-        )
+        # Dense k-space coordinate grids are compatibility attributes and
+        # are intentionally not materialized until explicitly accessed.
 
         # default cache for skeleton graph
         self.skeleton_graph_cache = None
@@ -164,7 +206,35 @@ class NodalSkeleton:
             where \(\vec{d}\) represents the Bloch vector components.
             I.e., the half of the energy band gap.
         """
-        return np.sqrt(np.sum(self._bloch_vec_grid**2, axis=0))
+        shape = (self.dimension,) * 3
+        grids = (
+            self.kx_vals[:, None, None],
+            self.ky_vals[None, :, None],
+            self.kz_vals[None, None, :],
+        )
+        total = np.empty(shape, dtype=np.complex128)
+
+        for index, (expr, func) in enumerate(
+            zip(self.bloch_vec, self.bloch_vec_funcs)
+        ):
+            if expr.free_symbols:
+                component = np.asarray(func(*grids), dtype=np.complex128)
+            else:
+                component = np.asarray(complex(expr), dtype=np.complex128)
+
+            if component.flags.writeable:
+                np.multiply(component, component, out=component)
+                squared = component
+            else:
+                squared = np.multiply(component, component)
+
+            if index == 0:
+                np.copyto(total, squared)
+            else:
+                np.add(total, squared, out=total)
+
+        np.sqrt(total, out=total)
+        return total
 
 
     @cached_property
@@ -315,9 +385,13 @@ class NodalSkeleton:
             skeleton, and each row is the (kx, ky, kz) coordinate of a point.
         """
         point_mask = np.where(self._skeleton_image)
-        return np.asarray([self.kx_grid[point_mask],
-                           self.ky_grid[point_mask],
-                           self.kz_grid[point_mask]]).T
+        return np.asarray(
+            [
+                self.kx_vals[point_mask[0]],
+                self.ky_vals[point_mask[1]],
+                self.kz_vals[point_mask[2]],
+            ]
+        ).T
 
 
     def skeleton_graph(

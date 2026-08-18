@@ -11,6 +11,15 @@
 #include <utility>
 #include <vector>
 
+// Exact structural identities used by the recurrence below are Yamada graph
+// polynomial identities, not numerical approximations. References:
+// S. Yamada, J. Graph Theory 13 (1989), 537-551.
+// https://doi.org/10.1002/jgt.3190130503
+// M. Li et al., J. Knot Theory Ramifications 27 (2018).
+// https://doi.org/10.1142/S021821651842004X
+// The dense compact representation, memo layout, int64 checked fast path and
+// prepared-state traversal are KnottedGraph implementation optimizations.
+
 namespace py = pybind11;
 using Coeff = std::int64_t;
 using Laurent = std::map<int, Coeff>;
@@ -175,6 +184,8 @@ Laurent multiply_sigma(const Laurent& poly, int sign = 1) {
     return out;
 }
 
+// Yamada loop identity; Li et al., Sec. 2, property (3):
+// https://doi.org/10.1142/S021821651842004X
 Laurent negative_sigma_power(int exponent) {
     Laurent out = constant(1);
     for (int i = 0; i < exponent; ++i) {
@@ -183,6 +194,8 @@ Laurent negative_sigma_power(int exponent) {
     return out;
 }
 
+// Closed whole-parallel-class factor obtained by repeated exact
+// deletion-contraction plus the loop identity (same reference).
 Laurent parallel_factor(int multiplicity) {
     Laurent total;
     Laurent power = constant(1);
@@ -350,6 +363,8 @@ Graph suppress_degree_two(const Graph& graph, int vertex) {
     return out;
 }
 
+// Loop batching and degree-two homeomorphism/subdivision reduction;
+// see Li et al., Lemma 2.3 and Sec. 2 identities.
 std::pair<Graph, Laurent> reduce_homeomorphic(const Graph& input) {
     Graph graph = input;
     Laurent factor = constant(1);
@@ -496,6 +511,124 @@ std::vector<Graph> articulation_parts(const Graph& graph, int cut) {
     return parts;
 }
 
+
+// Build one resolved graph directly from the prepared PD port tables. This is
+// an implementation optimization: the Yamada three-state definition is
+// unchanged; only Python per-state allocation is removed.
+Graph build_prepared_state(
+    int vertex_count,
+    int crossing_count,
+    const std::vector<int>& state,
+    const std::vector<int>& arc_partner,
+    const std::vector<int>& fixed_terminal_index,
+    const std::vector<int>& crossing_for_port,
+    const std::vector<int>& plus_partner,
+    const std::vector<int>& minus_partner
+) {
+    const int port_count = static_cast<int>(arc_partner.size());
+    if (
+        static_cast<int>(state.size()) != crossing_count ||
+        static_cast<int>(fixed_terminal_index.size()) != port_count ||
+        static_cast<int>(crossing_for_port.size()) != port_count ||
+        static_cast<int>(plus_partner.size()) != port_count ||
+        static_cast<int>(minus_partner.size()) != port_count
+    ) {
+        throw std::invalid_argument("prepared Yamada table size mismatch");
+    }
+
+    std::vector<int> crossing_terminal_index(crossing_count, -1);
+    int node_count = vertex_count;
+    for (int crossing = 0; crossing < crossing_count; ++crossing) {
+        int spin = state[crossing];
+        if (spin == 2) {
+            crossing_terminal_index[crossing] = node_count++;
+        } else if (spin != 0 && spin != 1) {
+            throw std::invalid_argument("invalid prepared Yamada state spin");
+        }
+    }
+
+    auto terminal_index = [&](int port) -> int {
+        int fixed = fixed_terminal_index[port];
+        if (fixed >= 0) return fixed;
+        int crossing = crossing_for_port[port];
+        if (crossing >= 0 && state[crossing] == 2) {
+            return crossing_terminal_index[crossing];
+        }
+        return -1;
+    };
+
+    std::vector<char> visited(port_count, 0);
+    std::vector<std::pair<int, int>> graph_edges;
+    graph_edges.reserve(port_count / 2);
+
+    for (int start_port = 0; start_port < port_count; ++start_port) {
+        int start_terminal = terminal_index(start_port);
+        if (start_terminal < 0 || visited[start_port]) continue;
+
+        int current = start_port;
+        while (true) {
+            int other = arc_partner[current];
+            if (other < 0 || other >= port_count) {
+                throw std::runtime_error("malformed prepared arc table");
+            }
+            visited[current] = 1;
+            visited[other] = 1;
+
+            int end_terminal = terminal_index(other);
+            if (end_terminal >= 0) {
+                graph_edges.emplace_back(start_terminal, end_terminal);
+                break;
+            }
+
+            int crossing = crossing_for_port[other];
+            if (crossing < 0 || crossing >= crossing_count) {
+                throw std::runtime_error("resolved port has no crossing");
+            }
+            int spin = state[crossing];
+            current = spin == 0 ? plus_partner[other] : minus_partner[other];
+            if (current < 0 || current >= port_count) {
+                throw std::runtime_error("malformed prepared resolution table");
+            }
+        }
+    }
+
+    int closed_loop_count = 0;
+    for (int start_port = 0; start_port < port_count; ++start_port) {
+        if (visited[start_port]) continue;
+        ++closed_loop_count;
+        int current = start_port;
+        while (true) {
+            int other = arc_partner[current];
+            visited[current] = 1;
+            visited[other] = 1;
+            int crossing = crossing_for_port[other];
+            if (crossing < 0 || crossing >= crossing_count || state[crossing] == 2) {
+                throw std::runtime_error("malformed terminal-free prepared component");
+            }
+            current = state[crossing] == 0 ? plus_partner[other] : minus_partner[other];
+            if (current < 0 || current >= port_count) {
+                throw std::runtime_error("malformed prepared resolution table");
+            }
+            if (visited[current]) break;
+        }
+    }
+
+    Graph graph;
+    graph.n = node_count + closed_loop_count;
+    graph.a.assign(
+        static_cast<std::size_t>(graph.n) * static_cast<std::size_t>(graph.n), 0
+    );
+    for (const auto& [i, j] : graph_edges) {
+        ++graph.at(i, j);
+        if (i != j) ++graph.at(j, i);
+    }
+    for (int loop = 0; loop < closed_loop_count; ++loop) {
+        int node = node_count + loop;
+        graph.at(node, node) = 1;
+    }
+    return graph;
+}
+
 PythonLaurent to_python(const Laurent& poly) {
     PythonLaurent out;
     out.reserve(poly.size());
@@ -524,6 +657,47 @@ public:
         for (std::size_t i = 0; i < graphs.size(); ++i) {
             total = add(total, shift(rec(from_rows(graphs[i])), exponents[i]));
         }
+        return to_python(total);
+    }
+
+
+    PythonLaurent compute_prepared(
+        int vertex_count,
+        int crossing_count,
+        const std::vector<int>& arc_partner,
+        const std::vector<int>& fixed_terminal_index,
+        const std::vector<int>& crossing_for_port,
+        const std::vector<int>& plus_partner,
+        const std::vector<int>& minus_partner
+    ) {
+        if (crossing_count < 0 || vertex_count < 0) {
+            throw std::invalid_argument("negative prepared Yamada dimensions");
+        }
+        std::vector<int> state(static_cast<std::size_t>(crossing_count), 0);
+        Laurent total;
+        std::function<void(int, int)> enumerate = [&](int index, int exponent) {
+            if (index == crossing_count) {
+                Graph graph = build_prepared_state(
+                    vertex_count,
+                    crossing_count,
+                    state,
+                    arc_partner,
+                    fixed_terminal_index,
+                    crossing_for_port,
+                    plus_partner,
+                    minus_partner
+                );
+                total = add(total, shift(rec(graph), exponent));
+                return;
+            }
+            state[index] = 0;
+            enumerate(index + 1, exponent + 1);
+            state[index] = 1;
+            enumerate(index + 1, exponent - 1);
+            state[index] = 2;
+            enumerate(index + 1, exponent);
+        };
+        enumerate(0, 0);
         return to_python(total);
     }
 
@@ -630,6 +804,10 @@ PYBIND11_MODULE(_yamada_native, module) {
         )
         .def(
             "compute_many", &NativeEvaluator::compute_many,
+            py::call_guard<py::gil_scoped_release>()
+        )
+        .def(
+            "compute_prepared", &NativeEvaluator::compute_prepared,
             py::call_guard<py::gil_scoped_release>()
         )
         .def("clear", &NativeEvaluator::clear)
