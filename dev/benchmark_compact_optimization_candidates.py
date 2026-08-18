@@ -10,8 +10,8 @@ import sympy as sp
 
 from knotted_graph.invariants.yamada.compact import (
     CompactGraph,
-    CompactNegamiSpecializedEvaluator,
-    CompactYamadaEvaluator,
+    PythonCompactNegamiSpecializedEvaluator,
+    PythonCompactYamadaEvaluator,
     _theta_value,
 )
 from knotted_graph.invariants.yamada.fast import (
@@ -291,13 +291,18 @@ def connected_calculator():
     return calculator, 1
 
 
-def candidate_state_sum(calculator, strategy, delete_first):
-    evaluator = CandidateEvaluator(strategy=strategy, delete_first=delete_first)
+def state_sum_with_evaluator(calculator, evaluator):
     raw = _sum_laurent_states_raw(
         _evaluate_fast_state(evaluator, graph, exponent)
         for graph, exponent in calculator._iter_compact_states()
     )
-    return to_sympy(raw, A), evaluator.calls, len(evaluator.memo)
+    return to_sympy(raw, A)
+
+
+def candidate_state_sum(calculator, strategy, delete_first):
+    evaluator = CandidateEvaluator(strategy=strategy, delete_first=delete_first)
+    polynomial = state_sum_with_evaluator(calculator, evaluator)
+    return polynomial, evaluator.calls, len(evaluator.memo)
 
 
 def main():
@@ -305,34 +310,83 @@ def main():
     rows = []
     print("KERNEL_CANDIDATES")
     for name, graph in kernel_cases():
-        baseline_t, baseline = median_time(lambda: CompactYamadaEvaluator().compute(graph, A))
+        baseline_t, baseline = median_time(
+            lambda: PythonCompactYamadaEvaluator().compute(graph, A)
+        )
         for strategy in strategies:
-            t, result = median_time(lambda strategy=strategy: CandidateEvaluator(strategy=strategy).compute(graph))
+            t, result = median_time(
+                lambda strategy=strategy: CandidateEvaluator(strategy=strategy).compute(graph)
+            )
             if not equal(baseline, result):
                 raise AssertionError(f"Candidate output mismatch: {name} {strategy}")
-            row = {"scope":"kernel","case":name,"V":graph.number_of_nodes(),"E":graph.number_of_edges(),"strategy":strategy,"baseline_s":baseline_t,"candidate_s":t,"speedup":baseline_t/t}
+            row = {
+                "scope": "kernel",
+                "case": name,
+                "V": graph.number_of_nodes(),
+                "E": graph.number_of_edges(),
+                "strategy": strategy,
+                "baseline": "python_reference",
+                "baseline_s": baseline_t,
+                "candidate_s": t,
+                "speedup": baseline_t / t,
+            }
             rows.append(row)
             print(json.dumps(row, separators=(",", ":")))
 
     ladder = nx.MultiGraph(nx.circular_ladder_graph(5))
-    baseline_negami_t, baseline_negami = median_time(lambda: CompactNegamiSpecializedEvaluator().compute(ladder, A))
+    baseline_negami_t, baseline_negami = median_time(
+        lambda: PythonCompactNegamiSpecializedEvaluator().compute(ladder, A)
+    )
     for delete_first in (False, True):
-        t, result = median_time(lambda: CandidateEvaluator(strategy="first", delete_first=delete_first).compute(ladder))
+        t, result = median_time(
+            lambda: CandidateEvaluator(
+                strategy="first", delete_first=delete_first
+            ).compute(ladder)
+        )
         if not equal(baseline_negami, result):
             raise AssertionError("Negami branch-order candidate changed output")
-        row = {"scope":"negami_branch_order","case":"ladder_5","delete_first":delete_first,"baseline_s":baseline_negami_t,"candidate_s":t,"speedup":baseline_negami_t/t}
+        row = {
+            "scope": "negami_branch_order",
+            "case": "ladder_5",
+            "delete_first": delete_first,
+            "baseline": "python_reference",
+            "baseline_s": baseline_negami_t,
+            "candidate_s": t,
+            "speedup": baseline_negami_t / t,
+        }
         rows.append(row)
         print(json.dumps(row, separators=(",", ":")))
 
     calculator, crossings = connected_calculator()
-    baseline_t, baseline = median_time(lambda: calculator.compute(A, normalize=False, n_jobs=1, method="negami"), 2)
+    baseline_t, baseline = median_time(
+        lambda: state_sum_with_evaluator(
+            calculator, PythonCompactNegamiSpecializedEvaluator()
+        ),
+        2,
+    )
     print("CONNECTED_CANDIDATES")
     for strategy in strategies:
-        t, result = median_time(lambda strategy=strategy: candidate_state_sum(calculator, strategy, True), 2)
+        t, result = median_time(
+            lambda strategy=strategy: candidate_state_sum(calculator, strategy, True),
+            2,
+        )
         poly, calls, memo = result
         if not equal(baseline, poly):
             raise AssertionError(f"Connected candidate output mismatch: {strategy}")
-        row = {"scope":"connected","case":"K4","V":4,"E":6,"crossings":crossings,"strategy":strategy,"baseline_s":baseline_t,"candidate_s":t,"speedup":baseline_t/t,"calls":calls,"memo":memo}
+        row = {
+            "scope": "connected",
+            "case": "K4",
+            "V": 4,
+            "E": 6,
+            "crossings": crossings,
+            "strategy": strategy,
+            "baseline": "python_reference",
+            "baseline_s": baseline_t,
+            "candidate_s": t,
+            "speedup": baseline_t / t,
+            "calls": calls,
+            "memo": memo,
+        }
         rows.append(row)
         print(json.dumps(row, separators=(",", ":")))
     print("SUMMARY=" + json.dumps(rows, separators=(",", ":")))
