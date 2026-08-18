@@ -1,6 +1,6 @@
 name: One-off finalize optimization branch
 
-# Retrigger after fixing the cleanup audit for intentional staged deletions.
+# Retrigger after fixing the final repository audit findings.
 on:
   pull_request:
     branches: [Latest_Workplace]
