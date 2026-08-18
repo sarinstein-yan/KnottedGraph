@@ -109,6 +109,20 @@ def update_benchmark_workflow() -> None:
     old = """          uv sync --group dev\n          uv pip install topoly\n"""
     if old in text:
         text = text.replace(old, "          uv sync --group dev --group benchmark\n")
+
+    # Remove research-only candidates whose exact experiments showed no runtime
+    # benefit. Production CI retains the permanent structural/native regressions.
+    for line in (
+        '      - "dev/benchmark_skein_hybrid_candidate.py"\n',
+        '      - "dev/benchmark_frontier_flow_candidate.py"\n',
+        '      - "dev/benchmark_native_discrete_canonical_candidate.py"\n',
+        '      - "dev/benchmark_native_prepared_candidate.py"\n',
+    ):
+        text = text.replace(line, "")
+    for block in (
+        """      - name: Benchmark guarded hybrid skein candidate on irreducible diagrams\n        run: uv run --no-sync python dev/benchmark_skein_hybrid_candidate.py\n""",
+    ):
+        text = text.replace(block, "")
     path.write_text(text)
 
 
@@ -124,9 +138,32 @@ def update_notebook_workflow() -> None:
     path.write_text(text)
 
 
+def remove_rejected_experiments() -> None:
+    """Remove candidate-only files after their exact benchmark decisions."""
+    candidates = (
+        ".github/workflows/yamada-flow-candidate.yml",
+        "dev/benchmark_frontier_flow_candidate.py",
+        "dev/benchmark_native_discrete_canonical_candidate.py",
+        "dev/benchmark_native_prepared_candidate.py",
+        "dev/benchmark_skein_hybrid_candidate.py",
+        "dev/benchmark_two_vertex_candidate.py",
+        "dev/benchmark_two_vertex_decomposition_candidate.py",
+        "dev/benchmark_exact_isomorphism_candidate.py",
+        "dev/benchmark_isomorphism_candidate.py",
+        "dev/benchmark_state_streaming_candidate.py",
+        "dev/benchmark_native_streaming_candidate.py",
+        "dev/benchmark_streaming_candidate.py",
+    )
+    for relative in candidates:
+        path = ROOT / relative
+        if path.exists():
+            path.unlink()
+
+
 def remove_temporary_migration_files() -> None:
     for relative in (
         ".github/workflows/oneoff-integrate-nodal-memory.yml",
+        ".github/workflows/oneoff-fix-frontier-union.yml",
         "dev/oneoff_quality_upgrade.py",
         "dev/oneoff_finalize_quality.py",
         "dev/promote_native_prepared.py",
@@ -173,6 +210,7 @@ def main() -> None:
     threshold = update_tests_workflow()
     update_benchmark_workflow()
     update_notebook_workflow()
+    remove_rejected_experiments()
     remove_temporary_migration_files()
     print(f"Permanent coverage floor set to {threshold}% from measured baseline.")
 
