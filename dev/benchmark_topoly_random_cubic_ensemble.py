@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import hashlib
 import json
 import multiprocessing as mp
@@ -114,6 +115,66 @@ def _connected_cubic(vertex_count: int, seed: int) -> nx.Graph:
     raise RuntimeError(f"could not generate a connected cubic graph at V={vertex_count}")
 
 
+def _isomorphism_profile(graph: nx.Graph):
+    """Return a relabeling-invariant distance profile and per-node colors.
+
+    Different graph-level signatures prove non-isomorphism. Equal signatures
+    are only a prefilter collision: callers must still run an exact graph
+    isomorphism check. The per-node profiles are safe exact-match constraints
+    because graph isomorphisms preserve all-pairs shortest-path distances.
+    """
+    raw_profiles = {}
+    diameter = 0
+    for node, distances in nx.all_pairs_shortest_path_length(graph):
+        counts = Counter(distances.values())
+        local_max = max(counts, default=0)
+        diameter = max(diameter, local_max)
+        raw_profiles[node] = counts
+
+    node_profiles = {
+        node: tuple(counts.get(distance, 0) for distance in range(diameter + 1))
+        for node, counts in raw_profiles.items()
+    }
+    signature = tuple(sorted(node_profiles.values()))
+    return signature, node_profiles
+
+
+def _are_isomorphic_exact(
+    left: nx.Graph,
+    right: nx.Graph,
+    left_profile=None,
+    right_profile=None,
+) -> bool:
+    """Exact isomorphism with a safe distance-profile rejection fast path."""
+    if left.number_of_nodes() != right.number_of_nodes():
+        return False
+    if left.number_of_edges() != right.number_of_edges():
+        return False
+
+    if left_profile is None:
+        left_profile = _isomorphism_profile(left)
+    if right_profile is None:
+        right_profile = _isomorphism_profile(right)
+
+    left_signature, left_node_profiles = left_profile
+    right_signature, right_node_profiles = right_profile
+    if left_signature != right_signature:
+        return False
+
+    # A signature collision is never treated as equality. Fall back to exact
+    # VF2, but color vertices with their invariant distance profiles to avoid
+    # the pathological uncolored search seen for large regular graphs.
+    left_colored = left.copy()
+    right_colored = right.copy()
+    nx.set_node_attributes(left_colored, left_node_profiles, "_iso_profile")
+    nx.set_node_attributes(right_colored, right_node_profiles, "_iso_profile")
+    node_match = nx.algorithms.isomorphism.categorical_node_match(
+        "_iso_profile",
+        None,
+    )
+    return nx.is_isomorphic(left_colored, right_colored, node_match=node_match)
+
+
 def topology_ensemble(
     vertex_count: int,
     n_samples: int,
@@ -121,10 +182,13 @@ def topology_ensemble(
 ) -> list[tuple[Sample, nx.Graph]]:
     """Generate pairwise non-isomorphic connected cubic graph instances.
 
-    Exact NetworkX isomorphism checks are used as the acceptance criterion. The
-    deterministic candidate seeds make the ensemble reproducible.
+    A relabeling-invariant all-pairs-distance signature rejects graphs that are
+    provably non-isomorphic. Signature collisions still use an exact NetworkX
+    isomorphism check, so the acceptance criterion is unchanged while avoiding
+    pathological VF2 searches on large 3-regular graphs. Deterministic candidate
+    seeds make the ensemble reproducible.
     """
-    accepted: list[tuple[Sample, nx.Graph]] = []
+    accepted = []
     for sample_index in range(n_samples):
         for attempt in range(50_000):
             topology_seed = _seed(
@@ -135,7 +199,16 @@ def topology_ensemble(
                 attempt,
             )
             candidate = _connected_cubic(vertex_count, topology_seed)
-            if any(nx.is_isomorphic(candidate, prior) for _, prior in accepted):
+            candidate_profile = _isomorphism_profile(candidate)
+            if any(
+                _are_isomorphic_exact(
+                    candidate,
+                    prior,
+                    candidate_profile,
+                    prior_profile,
+                )
+                for _, prior, prior_profile in accepted
+            ):
                 continue
             accepted.append(
                 (
@@ -146,6 +219,7 @@ def topology_ensemble(
                         topology_attempt=attempt,
                     ),
                     candidate,
+                    candidate_profile,
                 )
             )
             break
@@ -154,7 +228,7 @@ def topology_ensemble(
                 f"could not obtain {n_samples} pairwise non-isomorphic connected "
                 f"cubic graphs at V={vertex_count}"
             )
-    return accepted
+    return [(sample, graph) for sample, graph, _ in accepted]
 
 
 def _abstract_hash(graph: nx.Graph) -> str:
@@ -495,10 +569,17 @@ def main(
     for vertex_count in vertices:
         print(f"FAMILY=random_cubic V={vertex_count}", flush=True)
         ensemble = topology_ensemble(vertex_count, samples_per_v, base_seed)
-        # This exact check is deliberately repeated at the ensemble boundary.
+        # Repeat the exact ensemble-boundary guarantee using the same safe
+        # invariant prefilter and exact collision fallback.
+        profiles = [_isomorphism_profile(graph) for _, graph in ensemble]
         for left in range(len(ensemble)):
             for right in range(left):
-                if nx.is_isomorphic(ensemble[left][1], ensemble[right][1]):
+                if _are_isomorphic_exact(
+                    ensemble[left][1],
+                    ensemble[right][1],
+                    profiles[left],
+                    profiles[right],
+                ):
                     raise AssertionError(
                         f"random_cubic/V={vertex_count}: samples {left} and {right} "
                         "are isomorphic"
