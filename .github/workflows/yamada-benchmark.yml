@@ -27,6 +27,7 @@ on:
       - "dev/application_yamada_regression.py"
       - "dev/run_yamada_sanity_checks.py"
       - "dev/benchmark_topoly_extended_scaling.py"
+      - "dev/benchmark_topoly_random_cubic_ensemble.py"
       - "dev/plot_topoly_scaling.py"
       - "tests/benchmarks/test_topoly_paper_setup.py"
       - "User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb"
@@ -182,5 +183,7 @@ jobs:
           PY
       - name: Validate paper benchmark design
         run: uv run --no-sync pytest -q tests/benchmarks/test_topoly_paper_setup.py
-      - name: Smoke-test identical-PD ensemble scaling
+      - name: Smoke-test controlled identical-PD ensemble scaling
         run: uv run --no-sync python dev/benchmark_topoly_extended_scaling.py --profile smoke --embeddings 2 --timeout 10
+      - name: Smoke-test heterogeneous connected-cubic ensemble
+        run: uv run --no-sync python dev/benchmark_topoly_random_cubic_ensemble.py --profile smoke --samples-per-v 2 --timeout 10
