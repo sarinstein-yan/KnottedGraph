@@ -6,6 +6,7 @@ on:
       - "dev/benchmark_flow_structural_reductions.py"
       - "dev/benchmark_two_vertex_yamada.py"
       - "dev/benchmark_yamada_isomorphism_potential.py"
+      - "dev/benchmark_native_prepared_candidate.py"
       - ".github/workflows/yamada-flow-candidate.yml"
 
 permissions:
@@ -14,7 +15,7 @@ permissions:
 jobs:
   exact-structural-reductions:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -29,3 +30,5 @@ jobs:
         run: uv run --no-sync python dev/benchmark_two_vertex_yamada.py
       - name: Measure exact isomorphism memoization potential
         run: uv run --no-sync python dev/benchmark_yamada_isomorphism_potential.py
+      - name: Benchmark native prepared-diagram candidate
+        run: uv run --no-sync python dev/benchmark_native_prepared_candidate.py
