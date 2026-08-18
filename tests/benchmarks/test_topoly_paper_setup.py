@@ -100,6 +100,7 @@ def test_random_cubic_instances_are_connected_cubic_and_nonisomorphic():
     assert len(ensemble) == 4
 
     hashes = []
+    profiles = []
     for sample, graph in ensemble:
         assert sample.vertex_count == 10
         assert nx.is_connected(graph)
@@ -107,11 +108,63 @@ def test_random_cubic_instances_are_connected_cubic_and_nonisomorphic():
         assert graph.number_of_edges() == 15
         assert all(degree == 3 for _, degree in graph.degree())
         hashes.append(bench._abstract_hash(graph))
+        profiles.append(bench._isomorphism_profile(graph))
 
     assert len(set(hashes)) == 4
     for i in range(len(ensemble)):
         for j in range(i):
-            assert not nx.is_isomorphic(ensemble[i][1], ensemble[j][1])
+            assert not bench._are_isomorphic_exact(
+                ensemble[i][1],
+                ensemble[j][1],
+                profiles[i],
+                profiles[j],
+            )
+
+
+def test_random_cubic_isomorphism_prefilter_preserves_exactness():
+    bench = _random_cubic()
+    _sample, graph = bench.topology_ensemble(40, 1, bench.DEFAULT_SEED)[0]
+
+    relabeling = {
+        node: graph.number_of_nodes() - 1 - node
+        for node in graph.nodes()
+    }
+    relabeled = nx.relabel_nodes(graph, relabeling, copy=True)
+
+    left_profile = bench._isomorphism_profile(graph)
+    right_profile = bench._isomorphism_profile(relabeled)
+    assert left_profile[0] == right_profile[0]
+    assert bench._are_isomorphic_exact(
+        graph,
+        relabeled,
+        left_profile,
+        right_profile,
+    )
+
+    other = bench.topology_ensemble(40, 2, bench.DEFAULT_SEED)[1][1]
+    other_profile = bench._isomorphism_profile(other)
+    assert not bench._are_isomorphic_exact(
+        graph,
+        other,
+        left_profile,
+        other_profile,
+    )
+
+
+def test_random_cubic_large_ensemble_uses_scalable_exact_filter():
+    bench = _random_cubic()
+    ensemble = bench.topology_ensemble(200, 10, bench.DEFAULT_SEED)
+    assert len(ensemble) == 10
+
+    profiles = [bench._isomorphism_profile(graph) for _, graph in ensemble]
+    for i in range(len(ensemble)):
+        for j in range(i):
+            assert not bench._are_isomorphic_exact(
+                ensemble[i][1],
+                ensemble[j][1],
+                profiles[i],
+                profiles[j],
+            )
 
 
 def test_random_cubic_pd_preparation_preserves_abstract_topology():
