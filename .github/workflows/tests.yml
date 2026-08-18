@@ -82,6 +82,12 @@ jobs:
           assert native_available()
           PY
 
+      - name: Audit repository consistency
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+          PYTHONNOUSERSITE: '1'
+        run: uv run --no-sync python dev/check_repository_consistency.py
+
       - name: Run complete Python test suite
         run: uv run --no-sync pytest -q
 
@@ -145,4 +151,4 @@ jobs:
         run: uv sync --group dev
 
       - name: Run Ruff
-        run: uv run --no-sync ruff check src tests
+        run: uv run --no-sync ruff check src tests dev/check_repository_consistency.py
