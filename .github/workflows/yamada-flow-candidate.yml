@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "dev/benchmark_flow_structural_reductions.py"
+      - "dev/benchmark_two_vertex_yamada.py"
       - ".github/workflows/yamada-flow-candidate.yml"
 
 permissions:
@@ -23,3 +24,5 @@ jobs:
         run: uv sync --group dev
       - name: Run exact literature-backed reduction gate
         run: uv run --no-sync python dev/benchmark_flow_structural_reductions.py
+      - name: Run exact two-vertex decomposition gate
+        run: uv run --no-sync python dev/benchmark_two_vertex_yamada.py
