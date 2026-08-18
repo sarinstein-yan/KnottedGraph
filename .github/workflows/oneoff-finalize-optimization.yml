@@ -1,6 +1,6 @@
 name: One-off finalize optimization branch
 
-# Retrigger after canonicalizing the committed random-cubic embedding order.
+# Retrigger after declaring the concrete fast-evaluator recurrence contract.
 on:
   pull_request:
     branches: [Latest_Workplace]
