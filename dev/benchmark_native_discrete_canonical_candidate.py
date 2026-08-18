@@ -96,7 +96,7 @@ Graph canonicalize_if_discrete(const Graph& graph) {
     });
     for (int i = 1; i < graph.n; ++i) {
         if (colors[order[i - 1]] == colors[order[i]]) {
-            return graph;  // no exact canonical order without branching on a tie
+            return graph;
         }
     }
     return induced(graph, order);
@@ -111,6 +111,18 @@ def _compile(source: str, module_name: str):
         f"PYBIND11_MODULE({module_name}, module)",
         1,
     )
+    # These are benchmark-only sibling extensions loaded into one interpreter.
+    # Keep their NativeEvaluator Python registrations local to each module so
+    # pybind11 does not reject the second temporary extension as a duplicate.
+    binding = 'py::class_<NativeEvaluator>(module, "NativeEvaluator")'
+    if binding not in source:
+        raise RuntimeError("NativeEvaluator binding marker not found")
+    source = source.replace(
+        binding,
+        'py::class_<NativeEvaluator>(module, "NativeEvaluator", py::module_local())',
+        1,
+    )
+
     tmpdir = Path(tempfile.mkdtemp(prefix=f"kg-{module_name}-"))
     cpp = tmpdir / "candidate.cpp"
     cpp.write_text(source)
