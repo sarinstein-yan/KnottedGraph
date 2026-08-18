@@ -1,6 +1,9 @@
+from types import SimpleNamespace
+
 import networkx as nx
 import numpy as np
 import pytest
+import skimage.morphology as morph
 import sympy as sp
 
 import knotted_graph.applications.nodal.skeleton as skeleton_module
@@ -96,3 +99,44 @@ def test_fields_pv_does_not_require_supported_berry_curvature():
     # absent; ordinary field visualization must remain usable.
     assert "berry" not in fields.point_data
     assert "|berry|" not in fields.point_data
+
+
+def test_broadcast_bloch_grid_is_byte_identical_to_dense_meshgrid():
+    kx, ky, kz = sp.symbols("kx ky kz", real=True)
+    model = NodalSkeleton(
+        (
+            sp.sin(kx) + sp.cos(ky),
+            sp.I * sp.Rational(1, 5),
+            sp.cos(kz) + sp.sin(kx + ky),
+        ),
+        k_symbols=(kx, ky, kz),
+        dimension=11,
+    )
+
+    dense_grids = (model.kx_grid, model.ky_grid, model.kz_grid)
+    reference = np.asarray(
+        [
+            func(*dense_grids).astype(np.complex128)
+            if expr.free_symbols
+            else np.full_like(
+                model.kx_grid,
+                complex(expr),
+                dtype=np.complex128,
+            )
+            for expr, func in zip(model.bloch_vec, model.bloch_vec_funcs)
+        ]
+    )
+
+    assert np.array_equal(model._bloch_vec_grid, reference)
+
+
+def test_cropped_lee_skeleton_is_byte_identical_to_full_volume():
+    mask = np.zeros((32, 28, 30), dtype=bool)
+    mask[7:25, 6:22, 8:24] = True
+    mask[13:19, 3:25, 13:17] = True
+
+    reference = morph.skeletonize(mask, method="lee")
+    stub = SimpleNamespace(_interior_mask=mask)
+    optimized = NodalSkeleton._skeleton_image.func(stub)
+
+    assert np.array_equal(optimized, reference)
