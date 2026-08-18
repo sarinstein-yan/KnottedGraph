@@ -1,5 +1,6 @@
 name: One-off finalize optimization branch
 
+# Retrigger after making the exact random-cubic non-isomorphism check scalable.
 on:
   pull_request:
     branches: [Latest_Workplace]
