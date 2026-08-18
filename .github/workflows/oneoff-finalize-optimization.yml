@@ -5,17 +5,12 @@ on:
     branches: [Latest_Workplace]
     paths:
       - .github/workflows/oneoff-finalize-optimization.yml
-  push:
-    branches:
-      - perf/yamada-max-optimization
-    paths:
-      - .github/workflows/oneoff-finalize-optimization.yml
 
 permissions:
   contents: write
 
 concurrency:
-  group: knottedgraph-finalize-optimization
+  group: knottedgraph-finalize-optimization-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
