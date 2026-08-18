@@ -1,5 +1,9 @@
 """Generic public API for spatial graph computation and invariants."""
 
+from knotted_graph._benchmark_cache import install_benchmark_cache as _install_benchmark_cache
+
+_install_benchmark_cache()
+
 from knotted_graph import core as _core
 from knotted_graph import projection as _projection
 from knotted_graph.invariants import yamada as _yamada
