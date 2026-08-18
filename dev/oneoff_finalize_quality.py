@@ -173,9 +173,44 @@ def remove_temporary_migration_files() -> None:
             path.unlink()
 
 
+def repair_native_test_fixture() -> None:
+    """Use a valid embedded graph with one genuine projected crossing."""
+    path = ROOT / "tests/invariants/yamada/test_native_prepared_state_sum.py"
+    text = path.read_text()
+    old_import = "from knotted_graph.core import ThetaGraph\n"
+    assert text.count(old_import) == 1
+    text = text.replace(old_import, "import networkx as nx\nimport numpy as np\n")
+
+    marker = "\n\ndef _prepared_from_pd(processor):\n"
+    assert text.count(marker) == 1
+    fixture = r'''
+
+
+def _crossed_cycle():
+    """A valid spatial 4-cycle with one nonadjacent-edge crossing in xy."""
+    graph = nx.MultiGraph()
+    positions = {
+        0: np.array([-1.0, -1.0, 0.0]),
+        1: np.array([1.0, 1.0, 1.0]),
+        2: np.array([-1.0, 1.0, 0.0]),
+        3: np.array([1.0, -1.0, -1.0]),
+    }
+    for node, pos in positions.items():
+        graph.add_node(node, pos=pos)
+    for u, v in ((0, 1), (1, 2), (2, 3), (3, 0)):
+        graph.add_edge(u, v, pts=np.vstack([positions[u], positions[v]]))
+    return graph
+'''
+    text = text.replace(marker, fixture + marker)
+    assert text.count("PDCode(ThetaGraph(3))") == 2
+    text = text.replace("PDCode(ThetaGraph(3))", "PDCode(_crossed_cycle())")
+    path.write_text(text)
+
+
 def validate_promoted_native_path() -> None:
     """Apply the pre-benchmarked native path and gate it before any commit."""
     promote_native_prepared()
+    repair_native_test_fixture()
     subprocess.run(
         [
             "uv",
