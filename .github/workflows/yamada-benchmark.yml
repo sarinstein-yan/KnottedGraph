@@ -22,6 +22,7 @@ on:
       - "dev/benchmark_laurent_arithmetic_candidates.py"
       - "dev/benchmark_native_yamada_candidate.py"
       - "dev/benchmark_skein_hybrid_candidate.py"
+      - "dev/benchmark_flow_structural_reductions.py"
       - "dev/benchmark_skeletonization_candidates.py"
       - "dev/benchmark_nodal_memory_candidates.py"
       - "dev/yamada_output_fingerprint.py"
@@ -66,6 +67,8 @@ jobs:
         run: uv run --no-sync python dev/benchmark_native_yamada_candidate.py
       - name: Benchmark guarded hybrid skein candidate on irreducible diagrams
         run: uv run --no-sync python dev/benchmark_skein_hybrid_candidate.py
+      - name: Benchmark exact flow-structure reductions
+        run: uv run --no-sync python dev/benchmark_flow_structural_reductions.py
       - name: Profile remaining projection and invariant costs
         run: uv run --no-sync python dev/benchmark_yamada_pipeline_breakdown.py
       - name: Compare public dispatch with compact serial
