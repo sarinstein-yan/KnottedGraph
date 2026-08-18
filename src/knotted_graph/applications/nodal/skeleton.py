@@ -133,13 +133,22 @@ class NodalSkeleton:
     @cached_property
     def _bloch_vec_grid(self) -> np.ndarray:
         """The Bloch vector components evaluated on the k-space grid."""
-        k_grids = (self.kx_grid, self.ky_grid, self.kz_grid)
-        return np.asarray([
-            func(*k_grids).astype(np.complex128)
-            if expr.free_symbols
-            else np.full_like(self.kx_grid, complex(expr), dtype=np.complex128)
-            for expr, func in zip(self.bloch_vec, self.bloch_vec_funcs)
-        ])
+        shape = (self.dimension,) * 3
+        k_grids = (
+            self.kx_vals[:, None, None],
+            self.ky_vals[None, :, None],
+            self.kz_vals[None, None, :],
+        )
+        components = []
+        for expr, func in zip(self.bloch_vec, self.bloch_vec_funcs):
+            if expr.free_symbols:
+                value = np.asarray(func(*k_grids), dtype=np.complex128)
+                components.append(np.broadcast_to(value, shape))
+            else:
+                components.append(
+                    np.full(shape, complex(expr), dtype=np.complex128)
+                )
+        return np.asarray(components)
 
     @cached_property
     def spectrum(self) -> NDArray:
@@ -267,7 +276,26 @@ class NodalSkeleton:
     def _skeleton_image(self) -> NDArray:
         """A binary image of the skeleton (medial axis) of the exceptional
         surface."""
-        image = morph.skeletonize(self._interior_mask, method='lee')
+        mask = self._interior_mask
+        occupied = [
+            np.flatnonzero(mask.any(axis=axes))
+            for axes in ((1, 2), (0, 2), (0, 1))
+        ]
+
+        if any(len(indices) == 0 for indices in occupied):
+            image = np.zeros_like(mask, dtype=bool)
+        else:
+            slices = tuple(
+                slice(
+                    max(0, int(indices[0]) - 1),
+                    min(mask.shape[axis], int(indices[-1]) + 2),
+                )
+                for axis, indices in enumerate(occupied)
+            )
+            skeleton_crop = morph.skeletonize(mask[slices], method='lee')
+            image = np.zeros_like(mask, dtype=bool)
+            image[slices] = skeleton_crop
+
         if np.sum(image) == 0:
             raise ValueError(
                 "The skeleton image is empty. "
