@@ -82,7 +82,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install environment
-        run: uv sync --group dev
+        run: uv sync --extra all --group dev
       - name: Benchmark exact skeletonization candidates
         run: uv run --no-sync python dev/benchmark_skeletonization_candidates.py
       - name: Run nodal regression tests
