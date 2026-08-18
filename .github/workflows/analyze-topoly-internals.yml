@@ -1,6 +1,9 @@
 name: Analyze Topoly Yamada internals
 
 on:
+  pull_request:
+    branches:
+      - perf/yamada-max-optimization
   push:
     branches:
       - analysis/topoly-yamada-internals-20260818
@@ -26,9 +29,8 @@ jobs:
           uv run --no-sync python - <<'PY'
           import dis
           import inspect
-          import json
-          import pkgutil
           import pathlib
+          import pkgutil
           import topoly
           import topoly.invariants as inv
 
@@ -70,8 +72,8 @@ jobs:
         run: |
           uv run --no-sync python - <<'PY'
           import cProfile
-          import pstats
           import io
+          import pstats
           from dev.benchmark_topoly_extended_scaling import Case, _prepare, _seed_for
           from topoly.invariants import Invariant, YamadaGraph
 
@@ -86,7 +88,7 @@ jobs:
               result = YamadaGraph(pd).point(max_cross=5000)
               prof.disable()
               stream = io.StringIO()
-              pstats.Stats(prof, stream=stream).sort_stats('cumtime').print_stats(40)
+              pstats.Stats(prof, stream=stream).sort_stats('cumtime').print_stats(50)
               print(stream.getvalue())
               print('RESULT_TERMS=', len(result.term))
           PY
