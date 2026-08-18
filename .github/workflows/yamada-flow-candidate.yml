@@ -1,0 +1,25 @@
+name: Yamada flow candidate
+
+on:
+  pull_request:
+    paths:
+      - "dev/benchmark_flow_structural_reductions.py"
+      - ".github/workflows/yamada-flow-candidate.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  exact-structural-reductions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install environment
+        run: uv sync --group dev
+      - name: Run exact literature-backed reduction gate
+        run: uv run --no-sync python dev/benchmark_flow_structural_reductions.py
