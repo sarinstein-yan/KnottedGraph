@@ -67,6 +67,24 @@ def test_native_batch_matches_python_state_sum_when_available():
     assert evaluator.native_calls == 1
 
 
+def test_native_int64_overflow_transparently_uses_arbitrary_precision_python():
+    if not native_available():
+        pytest.skip("native extension is not built in this environment")
+
+    # Theta_70 generates coefficients well beyond signed 64-bit range while
+    # remaining cheap for the closed-form Python fallback.
+    compact = CompactGraph(((0, 70), (70, 0)))
+    expected = PythonCompactYamadaEvaluator().compute_laurent(compact)
+
+    evaluator = NativeCompactEvaluator(PythonCompactYamadaEvaluator)
+    actual = evaluator.compute_laurent(compact)
+
+    assert actual == expected
+    assert evaluator.native_calls == 1
+    assert evaluator.fallback_calls == 1
+    assert max(abs(coefficient) for _, coefficient in actual) > 2**63 - 1
+
+
 def test_python_fallback_remains_available_independently_of_native_extension():
     graph = nx.MultiGraph(nx.complete_graph(4))
     compact = CompactGraph.from_networkx(graph)
