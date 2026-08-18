@@ -374,7 +374,9 @@ class Yamada:
             self.arcs,
             _ordered_crossing_ports,
         )
-        for config in itertools.product([0, 1, 2], repeat=len(self.crossings)):
+        prepared, _ = prepared.reduce_reidemeister_ii()
+        crossing_count = len(prepared.crossing_ids)
+        for config in itertools.product([0, 1, 2], repeat=crossing_count):
             yield prepared.build(config), config.count(0) - config.count(1)
 
     def _diagram_blocks(self) -> list["Yamada"]:
