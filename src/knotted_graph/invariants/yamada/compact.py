@@ -191,6 +191,40 @@ class CompactGraph:
                     return i, j
         return None
 
+    def without_loops(self) -> tuple["CompactGraph", int]:
+        """Remove every loop at once and return the number removed."""
+        loop_count = sum(self.rows[i][i] for i in range(self.n))
+        if not loop_count:
+            return self, 0
+        rows = [list(row) for row in self.rows]
+        for i in range(self.n):
+            rows[i][i] = 0
+        return CompactGraph(tuple(tuple(row) for row in rows)), loop_count
+
+    def suppress_degree_two(self, vertex: int) -> "CompactGraph":
+        """Suppress one loopless degree-two vertex, preserving homeomorphism."""
+        if not 0 <= vertex < self.n or self.rows[vertex][vertex]:
+            raise ValueError("degree-two suppression requires a loopless vertex")
+        neighbors: list[int] = []
+        for other, multiplicity in enumerate(self.rows[vertex]):
+            if other != vertex:
+                neighbors.extend([other] * multiplicity)
+        if len(neighbors) != 2:
+            raise ValueError("vertex is not degree two")
+
+        left, right = neighbors
+        kept = [index for index in range(self.n) if index != vertex]
+        remap = {old: new for new, old in enumerate(kept)}
+        rows = [[self.rows[i][j] for j in kept] for i in kept]
+        i = remap[left]
+        j = remap[right]
+        if i == j:
+            rows[i][i] += 1
+        else:
+            rows[i][j] += 1
+            rows[j][i] += 1
+        return CompactGraph(tuple(tuple(row) for row in rows))
+
     def delete_loop(self, i: int) -> "CompactGraph":
         matrix = [list(row) for row in self.rows]
         matrix[i][i] -= 1
@@ -200,6 +234,33 @@ class CompactGraph:
         matrix = [list(row) for row in self.rows]
         matrix[i][j] -= 1
         matrix[j][i] -= 1
+        return CompactGraph(tuple(tuple(row) for row in matrix))
+
+    def delete_parallel_class(self, i: int, j: int) -> "CompactGraph":
+        """Delete every edge between two distinct vertices."""
+        if i == j:
+            raise ValueError("parallel class must be non-loop")
+        matrix = [list(row) for row in self.rows]
+        matrix[i][j] = 0
+        matrix[j][i] = 0
+        return CompactGraph(tuple(tuple(row) for row in matrix))
+
+    def identify_vertices(self, i: int, j: int) -> "CompactGraph":
+        """Identify two vertices without requiring an existing edge."""
+        if i == j:
+            return self
+        if i > j:
+            i, j = j, i
+        matrix = [list(row) for row in self.rows]
+        matrix[i][i] += matrix[j][j] + matrix[i][j]
+        for k in range(self.n):
+            if k in (i, j):
+                continue
+            matrix[i][k] += matrix[j][k]
+            matrix[k][i] = matrix[i][k]
+        matrix.pop(j)
+        for row in matrix:
+            row.pop(j)
         return CompactGraph(tuple(tuple(row) for row in matrix))
 
     def contract_edge(self, i: int, j: int) -> "CompactGraph":
@@ -281,6 +342,23 @@ def _theta_value(theta: int) -> Laurent:
     return value
 
 
+def _negative_sigma_power(power: int) -> Laurent:
+    value = ONE
+    for _ in range(power):
+        value = multiply_sigma(value, sign=-1)
+    return value
+
+
+def _parallel_factor(multiplicity: int) -> Laurent:
+    """Return 1 + (-sigma) + ... + (-sigma)^(multiplicity-1)."""
+    total = ZERO
+    power = ONE
+    for _ in range(multiplicity):
+        total = add(total, power)
+        power = multiply_sigma(power, sign=-1)
+    return total
+
+
 class _CompactBase:
     def __init__(self):
         self.memo: dict[CompactGraph, Laurent] = {}
@@ -292,12 +370,39 @@ class _CompactBase:
     def compute(self, graph: nx.MultiGraph | CompactGraph, variable: sp.Symbol) -> sp.Expr:
         return to_sympy(self.compute_laurent(graph), variable)
 
+    def _reduce_homeomorphic(self, graph: CompactGraph) -> tuple[CompactGraph, Laurent]:
+        """Batch loops and suppress all loopless degree-two vertices exactly."""
+        factor = ONE
+        while True:
+            graph, loop_count = graph.without_loops()
+            if loop_count:
+                factor = multiply(factor, _negative_sigma_power(loop_count))
+
+            degrees = tuple(graph.degree(i) for i in range(graph.n))
+            degree_two = next(
+                (
+                    vertex
+                    for vertex, degree in enumerate(degrees)
+                    if degree == 2 and not graph.rows[vertex][vertex]
+                ),
+                None,
+            )
+            if degree_two is None:
+                return graph, factor
+            graph = graph.suppress_degree_two(degree_two)
+
     def _rec(self, graph: CompactGraph) -> Laurent:
         cached = self.memo.get(graph)
         if cached is not None:
             return cached
 
-        edge_count, degrees, loop, edge = graph.scan()
+        reduced, factor = self._reduce_homeomorphic(graph)
+        if reduced != graph or factor != ONE:
+            value = multiply(factor, self._rec(reduced))
+            self.memo[graph] = value
+            return value
+
+        edge_count, degrees, _loop, edge = graph.scan()
         if edge_count == 0:
             value = constant((-1) ** graph.n)
             self.memo[graph] = value
@@ -318,19 +423,16 @@ class _CompactBase:
                 self.memo[graph] = value
                 return value
 
-        if graph.n and all(degree == 2 for degree in degrees):
-            self.memo[graph] = SIGMA
-            return SIGMA
+        # After loop removal and homeomorphic suppression, any connected graph
+        # with cyclomatic number <= 1 is either trivial or contains an isthmus.
+        if edge_count <= graph.n:
+            self.memo[graph] = ZERO
+            return ZERO
 
         has_bridge, articulation = graph.bridge_and_articulation()
         if has_bridge:
             self.memo[graph] = ZERO
             return ZERO
-
-        if loop is not None:
-            value = multiply_sigma(self._rec(graph.delete_loop(loop)), sign=-1)
-            self.memo[graph] = value
-            return value
 
         if articulation is not None:
             parts = graph.articulation_parts_at(articulation)
@@ -342,6 +444,26 @@ class _CompactBase:
                     value = scale(value, -1)
                 self.memo[graph] = value
                 return value
+
+        parallel: tuple[int, int, int] | None = None
+        for i in range(graph.n):
+            for j in range(i + 1, graph.n):
+                multiplicity = graph.rows[i][j]
+                if multiplicity > 1 and (
+                    parallel is None or multiplicity > parallel[2]
+                ):
+                    parallel = (i, j, multiplicity)
+
+        if parallel is not None:
+            i, j, multiplicity = parallel
+            remainder = graph.delete_parallel_class(i, j)
+            contracted = remainder.identify_vertices(i, j)
+            value = add(
+                self._rec(remainder),
+                multiply(_parallel_factor(multiplicity), self._rec(contracted)),
+            )
+            self.memo[graph] = value
+            return value
 
         if edge is None:
             value = constant((-1) ** graph.n)
