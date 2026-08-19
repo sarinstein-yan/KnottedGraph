@@ -23,12 +23,80 @@ from knotted_graph.invariants.yamada.skein_hybrid import (
 from knotted_graph.invariants.yamada.state_compact import PreparedCompactStateBuilder
 
 
-def first_reducing_inversion(prepared):
-    for crossing_index in range(len(prepared.crossing_ids)):
-        inverted = invert_crossing(prepared, crossing_index)
-        reduced, moves = inverted.reduce_reidemeister_ii()
-        if moves:
-            return crossing_index, reduced
+def direct_reducing_inversion(prepared):
+    """Find an exact RII pair exposed by flipping one crossing in O(c) adjacency work.
+
+    The ordinary RII certificate requires the two shared arcs to preserve
+    over/under parity at both crossings. Flipping one crossing toggles the parity
+    of all four of its ports, so a geometrically valid bigon whose two shared
+    arcs both *reverse* parity is exactly one crossing inversion away from the
+    same conservative RII certificate. No trial inversions are needed.
+    """
+    arc_partner = prepared.arc_partner
+    crossing_for_port = prepared.crossing_for_port
+    ordered_ports = prepared.ordered_ports
+
+    for first, first_ports in enumerate(ordered_ports):
+        by_second = {}
+        for first_position, first_port in enumerate(first_ports):
+            partner = arc_partner[first_port]
+            second = crossing_for_port[partner]
+            if second < 0 or second >= first:
+                continue
+            by_second.setdefault(second, []).append((first_position, partner))
+
+        for second, links in by_second.items():
+            if len(links) != 2:
+                continue
+            second_ports = ordered_ports[second]
+            second_position = {port: index for index, port in enumerate(second_ports)}
+            shared = []
+            for first_position, partner in links:
+                position = second_position.get(partner)
+                if position is None:
+                    break
+                shared.append((first_position, position))
+            if len(shared) != 2:
+                continue
+            if (shared[0][0] - shared[1][0]) % 4 not in (1, 3):
+                continue
+            if (shared[0][1] - shared[1][1]) % 4 not in (1, 3):
+                continue
+            # Both shared arcs must reverse parity. A one-quarter rotation used
+            # by invert_crossing toggles the first crossing parity on both arcs.
+            if any((left % 2) == (right % 2) for left, right in shared):
+                continue
+
+            removed = set(first_ports) | set(second_ports)
+            splices = []
+            valid = True
+            for first_position, second_position_index in shared:
+                first_external = first_ports[(first_position + 2) % 4]
+                second_external = second_ports[(second_position_index + 2) % 4]
+                remote_first = arc_partner[first_external]
+                remote_second = arc_partner[second_external]
+                if (
+                    remote_first in removed
+                    or remote_second in removed
+                    or remote_first == remote_second
+                ):
+                    valid = False
+                    break
+                splices.append((remote_first, remote_second))
+            if not valid or len({port for pair in splices for port in pair}) != 4:
+                continue
+
+            inverted = invert_crossing(prepared, first)
+            # _remove_reidemeister_ii_pair is the same exact splice operation
+            # used by the production conservative RII reducer. Rotation does not
+            # change the physical port opposite any shared port, so the splices
+            # computed above remain the correct ones after inversion.
+            reduced = inverted._remove_reidemeister_ii_pair(
+                first,
+                second,
+                tuple(splices),
+            )
+            return first, reduced
     return None
 
 
@@ -109,7 +177,7 @@ def full_recursive_laurent(prepared, evaluator, stats=None):
         if not current.crossing_ids:
             value = evaluator.compute_prepared_bulk_laurent(current)
         else:
-            inversion = first_reducing_inversion(current)
+            inversion = direct_reducing_inversion(current)
             if inversion is not None:
                 crossing_index, inverted_reduced = inversion
                 stats["inversions"] += 1
@@ -167,7 +235,7 @@ def main():
                 f"native-isomorphism generic recursion disagrees with external theorem oracle at n={n}"
             )
         print(json.dumps({
-            "candidate": "exact_native_iso_global_recursion",
+            "candidate": "direct_RII_native_iso_global_recursion",
             "n": n,
             "seconds": elapsed,
             "stats": stats,
