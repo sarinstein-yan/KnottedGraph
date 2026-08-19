@@ -1,0 +1,244 @@
+name: Augment notebook 03 with essential torus benchmark
+
+on:
+  push:
+    branches:
+      - perf/yamada-max-optimization
+    paths:
+      - dev/benchmark_topoly_essential_torus_scaling.py
+      - .github/workflows/augment-notebook03-essential-torus.yml
+
+permissions:
+  contents: write
+
+jobs:
+  augment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/yamada-max-optimization
+
+      - name: Insert T(2,n) benchmark section
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb')
+          nb = json.loads(path.read_text())
+          marker = 'essential-torus-md'
+          if any(cell.get('id') == marker for cell in nb['cells']):
+              print('T(2,n) section already present')
+              raise SystemExit(0)
+
+          def md(cell_id, source):
+              return {
+                  'cell_type': 'markdown',
+                  'metadata': {},
+                  'source': source,
+                  'id': cell_id,
+              }
+
+          def code(cell_id, source):
+              return {
+                  'cell_type': 'code',
+                  'execution_count': None,
+                  'metadata': {},
+                  'outputs': [],
+                  'source': [line + '\n' for line in source.rstrip('\n').splitlines()],
+                  'id': cell_id,
+              }
+
+          cells = [
+              md(
+                  'essential-torus-md',
+                  '''## 6. Topologically essential crossings: $T(2,n)$ constituent cycles
+
+The controlled-crossing ensemble above measures **diagram complexity**: it fixes the number of crossings in the supplied projection, but some of those crossings may be removable by Reidemeister moves. This section adds a deliberately different benchmark in which the crossing count is certified by the topology of the spatial embedding itself.
+
+For every odd $n\\ge 3$, we construct a trivalent theta graph whose distinguished two-edge constituent cycle is the standard closure of the two-strand braid
+
+$$
+\\sigma_1^n.
+$$
+
+That closure is the torus knot $T(2,n)$ (or its mirror under orientation reversal), and its crossing number is
+
+$$
+\\operatorname{cr}(T(2,n))=n.
+$$
+
+Therefore every diagram of the whole spatial graph contains at least $n$ crossings: otherwise the $T(2,n)$ constituent cycle would also admit a diagram with fewer than $n$ crossings. The generator below supplies the standard $n$-crossing braid diagram and routes the third theta edge outside it, so
+
+$$
+c_{\\mathrm{projected}}=c_{\\min}=n.
+$$
+
+This is consequently a **topology-hard scaling test**, not merely a stress test based on Reidemeister-reducible projected crossings. As above, graph construction and PD conversion are outside the timed region; KnottedGraph and Topoly receive the same PD code, and successful paired evaluations must agree up to the explicitly allowed Laurent-unit/variable-orientation conventions before a timing row is accepted.'''
+              ),
+              code(
+                  'essential-torus-config',
+                  '''# Odd n values define T(2,n) constituent knots with certified crossing number n.
+ESSENTIAL_TORUS_N = [3, 5] if IS_CI else [3, 5, 9, 17, 33]
+essential_raw_csv = RES / "topoly_yamada_essential_torus_raw.csv"
+essential_figure_png = FIG / "topoly_vs_knottedgraph_essential_torus_crossings.png"
+essential_figure_pdf = FIG / "topoly_vs_knottedgraph_essential_torus_crossings.pdf"
+
+assert ESSENTIAL_TORUS_N == sorted(set(ESSENTIAL_TORUS_N))
+assert all(n >= 3 and n % 2 == 1 for n in ESSENTIAL_TORUS_N)
+print("Certified T(2,n) crossing grid:", ESSENTIAL_TORUS_N)'''
+              ),
+              md(
+                  'essential-torus-run-md',
+                  '''### 6.1 Run the certified topology-hard ensemble
+
+Each row fixes $V=2$ and $E=3$ and increases only the certified topological crossing number of the distinguished constituent knot. Timeout/censoring semantics are identical to the main benchmark.'''
+              ),
+              code(
+                  'essential-torus-run',
+                  '''essential_script = ROOT / "dev" / "benchmark_topoly_essential_torus_scaling.py"
+essential_cmd = [
+    sys.executable,
+    str(essential_script),
+    "--n-values", ",".join(map(str, ESSENTIAL_TORUS_N)),
+    "--timeout", str(TIMEOUT_S),
+    "--censor-frontier", str(CENSOR_FRONTIER),
+]
+
+essential_rows = run_streamed_benchmark(
+    essential_cmd,
+    total=len(ESSENTIAL_TORUS_N),
+    description="Essential T(2,n) Yamada scaling",
+)'''
+              ),
+              md(
+                  'essential-torus-check-md',
+                  '''### 6.2 Certificate and correctness checks
+
+The checks below distinguish three logically separate facts:
+
+1. the **construction certificate** identifies the constituent cycle as $T(2,n)$;
+2. PD conversion confirms that the supplied standard diagram actually has exactly $n$ crossings, attaining the known lower bound;
+3. whenever both implementations finish, KnottedGraph and Topoly must return the same Yamada polynomial up to the benchmark's explicitly permitted convention changes.
+
+A timeout is not counted as a correctness pass or failure; it is recorded as unevaluated.'''
+              ),
+              code(
+                  'essential-torus-check',
+                  '''assert {row["family"] for row in essential_rows} == {"essential_torus_constituent"}
+
+for row in essential_rows:
+    n = int(row["size"])
+    assert n in ESSENTIAL_TORUS_N
+    assert row["constituent_knot"] == f"T(2,{n})"
+    assert int(row["certified_min_crossings"]) == n
+    assert int(row["crossings"]) == n
+    assert bool(row["crossing_minimal_diagram"])
+    assert int(row["V"]) == 2 and int(row["E"]) == 3
+    assert bool(row["connected"])
+    assert int(row["regular_degree"]) == 3
+    if row["correctness"] == "PASS":
+        assert row["knottedgraph_status"] == "ok"
+        assert row["topoly_status"] == "ok"
+        assert row["pd_hash"]
+
+essential_keys = list(dict.fromkeys(key for row in essential_rows for key in row))
+with essential_raw_csv.open("w", newline="") as handle:
+    writer = csv.DictWriter(handle, fieldnames=essential_keys)
+    writer.writeheader()
+    writer.writerows(essential_rows)
+
+n_pass = sum(row["correctness"] == "PASS" for row in essential_rows)
+n_unevaluated = len(essential_rows) - n_pass
+print(f"PASS: all {len(essential_rows)} supplied T(2,n) diagrams attain their certified crossing number.")
+print(f"Polynomial agreement: {n_pass} PASS, {n_unevaluated} unevaluated after timeout/error/skip.")
+print("wrote", essential_raw_csv)'''
+              ),
+              md(
+                  'essential-torus-plot-md',
+                  '''### 6.3 Runtime versus certified unavoidable crossing number
+
+Successful runtimes are plotted at their measured values. A timeout is plotted at the timeout threshold and therefore represents a lower bound on the true runtime. Error/skipped rows are omitted for that framework.'''
+              ),
+              code(
+                  'essential-torus-plot',
+                  '''import matplotlib.pyplot as plt
+
+
+def _essential_runtime(row, framework):
+    status = row[f"{framework}_status"]
+    if status == "ok":
+        return float(row[f"{framework}_s"]), False
+    if status == "timeout":
+        return float(row["timeout_s"]), True
+    return None, False
+
+
+fig, ax = plt.subplots(figsize=(6.4, 4.6))
+for framework, label in (("knottedgraph", "KnottedGraph"), ("topoly", "Topoly")):
+    xs, ys = [], []
+    timeout_x, timeout_y = [], []
+    for row in essential_rows:
+        value, censored = _essential_runtime(row, framework)
+        if value is None:
+            continue
+        n = int(row["certified_min_crossings"])
+        xs.append(n)
+        ys.append(value)
+        if censored:
+            timeout_x.append(n)
+            timeout_y.append(value)
+    if xs:
+        ax.plot(xs, ys, marker="o", label=label)
+    if timeout_x:
+        ax.scatter(timeout_x, timeout_y, marker="v", label=f"{label} timeout lower bound")
+
+ax.set_xlabel(r"Certified minimal crossing number $c_{\\min}=n$ of constituent $T(2,n)$")
+ax.set_ylabel("Yamada evaluation time (s)")
+ax.set_yscale("log")
+ax.grid(True, which="both", alpha=0.25)
+ax.legend()
+fig.tight_layout()
+fig.savefig(essential_figure_png, dpi=220)
+fig.savefig(essential_figure_pdf)
+plt.show()
+
+assert essential_figure_png.exists()
+assert essential_figure_pdf.exists()
+print("PASS: wrote", essential_figure_png)
+print("PASS: wrote", essential_figure_pdf)'''
+              ),
+              md(
+                  'essential-torus-interpret',
+                  '''### 6.4 Interpretation
+
+The two crossing experiments answer different questions and should be reported separately:
+
+| Benchmark | What $c$ measures | Crossings essential? | Purpose |
+| --- | --- | --- | --- |
+| Controlled crossing family | supplied PD complexity | not necessarily | raw evaluator scaling |
+| $T(2,n)$ constituent family | certified minimal crossing number | **yes** | topology-hard scaling |
+
+The second family deliberately holds the abstract theta graph fixed while increasing embedding complexity. Because the certificate comes from a constituent knot with known crossing number, Reidemeister simplification cannot reduce these examples below the reported $n$ crossings.'''
+              ),
+          ]
+
+          nb['cells'].extend(cells)
+          path.write_text(json.dumps(nb, indent=1, ensure_ascii=False) + '\n')
+          print('Inserted', len(cells), 'cells into', path)
+          PY
+
+      - name: Commit notebook change
+        run: |
+          if git diff --quiet -- User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb; then
+            echo "No notebook change needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb
+          git commit -m "Add essential T(2,n) scaling section to notebook 03"
+          git fetch origin perf/yamada-max-optimization
+          git rebase origin/perf/yamada-max-optimization
+          git push origin HEAD:perf/yamada-max-optimization
