@@ -20,5 +20,5 @@ jobs:
       - run: uv sync --group dev --group benchmark
       - name: Require native backend
         run: uv run --no-sync python -c "from knotted_graph.invariants.yamada.native import native_available; assert native_available()"
-      - name: Benchmark generalized self-adjacent smoothing
-        run: uv run --no-sync python dev/benchmark_general_smoothing_quick.py
+      - name: Discover and verify exact curl factors
+        run: uv run --no-sync python dev/benchmark_r1_reduction_discovery.py
