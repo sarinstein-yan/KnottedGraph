@@ -8,7 +8,7 @@ on:
 jobs:
   benchmark:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -20,5 +20,5 @@ jobs:
       - run: uv sync --group dev --group benchmark
       - name: Require native backend
         run: uv run --no-sync python -c "from knotted_graph.invariants.yamada.native import native_available; assert native_available()"
-      - name: Benchmark exact generic global recursion
-        run: uv run --no-sync python dev/benchmark_theta_full_recursion_candidate.py
+      - name: Benchmark generalized self-adjacent smoothing
+        run: uv run --no-sync python dev/benchmark_general_smoothing_quick.py
