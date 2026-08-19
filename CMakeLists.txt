@@ -16,16 +16,24 @@ if(CMAKE_CXX_COMPILER)
         MODULE
         src/knotted_graph/invariants/yamada/_yamada_native.cpp
     )
+    pybind11_add_module(
+        _yamada_iso
+        MODULE
+        src/knotted_graph/invariants/yamada/_yamada_iso.cpp
+    )
     target_compile_features(_yamada_native PRIVATE cxx_std_17)
+    target_compile_features(_yamada_iso PRIVATE cxx_std_17)
 
     if(MSVC)
         target_compile_options(_yamada_native PRIVATE /O2 /DNDEBUG)
+        target_compile_options(_yamada_iso PRIVATE /O2 /DNDEBUG)
     else()
         target_compile_options(_yamada_native PRIVATE -O3 -DNDEBUG)
+        target_compile_options(_yamada_iso PRIVATE -O3 -DNDEBUG)
     endif()
 
     install(
-        TARGETS _yamada_native
+        TARGETS _yamada_native _yamada_iso
         LIBRARY DESTINATION knotted_graph/invariants/yamada
         RUNTIME DESTINATION knotted_graph/invariants/yamada
     )
