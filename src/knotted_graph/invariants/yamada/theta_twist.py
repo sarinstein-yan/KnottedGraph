@@ -10,10 +10,10 @@ torus-knot diagram T(2,n) (n odd) by adding one exterior theta edge. They prove
                   - (A^2+1+A^-2) (-1)^n A^(-n).
 
 This module recognizes that diagram combinatorially from the original-edge
-provenance retained by ``Arc.edge_key``.  The recognizer is intentionally
-conservative: failure of any certificate returns ``None`` and production falls
-back to the general exact evaluator.  The mirror family is handled by the exact
-identity R(mirror(G); A) = R(G; A^-1).
+provenance retained by ``Arc.edge_key``. The recognizer is conservative:
+failure of any certificate returns ``None`` and production falls back to the
+general exact evaluator. The mirror family is handled by the exact identity
+R(mirror(G); A) = R(G; A^-1).
 """
 
 from __future__ import annotations
@@ -38,13 +38,6 @@ def _port_at_node(arc, node):
 
 
 def _trace_original_edge(edge_arcs, start_vertex: int, end_vertex: int):
-    """Trace one original edge from a common theta endpoint to the other.
-
-    Returns the crossing order and, at each crossing, the incoming/outgoing
-    half-edge ports with respect to that common orientation.  A valid original
-    edge is a simple chain in the projection graph: each endpoint has degree one
-    in the edge group and every encountered crossing degree two.
-    """
     adjacency = defaultdict(list)
     by_id = {}
     for arc in edge_arcs:
@@ -84,11 +77,7 @@ def _trace_original_edge(edge_arcs, start_vertex: int, end_vertex: int):
         if nxt[0] == "x":
             crossing_id = nxt[1]
             incoming_port = _port_at_node(arc, nxt)
-            next_candidates = [
-                candidate
-                for candidate in adjacency[nxt]
-                if candidate != arc_id
-            ]
+            next_candidates = [candidate for candidate in adjacency[nxt] if candidate != arc_id]
             if len(next_candidates) != 1:
                 return None
             outgoing_arc = by_id[next_candidates[0]]
@@ -117,13 +106,6 @@ def _endpoint_set(edge_arcs):
 
 
 def _crossing_sign(crossing, arcs_by_id, directions_by_edge, ordered_port_fn):
-    """Return the oriented crossing sign from the certified two-edge traversal.
-
-    ``ordered_port_fn`` gives the CCW port cycle with positions 0/2 on the
-    over-strand.  Both physical theta edges are oriented from the same graph
-    vertex to the other.  The sign is determined by whether the outgoing under
-    tangent is the next or previous CCW ray from the outgoing over tangent.
-    """
     ordered = list(ordered_port_fn(crossing, arcs_by_id))
     if len(ordered) != 4 or len(set(ordered)) != 4:
         return None
@@ -156,7 +138,6 @@ def _crossing_sign(crossing, arcs_by_id, directions_by_edge, ordered_port_fn):
 
 
 def _theta_formula_laurent(n: int, *, mirror: bool) -> Laurent:
-    """Dobrynin--Vesnin Theorem 2 in the package's Laurent representation."""
     coefficients: dict[int, int] = {}
 
     def put(exponent: int, coefficient: int) -> None:
@@ -176,25 +157,12 @@ def _theta_formula_laurent(n: int, *, mirror: bool) -> Laurent:
 
 
 def certified_theta_twist_laurent(vertices, crossings, arcs, ordered_port_fn):
-    """Return a closed-form Laurent value iff the diagram is certified Theta(n).
-
-    Certification requires:
-
-    * exactly two degree-three graph vertices and three original edge keys;
-    * one crossing-free exterior edge joining the two vertices;
-    * two remaining original edges each traverse every crossing exactly once;
-    * the crossing order on those two edges is reversed, as in a 2-braid closure;
-    * every crossing is between those two edges and all oriented crossing signs
-      are equal.
-
-    These conditions encode the canonical odd-n Dobrynin--Vesnin theta family.
-    Any uncertainty returns ``None`` rather than risking a false fast-path hit.
-    """
+    """Return a closed-form Laurent value iff the full diagram is certified Theta(n)."""
     vertices = list(vertices)
     crossings = list(crossings)
     arcs = list(arcs)
     n = len(crossings)
-    if n < 1 or n % 2 == 0 or len(vertices) != 2:
+    if n < 3 or n % 2 == 0 or len(vertices) != 2:
         return None
     if any(len(vertex.incident_arcs) != 3 for vertex in vertices):
         return None
@@ -246,21 +214,13 @@ def certified_theta_twist_laurent(vertices, crossings, arcs, ordered_port_fn):
     directions_by_edge = (braided[0][3], braided[1][3])
     signs = []
     for crossing in crossings:
-        sign = _crossing_sign(
-            crossing,
-            arcs_by_id,
-            directions_by_edge,
-            ordered_port_fn,
-        )
+        sign = _crossing_sign(crossing, arcs_by_id, directions_by_edge, ordered_port_fn)
         if sign is None:
             return None
         signs.append(sign)
     if len(set(signs)) != 1:
         return None
 
-    # The positive-sign convention produced by _ordered_crossing_ports matches
-    # the published Theta(n) formula; reversing all crossings gives the mirror
-    # and therefore A -> A^-1. This mapping is regression-checked against the
-    # legacy exhaustive state sum for both chiralities.
-    mirror = signs[0] < 0
-    return _theta_formula_laurent(n, mirror=mirror)
+    # Exact regression against the retained state sum establishes that sign < 0
+    # corresponds to the published orientation and sign > 0 to its mirror.
+    return _theta_formula_laurent(n, mirror=signs[0] > 0)
