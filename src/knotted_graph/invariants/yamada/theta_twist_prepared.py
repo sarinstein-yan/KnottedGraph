@@ -49,9 +49,6 @@ def _trace_physical_edge(prepared, start_port: int, target_vertex: int, opposite
         if crossing_index < 0 or crossing_index >= len(ordered):
             return None
         if crossing_index in directions:
-            # Reject self-crossings of one physical edge. The closed form is for
-            # two distinct strands crossing each other, not arbitrary knots on
-            # an individual theta edge.
             return None
         through = opposite[remote]
         if through < 0 or crossing_for_port[through] != crossing_index:
@@ -93,21 +90,14 @@ def _crossing_sign(prepared, crossing_index: int, directions_a, directions_b):
 def certified_prepared_theta_twist_laurent(prepared):
     """Return the exact Theta(n) closed form iff the prepared diagram certifies it.
 
-    The certificate is intrinsic to the prepared combinatorial diagram and does
-    not rely on benchmark labels or geometry:
-
-    * two graph vertices, each with exactly three incident physical edges;
-    * tracing straight through crossings recovers three vertex-to-vertex edges;
-    * one edge is crossing-free;
-    * each of the other two visits every crossing exactly once;
-    * their crossing orders are reversed (the canonical two-braid closure);
-    * all crossings have the same oriented sign.
-
-    Any failure returns ``None`` so the general exact evaluator remains the
-    authoritative fallback.
+    Certification is intrinsic to the prepared combinatorial diagram and does
+    not rely on benchmark labels or geometry. The fast path is deliberately
+    restricted to non-trivial odd members n >= 3; n=1 remains on the general
+    evaluator because it can occur as a local block in unrelated diagrams and
+    is not needed for the certified T(2,n) benchmark family.
     """
     n = len(prepared.crossing_ids)
-    if n < 1 or n % 2 == 0 or len(prepared.vertex_ids) != 2:
+    if n < 3 or n % 2 == 0 or len(prepared.vertex_ids) != 2:
         return None
 
     fixed = prepared.fixed_terminal_index
@@ -136,8 +126,6 @@ def certified_prepared_theta_twist_laurent(prepared):
     if len(used_start_ports) != 3:
         return None
 
-    # Physical paths must partition all arc/crossing ports. They are allowed to
-    # meet only at the two graph vertices; individual integer ports are unique.
     all_seen = set()
     for _order, _directions, seen_ports in paths:
         if all_seen.intersection(seen_ports):
@@ -175,7 +163,9 @@ def certified_prepared_theta_twist_laurent(prepared):
     if len(set(signs)) != 1:
         return None
 
-    # Dobrynin--Vesnin's published orientation is the positive crossing
-    # convention used by PreparedCompactStateBuilder. The opposite common sign
-    # is the mirror family and follows by A <-> A^-1.
-    return _theta_formula_laurent(n, mirror=signs[0] < 0)
+    # Exact legacy-state regression on the benchmark geometry establishes that
+    # the sign convention returned above is opposite to the orientation used in
+    # the published formula: sign < 0 is the published Theta(n), while sign > 0
+    # is its mirror. This mapping is tested against the retained 3**c oracle for
+    # n=3,5,7,9,11 and against explicitly mirrored n=3,5 examples.
+    return _theta_formula_laurent(n, mirror=signs[0] > 0)
