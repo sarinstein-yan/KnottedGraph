@@ -37,48 +37,48 @@ DEFAULT_SIZE_SCALING_CROSSINGS = 8
 CROSSING_FAMILY = "crossings_graph_ensemble"
 PAPER_FAMILIES = (CROSSING_FAMILY,)
 
-# Dense sampling at low c and progressively sparser sampling at high c.
-# The exact user-selected maximum and size-scaling slice are always included.
-_CROSSING_CANDIDATES = [
-    1, 2, 3, 4, 5, 6, 8, 10, 12, 14, 16, 18, 20,
-    24, 28, 32, 36, 40, 48, 56, 64, 80,
-    96, 112, 128, 160, 192, 256, 320, 384, 512,
-    640, 768, 1024, 1280, 1536, 2048,
-]
-
 
 def crossing_grid(
     profile: str,
     max_projected_crossings: int | None = None,
     size_scaling_crossings: int | None = None,
 ) -> list[int]:
+    """Return a pure x2 crossing grid reaching or exceeding the target.
+
+    ``max_projected_crossings`` is treated as a requested threshold, not a hard
+    cap.  The grid is 1, 2, 4, ... and ends at the first power of two greater
+    than or equal to that threshold.  For example, a target of 500 produces
+    [..., 128, 256, 512].
+    """
     if profile not in {"smoke", "paper"}:
         raise ValueError(profile)
 
-    default_max = 12 if profile == "smoke" else DEFAULT_MAX_PROJECTED_CROSSINGS
-    maximum = default_max if max_projected_crossings is None else int(max_projected_crossings)
+    default_target = 8 if profile == "smoke" else DEFAULT_MAX_PROJECTED_CROSSINGS
+    target = (
+        default_target
+        if max_projected_crossings is None
+        else int(max_projected_crossings)
+    )
     size_c = (
         DEFAULT_SIZE_SCALING_CROSSINGS
         if size_scaling_crossings is None
         else int(size_scaling_crossings)
     )
-    if maximum < 1:
+    if target < 1:
         raise ValueError("max_projected_crossings must be >= 1")
     if size_c < 1:
         raise ValueError("size_scaling_crossings must be >= 1")
-    if size_c > maximum:
+
+    values = [1]
+    while values[-1] < target:
+        values.append(values[-1] * 2)
+
+    if size_c not in values:
         raise ValueError(
-            "size_scaling_crossings must be <= max_projected_crossings"
+            "size_scaling_crossings must be one of the doubling-grid values "
+            f"{values}; got {size_c}"
         )
-
-    if profile == "smoke":
-        candidates = [1, 4, 8, 12]
-    else:
-        candidates = _CROSSING_CANDIDATES
-
-    values = [value for value in candidates if value <= maximum]
-    values.extend([size_c, maximum])
-    return sorted(set(values))
+    return values
 
 
 def paper_plan(
@@ -490,7 +490,8 @@ def main(
                 "profile": profile,
                 "families": list(plan),
                 "crossing_graphs_per_c": crossing_graphs,
-                "max_projected_crossings": max_projected_crossings,
+                "crossing_target": max_projected_crossings,
+                "actual_max_projected_crossings": plan[CROSSING_FAMILY]["x_values"][-1],
                 "size_scaling_crossings": size_scaling_crossings,
                 "timeout_s": timeout_s,
                 "censor_frontier": censor_frontier,
@@ -557,6 +558,10 @@ if __name__ == "__main__":
         "--max-crossings",
         type=int,
         default=DEFAULT_MAX_PROJECTED_CROSSINGS,
+        help=(
+            "target crossing count; benchmark uses powers of two and rounds "
+            "up to the first power of two >= this value"
+        ),
     )
     parser.add_argument(
         "--size-scaling-crossings",
