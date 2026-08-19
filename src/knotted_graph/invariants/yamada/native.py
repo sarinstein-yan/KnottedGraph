@@ -4,6 +4,11 @@ The public API remains pure Python. When the compiled extension is available,
 the compact deletion--contraction recurrence and state summation run in C++.
 If the native int64 coefficient fast path overflows, the computation is rerun
 with the existing arbitrary-precision Python Laurent kernel, preserving exactness.
+
+High-crossing prepared diagrams additionally use an exact structural recursion
+that applies Reidemeister-II cancellation and skein identities before falling
+back to the legacy native ``3**c`` state sum. Small diagrams stay on the legacy
+C++ path because its constant factors are excellent there.
 """
 
 from __future__ import annotations
@@ -17,6 +22,11 @@ try:
 except Exception as exc:  # pragma: no cover - platform/build fallback
     _yamada_native = None
     _NATIVE_IMPORT_ERROR = exc
+
+# Below this number of unresolved crossings the native exhaustive state sum is
+# normally faster than Python-level structural look-ahead. This is a dispatch
+# policy only; both branches are algebraically exact and regression-compared.
+STRUCTURAL_DISPATCH_MIN_CROSSINGS = 10
 
 
 def native_available() -> bool:
@@ -56,6 +66,8 @@ class NativeCompactEvaluator:
         self._native = _yamada_native.NativeEvaluator() if native_available() else None
         self.native_calls = 0
         self.fallback_calls = 0
+        self.structural_calls = 0
+        self.last_structural_stats = None
         self.memo = _MemoSizeProxy(self)
 
     @property
@@ -111,8 +123,12 @@ class NativeCompactEvaluator:
             total = add(total, shift(evaluator.compute_laurent(graph), int(exponent)))
         return total
 
-    def compute_prepared_laurent(self, prepared):
-        """Evaluate a prepared diagram wholly in native code when available."""
+    def compute_prepared_bulk_laurent(self, prepared):
+        """Exact legacy prepared-state sum with no structural redispatch.
+
+        This method exists both as the production fallback and as an independent
+        regression oracle for the structural high-crossing path.
+        """
         if self._native is not None and hasattr(self._native, "compute_prepared"):
             try:
                 self.native_calls += 1
@@ -148,6 +164,20 @@ class NativeCompactEvaluator:
                 ),
             )
         return total
+
+    def compute_prepared_laurent(self, prepared):
+        """Evaluate a prepared diagram with exact size-aware dispatch."""
+        crossing_count = len(prepared.crossing_ids)
+        if crossing_count < STRUCTURAL_DISPATCH_MIN_CROSSINGS:
+            return self.compute_prepared_bulk_laurent(prepared)
+
+        from .diagram_structural import compute_structural_laurent
+
+        stats = {}
+        self.structural_calls += 1
+        value = compute_structural_laurent(prepared, self, stats=stats)
+        self.last_structural_stats = stats
+        return value
 
     def compute(self, graph, variable):
         from .fast import to_sympy
