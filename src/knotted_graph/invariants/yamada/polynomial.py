@@ -455,6 +455,20 @@ class Yamada:
         return blocks
 
     def _compute_laurent_block(self, evaluator):
+        # Recognize theorem-backed Theta(n) diagrams before building the
+        # generic prepared crossing tables.  This certificate uses original
+        # edge provenance and returns None for every unrecognized diagram.
+        from .theta_twist import certified_theta_twist_laurent
+
+        theta_value = certified_theta_twist_laurent(
+            self.vertices,
+            self.crossings,
+            self.arcs,
+            _ordered_crossing_ports,
+        )
+        if theta_value is not None:
+            return theta_value
+
         prepared = self._prepare_compact_state_builder()
         if hasattr(evaluator, "compute_prepared_laurent"):
             return evaluator.compute_prepared_laurent(prepared)
