@@ -1,13 +1,15 @@
-"""Benchmark generic exact crossing-recursion memoization candidates.
+"""Benchmark exact generic crossing recursion with fast isomorphism memoization.
 
 The Dobrynin--Vesnin formula is used only after evaluation as a correctness
-oracle. It is never called by the candidate evaluators.
+oracle. It is never used by the candidate evaluator.
 """
 
 from __future__ import annotations
 
 import json
 import time
+
+import networkx as nx
 
 import benchmark_topoly_essential_torus_scaling as torus
 from knotted_graph.invariants.yamada.compact import PythonCompactYamadaEvaluator
@@ -20,16 +22,6 @@ from knotted_graph.invariants.yamada.skein_hybrid import (
     resolve_crossing,
 )
 from knotted_graph.invariants.yamada.state_compact import PreparedCompactStateBuilder
-
-
-def diagram_key(prepared):
-    return (
-        len(prepared.vertex_ids),
-        prepared.ordered_ports,
-        prepared.arc_partner,
-        prepared.fixed_terminal_index,
-        prepared.crossing_for_port,
-    )
 
 
 def first_reducing_inversion(prepared):
@@ -54,168 +46,121 @@ def first_resolvable_crossing(prepared):
     return None
 
 
-def _relation_graph(prepared):
-    """Return a finite directed colored graph encoding the prepared diagram.
+def _vf2_graph(prepared):
+    """Node-labeled undirected gadget graph exactly encoding a prepared diagram.
 
-    Node colors distinguish over/under crossing ports, graph-terminal ports and
-    unlabeled spatial-graph vertices. Edge colors distinguish physical arcs,
-    directed crossing cyclic order and terminal incidence. Thus graph
-    isomorphism is exactly the relabeling freedom we want to quotient out.
+    Physical arcs and terminal incidence are ordinary gadgets. Directed cyclic
+    crossing order is encoded by source/edge/target nodes with distinct labels,
+    so undirected VF2++ still preserves crossing orientation. Rotating a crossing
+    by two ports remains an isomorphism, while reflection does not.
     """
+    graph = nx.Graph()
     port_count = len(prepared.arc_partner)
     parity = [-1] * port_count
     for ports in prepared.ordered_ports:
         for position, port in enumerate(ports):
             parity[port] = position % 2
 
-    terminal_values = sorted(
-        {terminal for terminal in prepared.fixed_terminal_index if terminal >= 0}
-    )
-    terminal_node = {
-        terminal: port_count + index
-        for index, terminal in enumerate(terminal_values)
-    }
-
-    labels = []
     for port in range(port_count):
         if prepared.crossing_for_port[port] >= 0:
-            labels.append(parity[port])  # 0=over port, 1=under port
+            label = "port_over" if parity[port] == 0 else "port_under"
         else:
-            labels.append(2)  # terminal port
-    labels.extend([3] * len(terminal_values))  # unlabeled spatial-graph vertex
+            label = "port_terminal"
+        graph.add_node(("p", port), label=label)
 
-    edges = []
-    # Physical arc pairing, encoded in both directions.
+    # Physical arc pairing.
     for port, partner in enumerate(prepared.arc_partner):
         if port < partner:
-            edges.append((port, 0, partner))
-            edges.append((partner, 0, port))
-    # Directed cyclic order at each crossing.
+            arc = ("a", port, partner)
+            graph.add_node(arc, label="physical_arc")
+            graph.add_edge(("p", port), arc)
+            graph.add_edge(arc, ("p", partner))
+
+    # Directed crossing cyclic order as an asymmetric labeled path.
+    relation_index = 0
     for ports in prepared.ordered_ports:
         for left, right in zip(ports, ports[1:] + ports[:1]):
-            edges.append((left, 1, right))
-    # Unordered terminal incidence, encoded in both directions.
+            src = ("cs", relation_index)
+            mid = ("cm", relation_index)
+            dst = ("ct", relation_index)
+            relation_index += 1
+            graph.add_node(src, label="cycle_source")
+            graph.add_node(mid, label="cycle_relation")
+            graph.add_node(dst, label="cycle_target")
+            graph.add_edge(("p", left), src)
+            graph.add_edge(src, mid)
+            graph.add_edge(mid, dst)
+            graph.add_edge(dst, ("p", right))
+
+    terminal_ports = {}
     for port, terminal in enumerate(prepared.fixed_terminal_index):
         if terminal >= 0:
-            vnode = terminal_node[terminal]
-            edges.append((vnode, 2, port))
-            edges.append((port, 2, vnode))
-    return tuple(labels), tuple(edges)
+            terminal_ports.setdefault(terminal, []).append(port)
+    for terminal, ports in terminal_ports.items():
+        vertex = ("v", terminal)
+        graph.add_node(vertex, label="spatial_vertex")
+        for port in ports:
+            graph.add_edge(vertex, ("p", port))
+    return graph
 
 
-def _canonical_colored_digraph(labels, edges):
-    """Exact canonical form by color refinement + individualization.
+class ExactVF2Memo:
+    """WL-bucketed memo whose hits are certified by exact VF2++ isomorphism."""
 
-    This is a small nauty-style canonical-labeling search. Color refinement is
-    deterministic and relabeling-invariant; if it is not discrete, every node
-    in one ambiguous color class is individualized in turn and the
-    lexicographically minimum recursively refined representation is selected.
-    Hence equality of returned tuples is exact graph isomorphism, not a hash.
-    """
-    n = len(labels)
-    outgoing = [[] for _ in range(n)]
-    incoming = [[] for _ in range(n)]
-    for left, kind, right in edges:
-        outgoing[left].append((kind, right))
-        incoming[right].append((kind, left))
+    def __init__(self):
+        self.buckets = {}
+        self.size = 0
+        self.hits = 0
+        self.comparisons = 0
+        self.graph_seconds = 0.0
+        self.iso_seconds = 0.0
 
-    initial_values = sorted(set(labels))
-    initial_map = {value: index for index, value in enumerate(initial_values)}
-    initial = tuple(initial_map[value] for value in labels)
-    search_memo = {}
-
-    def refine(colors):
-        colors = tuple(colors)
-        while True:
-            signatures = []
-            for node in range(n):
-                neighborhood = []
-                neighborhood.extend(
-                    (0, kind, colors[neighbor])
-                    for kind, neighbor in outgoing[node]
-                )
-                neighborhood.extend(
-                    (1, kind, colors[neighbor])
-                    for kind, neighbor in incoming[node]
-                )
-                signatures.append((colors[node], tuple(sorted(neighborhood))))
-            unique = sorted(set(signatures))
-            mapping = {signature: index for index, signature in enumerate(unique)}
-            new_colors = tuple(mapping[signature] for signature in signatures)
-            if len(set(new_colors)) == len(set(colors)):
-                return new_colors
-            colors = new_colors
-
-    def canonical(colors):
-        colors = refine(colors)
-        cached = search_memo.get(colors)
-        if cached is not None:
-            return cached
-
-        classes = {}
-        for node, color in enumerate(colors):
-            classes.setdefault(color, []).append(node)
-        ambiguous = [
-            (len(nodes), color, nodes)
-            for color, nodes in classes.items()
-            if len(nodes) > 1
-        ]
-        if not ambiguous:
-            order = sorted(range(n), key=colors.__getitem__)
-            code = (
-                tuple(labels[node] for node in order),
-                tuple(sorted((colors[left], kind, colors[right]) for left, kind, right in edges)),
+    def get(self, prepared):
+        started = time.perf_counter()
+        graph = _vf2_graph(prepared)
+        fingerprint = nx.weisfeiler_lehman_graph_hash(
+            graph,
+            node_attr="label",
+            iterations=4,
+        )
+        self.graph_seconds += time.perf_counter() - started
+        bucket_key = (len(prepared.crossing_ids), len(graph), fingerprint)
+        for other, value in self.buckets.get(bucket_key, ()):
+            self.comparisons += 1
+            started = time.perf_counter()
+            equivalent = nx.vf2pp_is_isomorphic(
+                graph,
+                other,
+                node_label="label",
             )
-            search_memo[colors] = code
-            return code
+            self.iso_seconds += time.perf_counter() - started
+            if equivalent:
+                self.hits += 1
+                return True, value, bucket_key, graph
+        return False, None, bucket_key, graph
 
-        _size, _color, nodes = min(ambiguous)
-        individualized_color = max(colors) + 1
-        best = None
-        for node in nodes:
-            branch = list(colors)
-            branch[node] = individualized_color
-            candidate = canonical(tuple(branch))
-            if best is None or candidate < best:
-                best = candidate
-        search_memo[colors] = best
-        return best
-
-    return canonical(initial)
+    def put(self, bucket_key, graph, value):
+        self.buckets.setdefault(bucket_key, []).append((graph, value))
+        self.size += 1
 
 
-def canonical_diagram_key(prepared):
-    labels, edges = _relation_graph(prepared)
-    return _canonical_colored_digraph(labels, edges)
-
-
-def full_recursive_laurent(prepared, evaluator, *, canonical=False, stats=None):
-    """Exact global Yamada crossing recursion with shared partial-diagram memo."""
-    memo = {}
+def full_recursive_laurent(prepared, evaluator, stats=None):
+    """Exact generic Yamada recursion with global exact isomorphism memo."""
+    memo = ExactVF2Memo()
     if stats is None:
         stats = {}
-    stats.update(
-        calls=0,
-        memo_hits=0,
-        rii_moves=0,
-        inversions=0,
-        resolutions=0,
-        key_seconds=0.0,
-    )
+    stats.update(calls=0, memo_hits=0, rii_moves=0, inversions=0, resolutions=0)
 
     def rec(current):
         stats["calls"] += 1
         current, moves = current.reduce_reidemeister_ii()
         stats["rii_moves"] += moves
-        key_started = time.perf_counter()
-        key = canonical_diagram_key(current) if canonical else diagram_key(current)
-        stats["key_seconds"] += time.perf_counter() - key_started
-        if key in memo:
+        hit, cached, bucket_key, graph = memo.get(current)
+        if hit:
             stats["memo_hits"] += 1
-            return memo[key]
+            return cached
 
-        crossing_count = len(current.crossing_ids)
-        if crossing_count == 0:
+        if not current.crossing_ids:
             value = evaluator.compute_prepared_bulk_laurent(current)
         else:
             inversion = first_reducing_inversion(current)
@@ -230,18 +175,24 @@ def full_recursive_laurent(prepared, evaluator, *, canonical=False, stats=None):
                 if resolved is None:
                     value = evaluator.compute_prepared_bulk_laurent(current)
                 else:
-                    _crossing_index, (plus, minus, vertex) = resolved
+                    _index, (plus, minus, vertex) = resolved
                     stats["resolutions"] += 1
                     value = add(
                         add(shift(rec(plus), 1), shift(rec(minus), -1)),
                         rec(vertex),
                     )
-
-        memo[key] = value
+        memo.put(bucket_key, graph, value)
         return value
 
     value = rec(prepared)
-    stats["memo_size"] = len(memo)
+    stats.update(
+        memo_size=memo.size,
+        iso_hits=memo.hits,
+        iso_comparisons=memo.comparisons,
+        graph_seconds=memo.graph_seconds,
+        iso_seconds=memo.iso_seconds,
+        buckets=len(memo.buckets),
+    )
     return value
 
 
@@ -256,43 +207,26 @@ def prepared_theta(n):
     )
 
 
-def run_candidate(label, n, canonical):
-    prepared = prepared_theta(n)
-    evaluator = NativeCompactEvaluator(PythonCompactYamadaEvaluator)
-    expected = tuple(sorted(torus.independent_theta_terms(n).items()))
-    stats = {}
-    started = time.perf_counter()
-    actual = full_recursive_laurent(
-        prepared,
-        evaluator,
-        canonical=canonical,
-        stats=stats,
-    )
-    elapsed = time.perf_counter() - started
-    if actual != expected:
-        raise AssertionError(
-            f"{label} disagrees with external theorem oracle at n={n}"
-        )
-    print(
-        json.dumps(
-            {
-                "candidate": label,
-                "n": n,
-                "seconds": elapsed,
-                "stats": stats,
-                "correctness": "PASS",
-            },
-            separators=(",", ":"),
-        ),
-        flush=True,
-    )
-
-
 def main():
-    for n in (9, 11):
-        run_candidate("labeled_global_recursion", n, False)
     for n in (9, 11, 13, 15, 17):
-        run_candidate("exact_canonical_global_recursion", n, True)
+        prepared = prepared_theta(n)
+        evaluator = NativeCompactEvaluator(PythonCompactYamadaEvaluator)
+        expected = tuple(sorted(torus.independent_theta_terms(n).items()))
+        stats = {}
+        started = time.perf_counter()
+        actual = full_recursive_laurent(prepared, evaluator, stats=stats)
+        elapsed = time.perf_counter() - started
+        if actual != expected:
+            raise AssertionError(
+                f"VF2++ generic recursion disagrees with external theorem oracle at n={n}"
+            )
+        print(json.dumps({
+            "candidate": "exact_vf2pp_global_recursion",
+            "n": n,
+            "seconds": elapsed,
+            "stats": stats,
+            "correctness": "PASS",
+        }, separators=(",", ":")), flush=True)
 
 
 if __name__ == "__main__":
