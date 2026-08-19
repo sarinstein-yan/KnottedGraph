@@ -1,18 +1,18 @@
 """Persistent cache for the long benchmark drivers used by notebook 03.
 
 This module is intentionally private and activates only when Python is executing
-one of the two benchmark driver scripts used by
+an approved benchmark driver used by
 ``User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb``.
 
-A successful driver run ends by printing ``SUMMARY=<json>``.  The summary is
-stored locally under the repository's Git metadata.  On the next run with the
+A successful driver run ends by printing ``SUMMARY=<json>``. The summary is
+stored locally under the repository's Git metadata. On the next run with the
 same command-line configuration, benchmark source, relevant KnottedGraph source,
 Python/dependency versions, and machine architecture, the cached rows are
 replayed to stdout and the driver exits before any expensive timings start.
 
 The notebook therefore receives exactly the same streamed-row/SUMMARY protocol
-on a cache hit and continues directly to its existing acceptance, aggregation,
-and plotting cells.
+on a cache hit and continues directly to its acceptance, aggregation, and
+plotting cells.
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ import sys
 from typing import Any
 
 _TARGETS = {
+    "benchmark_topoly_paper_scaling.py",
     "benchmark_topoly_extended_scaling.py",
     "benchmark_topoly_random_cubic_ensemble.py",
 }
@@ -58,6 +59,15 @@ def _environment_fingerprint() -> dict[str, str | None]:
 
 def _relevant_source_files(root: Path, script: Path) -> list[Path]:
     files = [script.resolve(), Path(__file__).resolve()]
+
+    # The focused paper driver deliberately reuses the graph constructors and
+    # polynomial-equivalence helpers from the broader diagnostic driver, so that
+    # imported source must participate in cache invalidation as well.
+    if script.name == "benchmark_topoly_paper_scaling.py":
+        helper = root / "dev" / "benchmark_topoly_extended_scaling.py"
+        if helper.exists():
+            files.append(helper.resolve())
+
     for relative in (
         Path("src/knotted_graph/core"),
         Path("src/knotted_graph/projection"),
