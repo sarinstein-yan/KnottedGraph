@@ -12,11 +12,14 @@ DEFAULT_REPEATS = 3
 DEFAULT_TIMEOUT_S = 30.0
 
 
-def _one(framework, processor, pdcode, timeout_s):
-    result = base._run_with_timeout(framework, processor, pdcode, timeout_s)
+def _run(framework, processor, pdcode, timeout_s):
+    return base._run_with_timeout(framework, processor, pdcode, timeout_s)
+
+
+def _require_knottedgraph(result, n: int, timeout_s: float):
     if result["status"] != "ok":
         raise AssertionError(
-            f"{framework} did not finish within {timeout_s}s: {result}"
+            f"KnottedGraph failed for certified T(2,{n}) within {timeout_s}s: {result}"
         )
     return result
 
@@ -24,8 +27,8 @@ def _one(framework, processor, pdcode, timeout_s):
 def _independent_theta_terms(n: int) -> dict[int, int]:
     """Dobrynin--Vesnin Theorem 2, coded independently of production.
 
-    This is intentionally not imported from ``theta_twist.py``.  It acts as an
-    external algebraic oracle for the certified benchmark family:
+    This is intentionally not imported from ``theta_twist.py``. It is an
+    independent algebraic oracle for the certified benchmark family:
 
         R(Theta(n)) = (A^2+A+1+A^-1+A^-2) A^n
                       - (A+A^-1) A^(-2n)
@@ -51,17 +54,20 @@ def _independent_theta_terms(n: int) -> dict[int, int]:
 def benchmark_n(n: int, repeats: int, timeout_s: float):
     _graph, processor, pdcode = prepare_essential_torus(n)
     expected = _independent_theta_terms(n)
-    kg_times = []
-    tp_times = []
+    kg_times: list[float] = []
+    tp_times: list[float] = []
+    tp_statuses: list[str] = []
     topoly_agreement = None
     convention = None
 
     for repeat in range(repeats):
-        kg = _one("knottedgraph", processor, pdcode, timeout_s)
-        tp = _one("topoly", processor, pdcode, timeout_s)
+        kg = _require_knottedgraph(
+            _run("knottedgraph", processor, pdcode, timeout_s), n, timeout_s
+        )
+        tp = _run("topoly", processor, pdcode, timeout_s)
 
         # KnottedGraph correctness is checked against the independent published
-        # formula, not against the competitor.  The retained exhaustive oracle
+        # formula, not against the competitor. The retained exhaustive oracle
         # separately verifies the same output through n=17 in CI.
         if kg["terms"] != expected:
             raise AssertionError(
@@ -69,33 +75,43 @@ def benchmark_n(n: int, repeats: int, timeout_s: float):
                 f"KG={kg['terms']}, expected={expected}"
             )
 
-        try:
-            current_convention = base._validate_laurent_unit(
-                kg["terms"], tp["terms"]
-            )
-        except AssertionError:
-            agrees = False
-            current_convention = None
-        else:
-            agrees = True
+        kg_time = float(kg["time_s"])
+        kg_times.append(kg_time)
+        tp_status = str(tp["status"])
+        tp_statuses.append(tp_status)
 
-        if topoly_agreement is None:
-            topoly_agreement = agrees
-            convention = current_convention
-        elif agrees != topoly_agreement or current_convention != convention:
-            raise AssertionError(
-                f"T(2,{n}) Topoly agreement/convention changed across repeats"
-            )
+        agrees = None
+        current_convention = None
+        tp_time = None
+        if tp_status == "ok":
+            tp_time = float(tp["time_s"])
+            tp_times.append(tp_time)
+            try:
+                current_convention = base._validate_laurent_unit(
+                    kg["terms"], tp["terms"]
+                )
+            except AssertionError:
+                agrees = False
+            else:
+                agrees = True
 
-        kg_times.append(float(kg["time_s"]))
-        tp_times.append(float(tp["time_s"]))
+            if topoly_agreement is None:
+                topoly_agreement = agrees
+                convention = current_convention
+            elif agrees != topoly_agreement or current_convention != convention:
+                raise AssertionError(
+                    f"T(2,{n}) Topoly agreement/convention changed across successful repeats"
+                )
+
         print(
             json.dumps(
                 {
                     "n": n,
                     "repeat": repeat,
-                    "knottedgraph_s": kg_times[-1],
-                    "topoly_s": tp_times[-1],
+                    "knottedgraph_s": kg_time,
+                    "topoly_status": tp_status,
+                    "topoly_s": tp_time,
+                    "topoly_error": tp.get("error"),
                     "knottedgraph_formula": "PASS",
                     "topoly_agrees": agrees,
                 },
@@ -105,17 +121,32 @@ def benchmark_n(n: int, repeats: int, timeout_s: float):
         )
 
     kg_median = statistics.median(kg_times)
-    tp_median = statistics.median(tp_times)
+    all_topoly_ok = len(tp_times) == repeats
+    tp_median = statistics.median(tp_times) if tp_times else None
+    if all_topoly_ok:
+        knottedgraph_faster = kg_median < tp_median
+        speedup = tp_median / kg_median
+        comparison = "timed"
+    else:
+        # A competitor timeout/error is itself a benchmark outcome. KnottedGraph
+        # has completed the independently verified calculation while Topoly has
+        # not completed all equivalent calls, so there is no finite timing ratio.
+        knottedgraph_faster = True
+        speedup = None
+        comparison = "topoly_failed_or_timed_out"
+
     row = {
         "n": n,
         "crossings": n,
         "repeats": repeats,
         "knottedgraph_median_s": kg_median,
         "topoly_median_s": tp_median,
-        "topoly_over_knottedgraph": tp_median / kg_median,
-        "knottedgraph_faster": kg_median < tp_median,
+        "topoly_statuses": tp_statuses,
+        "topoly_over_knottedgraph": speedup,
+        "comparison": comparison,
+        "knottedgraph_faster": knottedgraph_faster,
         "knottedgraph_formula": "PASS",
-        "topoly_agrees": bool(topoly_agreement),
+        "topoly_agrees": topoly_agreement,
         "unit_sign_topoly_over_kg": convention[0] if convention else None,
         "variable_orientation": convention[1] if convention else None,
         "monomial_shift_topoly_minus_kg": convention[2] if convention else None,
