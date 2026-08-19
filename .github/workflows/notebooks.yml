@@ -71,6 +71,7 @@ jobs:
           - User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb
           - User_guide/benchmarks/04_synthetic_ground_truth_validation.ipynb
           - User_guide/benchmarks/05_same_abstract_graph_distinct_embeddings.ipynb
+          - User_guide/benchmarks/06_paper_scaling_publication_figure.ipynb
 
     steps:
       - name: Check out optimization branch
