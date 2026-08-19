@@ -105,7 +105,8 @@ def _endpoint_set(edge_arcs):
     return tuple(sorted(endpoints))
 
 
-def _crossing_sign(crossing, arcs_by_id, directions_by_edge, ordered_port_fn):
+def _crossing_data(crossing, arcs_by_id, directions_by_edge, ordered_port_fn):
+    """Return ``(oriented_sign, over_edge_index)`` for one braid crossing."""
     ordered = list(ordered_port_fn(crossing, arcs_by_id))
     if len(ordered) != 4 or len(set(ordered)) != 4:
         return None
@@ -127,14 +128,17 @@ def _crossing_sign(crossing, arcs_by_id, directions_by_edge, ordered_port_fn):
 
     if {pos % 2 for pos in outgoing_positions} != {0, 1}:
         return None
-    over_out = next(pos for pos in outgoing_positions if pos % 2 == 0)
-    under_out = next(pos for pos in outgoing_positions if pos % 2 == 1)
+    over_edge = 0 if outgoing_positions[0] % 2 == 0 else 1
+    over_out = outgoing_positions[over_edge]
+    under_out = outgoing_positions[1 - over_edge]
     delta = (under_out - over_out) % 4
     if delta == 1:
-        return 1
-    if delta == 3:
-        return -1
-    return None
+        sign = 1
+    elif delta == 3:
+        sign = -1
+    else:
+        return None
+    return sign, over_edge
 
 
 def _theta_formula_laurent(n: int, *, mirror: bool) -> Laurent:
@@ -157,7 +161,13 @@ def _theta_formula_laurent(n: int, *, mirror: bool) -> Laurent:
 
 
 def certified_theta_twist_laurent(vertices, crossings, arcs, ordered_port_fn):
-    """Return a closed-form Laurent value iff the full diagram is certified Theta(n)."""
+    """Return a closed form iff the full diagram certifies the Theta(n) family.
+
+    Besides the common-sign and reversed-order conditions, a genuine
+    two-strand braid must alternate which physical theta edge is the over-pass
+    at successive half-twists. Requiring this prevents constant-overstrand
+    synthetic crossing diagrams from entering the theorem-backed fast path.
+    """
     vertices = list(vertices)
     crossings = list(crossings)
     arcs = list(arcs)
@@ -204,6 +214,7 @@ def certified_theta_twist_laurent(vertices, crossings, arcs, ordered_port_fn):
 
     braided_keys = {braided[0][0], braided[1][0]}
     arcs_by_id = {arc.id: arc for arc in arcs}
+    crossings_by_id = {int(crossing.id): crossing for crossing in crossings}
     for crossing in crossings:
         incident = [arcs_by_id[arc_id].edge_key for arc_id, _ in crossing.incident_arcs]
         if set(incident) != braided_keys:
@@ -213,12 +224,22 @@ def certified_theta_twist_laurent(vertices, crossings, arcs, ordered_port_fn):
 
     directions_by_edge = (braided[0][3], braided[1][3])
     signs = []
-    for crossing in crossings:
-        sign = _crossing_sign(crossing, arcs_by_id, directions_by_edge, ordered_port_fn)
-        if sign is None:
+    over_edges = []
+    for crossing_id in first_order:
+        data = _crossing_data(
+            crossings_by_id[crossing_id],
+            arcs_by_id,
+            directions_by_edge,
+            ordered_port_fn,
+        )
+        if data is None:
             return None
+        sign, over_edge = data
         signs.append(sign)
+        over_edges.append(over_edge)
     if len(set(signs)) != 1:
+        return None
+    if any(left == right for left, right in zip(over_edges, over_edges[1:])):
         return None
 
     # Exact regression against the retained state sum establishes that sign < 0
