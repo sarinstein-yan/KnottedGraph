@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  theta-family-0-20:
+  theta-generic-optimization-lab:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,11 +18,183 @@ jobs:
           python-version: '3.12'
       - name: Install benchmark environment
         run: uv sync --group dev --group benchmark
-      - name: Require native Yamada backend
+      - name: Apply validation-only theorem semantics and generic optimization candidates
         run: |
-          uv run --no-sync python - <<'PY'
-          from knotted_graph.invariants.yamada.native import native_available, native_import_error
-          assert native_available(), native_import_error()
+          python - <<'PY'
+          from pathlib import Path
+
+          # Never use the Dobrynin--Vesnin theorem in production evaluation.
+          p = Path('src/knotted_graph/invariants/yamada/polynomial.py')
+          s = p.read_text()
+          a = s.index('        # Recognize theorem-backed Theta(n) diagrams before building the\n')
+          marker = '        if theta_value is not None:\n            return theta_value\n\n'
+          b = s.index(marker, a) + len(marker)
+          p.write_text(s[:a] + s[b:])
+
+          p = Path('src/knotted_graph/invariants/yamada/native.py')
+          s = p.read_text()
+          a = s.index('        # First try the strongest possible optimization: a mathematically\n')
+          marker = '            return theta_value\n\n'
+          b = s.index(marker, a) + len(marker)
+          s = s[:a] + s[b:]
+          s = s.replace('STRUCTURAL_DISPATCH_MIN_CROSSINGS = 10', 'STRUCTURAL_DISPATCH_MIN_CROSSINGS = 8')
+          p.write_text(s)
+
+          # Candidate 1: stop inversion/resolution look-ahead at the first exact
+          # reducing move. Maximizing move count costs O(c^2) construction work
+          # at every recursion node and is unnecessary for repeated braid chains.
+          p = Path('src/knotted_graph/invariants/yamada/skein_hybrid.py')
+          s = p.read_text()
+          old = '''def _best_inversion(prepared):
+    best = None
+    for crossing_index in range(len(prepared.crossing_ids)):
+        inverted = invert_crossing(prepared, crossing_index)
+        reduced, moves = inverted.reduce_reidemeister_ii()
+        if moves and (best is None or moves > best[0]):
+            best = moves, crossing_index, reduced
+    return best
+'''
+          new = '''def _best_inversion(prepared):
+    # Any inversion exposing RII is exact; returning the first such move avoids
+    # evaluating every crossing merely to maximize an optimization heuristic.
+    for crossing_index in range(len(prepared.crossing_ids)):
+        inverted = invert_crossing(prepared, crossing_index)
+        reduced, moves = inverted.reduce_reidemeister_ii()
+        if moves:
+            return moves, crossing_index, reduced
+    return None
+'''
+          assert old in s
+          s = s.replace(old, new)
+          old = '''def _best_resolution(prepared):
+    """Find a crossing whose ordinary resolutions expose additional RII moves."""
+    best = None
+    crossing_count = len(prepared.crossing_ids)
+    for crossing_index in range(crossing_count):
+        children = []
+        extra_moves = 0
+        try:
+            for spin in (0, 1, 2):
+                child = resolve_crossing(prepared, crossing_index, spin)
+                reduced, moves = child.reduce_reidemeister_ii()
+                children.append(reduced)
+                extra_moves += moves
+        except ValueError:
+            continue
+        if extra_moves and (best is None or extra_moves > best[0]):
+            best = extra_moves, crossing_index, tuple(children)
+    return best
+'''
+          new = '''def _best_resolution(prepared):
+    """Return the first crossing whose exact resolutions expose RII moves."""
+    crossing_count = len(prepared.crossing_ids)
+    for crossing_index in range(crossing_count):
+        children = []
+        extra_moves = 0
+        try:
+            for spin in (0, 1, 2):
+                child = resolve_crossing(prepared, crossing_index, spin)
+                reduced, moves = child.reduce_reidemeister_ii()
+                children.append(reduced)
+                extra_moves += moves
+        except ValueError:
+            continue
+        if extra_moves:
+            return extra_moves, crossing_index, tuple(children)
+    return None
+'''
+          assert old in s
+          p.write_text(s.replace(old, new))
+
+          # Candidate 2: RII bigon lookup from physical adjacency rather than
+          # testing all O(c^2) crossing pairs.
+          p = Path('src/knotted_graph/invariants/yamada/state_compact.py')
+          s = p.read_text()
+          a = s.index('    def _find_reidemeister_ii_pair(self):\n')
+          b = s.index('    def _remove_reidemeister_ii_pair', a)
+          replacement = '''    def _find_reidemeister_ii_pair(self):
+        """Return one conservatively recognized Reidemeister-II crossing pair.
+
+        Candidate pairs are discovered from the four physical arc partners of
+        each crossing, so this is linear in the crossing count instead of
+        scanning every crossing pair. The acceptance conditions are identical
+        to the previous conservative regular-isotopy test.
+        """
+        arc_partner = self.arc_partner
+        crossing_for_port = self.crossing_for_port
+        ordered_ports = self.ordered_ports
+
+        for first, first_ports in enumerate(ordered_ports):
+            by_second = {}
+            for first_position, first_port in enumerate(first_ports):
+                partner = arc_partner[first_port]
+                second = crossing_for_port[partner]
+                if second < 0 or second >= first:
+                    continue
+                by_second.setdefault(second, []).append(
+                    (first_position, first_port, partner)
+                )
+
+            for second, links in by_second.items():
+                if len(links) != 2:
+                    continue
+                second_ports = ordered_ports[second]
+                second_position = {port: i for i, port in enumerate(second_ports)}
+                shared = []
+                valid_links = True
+                for first_position, first_port, partner in links:
+                    pos = second_position.get(partner)
+                    if pos is None:
+                        valid_links = False
+                        break
+                    shared.append((first_position, pos, first_port, partner))
+                if not valid_links:
+                    continue
+
+                fp0, fp1 = shared[0][0], shared[1][0]
+                sp0, sp1 = shared[0][1], shared[1][1]
+                if (fp0 - fp1) % 4 not in (1, 3):
+                    continue
+                if (sp0 - sp1) % 4 not in (1, 3):
+                    continue
+                if any((x[0] % 2) != (x[1] % 2) for x in shared):
+                    continue
+
+                removed = set(first_ports) | set(second_ports)
+                splices = []
+                valid = True
+                for first_position, second_position_index, _, _ in shared:
+                    first_external = first_ports[(first_position + 2) % 4]
+                    second_external = second_ports[(second_position_index + 2) % 4]
+                    remote_first = arc_partner[first_external]
+                    remote_second = arc_partner[second_external]
+                    if (
+                        remote_first in removed
+                        or remote_second in removed
+                        or remote_first == remote_second
+                    ):
+                        valid = False
+                        break
+                    splices.append((remote_first, remote_second))
+                if valid and len({port for pair in splices for port in pair}) == 4:
+                    return first, second, tuple(splices)
+        return None
+
+'''
+          p.write_text(s[:a] + replacement + s[b:])
+
+          for f in [
+              'src/knotted_graph/invariants/yamada/polynomial.py',
+              'src/knotted_graph/invariants/yamada/native.py',
+              'src/knotted_graph/invariants/yamada/skein_hybrid.py',
+              'src/knotted_graph/invariants/yamada/state_compact.py',
+          ]:
+              compile(Path(f).read_text(), f, 'exec')
+          print('candidate patch applied')
           PY
-      - name: Compare Theta(n), n=0..20, to published theorem and Topoly
-        run: uv run --no-sync python dev/benchmark_dobrynin_vesnin_theta_family.py --start 0 --stop 20 --timeout 60
+      - name: Require native backend
+        run: uv run --no-sync python -c "from knotted_graph.invariants.yamada.native import native_available; assert native_available()"
+      - name: Exact regression tests for structural and RII paths
+        run: uv run --no-sync pytest -q tests/invariants/yamada/test_reidemeister_ii_preprocessing.py tests/invariants/yamada/test_diagram_structural_dispatch.py -q
+      - name: Benchmark generic KG against theorem and Topoly through 20
+        run: uv run --no-sync python dev/benchmark_dobrynin_vesnin_theta_family.py --start 0 --stop 20 --timeout 25
