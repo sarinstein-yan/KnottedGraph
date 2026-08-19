@@ -34,13 +34,10 @@ def paper_cases(profile: str) -> dict[str, list[Case]]:
         crossings = [1, 4, 8, 12]
         vertices = [4, 16, 64, 256]
     elif profile == "paper":
-        # Enough density to resolve the trend without spending time on redundant
-        # diagnostic families.  Crossing count varies at fixed V=2, E=3.
         crossings = [
             1, 2, 3, 4, 5, 6, 8, 10, 12, 14, 16, 18, 20,
             24, 28, 32, 36, 40, 48, 56, 64, 80,
         ]
-        # Planar K4 components give a clean trivalent input-size axis.
         vertices = [
             4, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256,
             384, 512, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192,
@@ -66,7 +63,6 @@ def _run_once(framework: str, vertices, crossings, arcs, pdcode: str):
     if framework == "topoly":
         from topoly.invariants import Invariant, YamadaGraph
 
-        # Do not benchmark Topoly's memoized answer from a previous call.
         Invariant.known["Yamada"] = {}
         answer = YamadaGraph(pdcode).point(max_cross=5000)
         return answer, _topoly_terms(answer)
@@ -85,16 +81,14 @@ def _worker(
     seed: int,
     queue,
 ):
-    """Run one untimed warm-up, then exactly one timed evaluation.
+    """Time exactly one evaluation for one independent embedding.
 
-    Statistical replication comes from independent embeddings at each x value,
-    not from changing the number of within-sample stopwatch repetitions.  This
-    avoids artificial timing discontinuities when crossing a repeat threshold.
+    Statistical replication comes from the independent embeddings at each x
+    value.  Keeping exactly one timed evaluation per embedding at every x avoids
+    the old repeat-threshold discontinuities without duplicating expensive
+    Yamada calculations.
     """
     try:
-        # Warm-up is deliberately excluded from the measurement.
-        _run_once(framework, vertices, crossings, arcs, pdcode)
-
         start = time.perf_counter()
         _, terms = _run_once(framework, vertices, crossings, arcs, pdcode)
         elapsed = time.perf_counter() - start
@@ -104,7 +98,6 @@ def _worker(
                 "status": "ok",
                 "framework": framework,
                 "time_s": elapsed,
-                "warmups": 1,
                 "timed_repeats": 1,
                 "terms": terms,
                 "embedding": embedding,
@@ -221,8 +214,6 @@ def _row(
         "topoly_status": tp["status"],
         "knottedgraph_s": kg.get("time_s"),
         "topoly_s": tp.get("time_s"),
-        "knottedgraph_warmups": kg.get("warmups"),
-        "topoly_warmups": tp.get("warmups"),
         "knottedgraph_repeats": kg.get("timed_repeats"),
         "topoly_repeats": tp.get("timed_repeats"),
     }
@@ -272,7 +263,6 @@ def main(
                 "timeout_s": timeout_s,
                 "base_seed": base_seed,
                 "censor_frontier": censor_frontier,
-                "warmups_per_sample": 1,
                 "timed_repeats_per_sample": 1,
             },
             separators=(",", ":"),
