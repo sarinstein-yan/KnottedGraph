@@ -1,0 +1,54 @@
+name: Fix Theta notebook newlines
+
+on:
+  push:
+    branches: [perf/yamada-max-optimization]
+  workflow_dispatch:
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/yamada-max-optimization
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Repair generated code-cell newlines and validate syntax
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb')
+          nb = json.loads(path.read_text())
+          marker = 'dobrynin-vesnin-full-family'
+          fixed = []
+          for cell in nb.get('cells', []):
+              if (
+                  cell.get('metadata', {}).get('kg_section') == marker
+                  and cell.get('cell_type') == 'code'
+                  and isinstance(cell.get('source'), list)
+              ):
+                  cell['source'] = [item.replace('\\n', '\n') for item in cell['source']]
+                  compile(''.join(cell['source']), f"<cell {cell.get('id')}>", 'exec')
+                  fixed.append(cell.get('id'))
+          expected = {'dv-config','dv-run','dv-table','dv-assert','dv-runtime','dv-summary'}
+          assert set(fixed) == expected, fixed
+          path.write_text(json.dumps(nb, indent=1, ensure_ascii=False) + '\n')
+          print('validated:', ', '.join(fixed))
+          PY
+      - name: Commit repaired notebook
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb
+          if git diff --cached --quiet; then
+            echo 'Notebook already repaired.'
+          else
+            git commit -m 'Fix literal newline escapes in Theta notebook cells'
+            git push origin HEAD:perf/yamada-max-optimization
+          fi
