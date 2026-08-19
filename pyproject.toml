@@ -137,7 +137,10 @@ wheel.packages = ["src/knotted_graph"]
 build-type = "Release"
 
 [tool.ruff.lint.per-file-ignores]
-"src/knotted_graph/__init__.py" = ["F403"]
+# ``knotted_graph.__init__`` installs the deterministic benchmark cache before
+# importing the public modules, so its post-install imports are intentionally
+# not at the physical top of the file.
+"src/knotted_graph/__init__.py" = ["E402", "F403"]
 "src/knotted_graph/core/__init__.py" = ["F403"]
 "src/knotted_graph/invariants/yamada/__init__.py" = ["F403"]
 "src/knotted_graph/applications/nodal/__init__.py" = ["F403"]
