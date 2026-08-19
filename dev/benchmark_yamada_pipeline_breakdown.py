@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import statistics
 import time
+from collections import Counter, defaultdict
 
 import networkx as nx
 import numpy as np
@@ -107,6 +108,7 @@ def _theta_generic_optimization_lab():
 
     original_best_inversion = ds._best_inversion
     original_best_resolution = ds._best_resolution
+    original_key = ds.diagram_key
     original_rii = PreparedCompactStateBuilder._find_reidemeister_ii_pair
 
     def first_inversion(prepared):
@@ -180,6 +182,29 @@ def _theta_generic_optimization_lab():
                     return first, second, tuple(splices)
         return None
 
+    def terminal_canonical_key(prepared):
+        # Graph vertices are unlabeled. Canonicalize only their integer terminal
+        # indices; all crossing/port data remain exact and labeled, so equality
+        # of this key is an exact diagram equality modulo vertex renaming.
+        terminal_map = {}
+        fixed = []
+        next_terminal = 0
+        for value in prepared.fixed_terminal_index:
+            if value < 0:
+                fixed.append(-1)
+                continue
+            if value not in terminal_map:
+                terminal_map[value] = next_terminal
+                next_terminal += 1
+            fixed.append(terminal_map[value])
+        return (
+            len(prepared.vertex_ids),
+            prepared.ordered_ports,
+            prepared.arc_partner,
+            tuple(fixed),
+            prepared.crossing_for_port,
+        )
+
     prepared_by_n = {}
     expected_by_n = {}
     for n in (9, 11, 13, 15, 17):
@@ -192,14 +217,15 @@ def _theta_generic_optimization_lab():
         expected_by_n[n] = tuple(sorted(torus.independent_theta_terms(n).items()))
 
     configs = [
-        ("baseline", original_best_inversion, original_best_resolution, original_rii),
-        ("first_moves", first_inversion, first_resolution, original_rii),
-        ("first_moves_adjacency_rii", first_inversion, first_resolution, adjacency_rii),
+        ("baseline", original_best_inversion, original_best_resolution, original_rii, original_key),
+        ("first_moves_adjacency_rii", first_inversion, first_resolution, adjacency_rii, original_key),
+        ("first_moves_adjacency_rii_terminal_key", first_inversion, first_resolution, adjacency_rii, terminal_canonical_key),
     ]
     print("THETA_GENERIC_OPTIMIZATION_LAB")
-    for label, inv, res, rii in configs:
+    for label, inv, res, rii, key_fn in configs:
         ds._best_inversion = inv
         ds._best_resolution = res
+        ds.diagram_key = key_fn
         PreparedCompactStateBuilder._find_reidemeister_ii_pair = rii
         for n, prepared in prepared_by_n.items():
             evaluator = NativeCompactEvaluator(PythonCompactYamadaEvaluator)
@@ -211,8 +237,43 @@ def _theta_generic_optimization_lab():
                 raise AssertionError((label, n, value, expected_by_n[n]))
             print(json.dumps({"candidate": label, "n": n, "seconds": elapsed, "stats": stats}, separators=(",", ":")))
 
+    # Profile where n=17 actually spends its fallback time using the best cheap
+    # candidate. This guides the next algorithmic optimization.
+    class TrackingNative(NativeCompactEvaluator):
+        def __init__(self):
+            super().__init__(PythonCompactYamadaEvaluator)
+            self.fallback_counts = Counter()
+            self.fallback_seconds = defaultdict(float)
+        def compute_prepared_bulk_laurent(self, prepared):
+            c = len(prepared.crossing_ids)
+            start = time.perf_counter()
+            value = super().compute_prepared_bulk_laurent(prepared)
+            self.fallback_counts[c] += 1
+            self.fallback_seconds[c] += time.perf_counter() - start
+            return value
+
+    ds._best_inversion = first_inversion
+    ds._best_resolution = first_resolution
+    ds.diagram_key = terminal_canonical_key
+    PreparedCompactStateBuilder._find_reidemeister_ii_pair = adjacency_rii
+    evaluator = TrackingNative()
+    stats = {}
+    start = time.perf_counter()
+    value = ds.compute_structural_laurent(prepared_by_n[17], evaluator, stats=stats)
+    elapsed = time.perf_counter() - start
+    assert value == expected_by_n[17]
+    print(json.dumps({
+        "candidate": "n17_fallback_profile",
+        "seconds": elapsed,
+        "fallback_counts": dict(sorted(evaluator.fallback_counts.items())),
+        "fallback_seconds": {str(k): v for k, v in sorted(evaluator.fallback_seconds.items())},
+        "fallback_total_seconds": sum(evaluator.fallback_seconds.values()),
+        "stats": stats,
+    }, separators=(",", ":")))
+
     ds._best_inversion = original_best_inversion
     ds._best_resolution = original_best_resolution
+    ds.diagram_key = original_key
     PreparedCompactStateBuilder._find_reidemeister_ii_pair = original_rii
 
 
