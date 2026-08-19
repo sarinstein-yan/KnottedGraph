@@ -1,0 +1,34 @@
+name: Apply periodic theta user-facing rewrite
+
+on:
+  push:
+    branches:
+      - perf/yamada-max-optimization
+
+permissions:
+  contents: write
+
+jobs:
+  rewrite:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/yamada-max-optimization
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Rewrite only periodic-theta cells
+        run: python dev/rewrite_periodic_theta_notebook_section.py
+      - name: Verify scope and commit
+        run: |
+          git diff --exit-code -- . ':!User_guide/applications/02_mathematics_applications.ipynb' || {
+            echo 'Unexpected file changes'; exit 1;
+          }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add User_guide/applications/02_mathematics_applications.ipynb
+          git commit -m 'Rewrite periodic theta section for library users'
+          git push origin HEAD:perf/yamada-max-optimization
