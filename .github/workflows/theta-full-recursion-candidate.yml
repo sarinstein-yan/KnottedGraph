@@ -1,8 +1,8 @@
 name: Theta full recursion candidate
 
 on:
-  push:
-    branches: [perf/yamada-max-optimization]
+  pull_request:
+    branches: [Latest_Workplace]
   workflow_dispatch:
 
 jobs:
