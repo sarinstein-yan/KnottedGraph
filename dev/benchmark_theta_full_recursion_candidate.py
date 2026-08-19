@@ -1,7 +1,7 @@
-"""Benchmark exact generic crossing recursion with fast isomorphism memoization.
+"""Benchmark exact generic crossing recursion with native isomorphism memoization.
 
-The Dobrynin--Vesnin formula is used only after evaluation as a correctness
-oracle. It is never used by the candidate evaluator.
+The Dobrynin--Vesnin formula is used only after evaluation as an external
+correctness oracle. It is never used by the candidate evaluator.
 """
 
 from __future__ import annotations
@@ -9,9 +9,8 @@ from __future__ import annotations
 import json
 import time
 
-import networkx as nx
-
 import benchmark_topoly_essential_torus_scaling as torus
+from knotted_graph.invariants.yamada import _yamada_iso
 from knotted_graph.invariants.yamada.compact import PythonCompactYamadaEvaluator
 from knotted_graph.invariants.yamada.fast import add, shift
 from knotted_graph.invariants.yamada.native import NativeCompactEvaluator
@@ -46,107 +45,54 @@ def first_resolvable_crossing(prepared):
     return None
 
 
-def _vf2_graph(prepared):
-    """Node-labeled undirected gadget graph exactly encoding a prepared diagram.
-
-    Physical arcs and terminal incidence are ordinary gadgets. Directed cyclic
-    crossing order is encoded by source/edge/target nodes with distinct labels,
-    so undirected VF2++ still preserves crossing orientation. Rotating a crossing
-    by two ports remains an isomorphism, while reflection does not.
-    """
-    graph = nx.Graph()
-    port_count = len(prepared.arc_partner)
-    parity = [-1] * port_count
-    for ports in prepared.ordered_ports:
-        for position, port in enumerate(ports):
-            parity[port] = position % 2
-
-    for port in range(port_count):
-        if prepared.crossing_for_port[port] >= 0:
-            label = "port_over" if parity[port] == 0 else "port_under"
-        else:
-            label = "port_terminal"
-        graph.add_node(("p", port), label=label)
-
-    # Physical arc pairing.
-    for port, partner in enumerate(prepared.arc_partner):
-        if port < partner:
-            arc = ("a", port, partner)
-            graph.add_node(arc, label="physical_arc")
-            graph.add_edge(("p", port), arc)
-            graph.add_edge(arc, ("p", partner))
-
-    # Directed crossing cyclic order as an asymmetric labeled path.
-    relation_index = 0
-    for ports in prepared.ordered_ports:
-        for left, right in zip(ports, ports[1:] + ports[:1]):
-            src = ("cs", relation_index)
-            mid = ("cm", relation_index)
-            dst = ("ct", relation_index)
-            relation_index += 1
-            graph.add_node(src, label="cycle_source")
-            graph.add_node(mid, label="cycle_relation")
-            graph.add_node(dst, label="cycle_target")
-            graph.add_edge(("p", left), src)
-            graph.add_edge(src, mid)
-            graph.add_edge(mid, dst)
-            graph.add_edge(dst, ("p", right))
-
-    terminal_ports = {}
-    for port, terminal in enumerate(prepared.fixed_terminal_index):
-        if terminal >= 0:
-            terminal_ports.setdefault(terminal, []).append(port)
-    for terminal, ports in terminal_ports.items():
-        vertex = ("v", terminal)
-        graph.add_node(vertex, label="spatial_vertex")
-        for port in ports:
-            graph.add_edge(vertex, ("p", port))
-    return graph
+def _native_index(prepared):
+    return _yamada_iso.PreparedDiagramIndex(
+        len(prepared.vertex_ids),
+        [list(ports) for ports in prepared.ordered_ports],
+        list(prepared.arc_partner),
+        list(prepared.fixed_terminal_index),
+        list(prepared.crossing_for_port),
+    )
 
 
-class ExactVF2Memo:
-    """WL-bucketed memo whose hits are certified by exact VF2++ isomorphism."""
+class ExactNativeIsoMemo:
+    """Native exact-isomorphism memo; fingerprints are bucket filters only."""
 
     def __init__(self):
         self.buckets = {}
         self.size = 0
         self.hits = 0
         self.comparisons = 0
-        self.graph_seconds = 0.0
+        self.index_seconds = 0.0
         self.iso_seconds = 0.0
 
     def get(self, prepared):
         started = time.perf_counter()
-        graph = _vf2_graph(prepared)
-        fingerprint = nx.weisfeiler_lehman_graph_hash(
-            graph,
-            node_attr="label",
-            iterations=4,
+        index = _native_index(prepared)
+        self.index_seconds += time.perf_counter() - started
+        bucket_key = (
+            len(prepared.crossing_ids),
+            index.node_count,
+            index.fingerprint,
         )
-        self.graph_seconds += time.perf_counter() - started
-        bucket_key = (len(prepared.crossing_ids), len(graph), fingerprint)
         for other, value in self.buckets.get(bucket_key, ()):
             self.comparisons += 1
             started = time.perf_counter()
-            equivalent = nx.vf2pp_is_isomorphic(
-                graph,
-                other,
-                node_label="label",
-            )
+            equivalent = index.isomorphic(other)
             self.iso_seconds += time.perf_counter() - started
             if equivalent:
                 self.hits += 1
-                return True, value, bucket_key, graph
-        return False, None, bucket_key, graph
+                return True, value, bucket_key, index
+        return False, None, bucket_key, index
 
-    def put(self, bucket_key, graph, value):
-        self.buckets.setdefault(bucket_key, []).append((graph, value))
+    def put(self, bucket_key, index, value):
+        self.buckets.setdefault(bucket_key, []).append((index, value))
         self.size += 1
 
 
 def full_recursive_laurent(prepared, evaluator, stats=None):
-    """Exact generic Yamada recursion with global exact isomorphism memo."""
-    memo = ExactVF2Memo()
+    """Exact generic Yamada recursion with global exact diagram-isomorphism memo."""
+    memo = ExactNativeIsoMemo()
     if stats is None:
         stats = {}
     stats.update(calls=0, memo_hits=0, rii_moves=0, inversions=0, resolutions=0)
@@ -155,7 +101,7 @@ def full_recursive_laurent(prepared, evaluator, stats=None):
         stats["calls"] += 1
         current, moves = current.reduce_reidemeister_ii()
         stats["rii_moves"] += moves
-        hit, cached, bucket_key, graph = memo.get(current)
+        hit, cached, bucket_key, index = memo.get(current)
         if hit:
             stats["memo_hits"] += 1
             return cached
@@ -181,7 +127,7 @@ def full_recursive_laurent(prepared, evaluator, stats=None):
                         add(shift(rec(plus), 1), shift(rec(minus), -1)),
                         rec(vertex),
                     )
-        memo.put(bucket_key, graph, value)
+        memo.put(bucket_key, index, value)
         return value
 
     value = rec(prepared)
@@ -189,7 +135,7 @@ def full_recursive_laurent(prepared, evaluator, stats=None):
         memo_size=memo.size,
         iso_hits=memo.hits,
         iso_comparisons=memo.comparisons,
-        graph_seconds=memo.graph_seconds,
+        index_seconds=memo.index_seconds,
         iso_seconds=memo.iso_seconds,
         buckets=len(memo.buckets),
     )
@@ -208,7 +154,7 @@ def prepared_theta(n):
 
 
 def main():
-    for n in (9, 11, 13, 15, 17):
+    for n in (9, 11, 13, 15, 17, 19):
         prepared = prepared_theta(n)
         evaluator = NativeCompactEvaluator(PythonCompactYamadaEvaluator)
         expected = tuple(sorted(torus.independent_theta_terms(n).items()))
@@ -218,10 +164,10 @@ def main():
         elapsed = time.perf_counter() - started
         if actual != expected:
             raise AssertionError(
-                f"VF2++ generic recursion disagrees with external theorem oracle at n={n}"
+                f"native-isomorphism generic recursion disagrees with external theorem oracle at n={n}"
             )
         print(json.dumps({
-            "candidate": "exact_vf2pp_global_recursion",
+            "candidate": "exact_native_iso_global_recursion",
             "n": n,
             "seconds": elapsed,
             "stats": stats,
