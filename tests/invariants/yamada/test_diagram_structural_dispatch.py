@@ -11,6 +11,7 @@ from knotted_graph.invariants.yamada.diagram_structural import compute_structura
 from knotted_graph.invariants.yamada.native import NativeCompactEvaluator, native_available
 from knotted_graph.invariants.yamada.polynomial import Yamada, _ordered_crossing_ports
 from knotted_graph.invariants.yamada.state_compact import PreparedCompactStateBuilder
+from knotted_graph.projection import PDCode
 
 ROOT = Path(__file__).resolve().parents[3]
 TORUS_SCRIPT = ROOT / "dev" / "benchmark_topoly_essential_torus_scaling.py"
@@ -28,9 +29,22 @@ def _load_torus_module():
     return module
 
 
-def _prepared(n: int):
+def _prepared(n: int, *, mirror: bool = False):
     module = _load_torus_module()
-    _graph, processor, _pdcode = module.prepare_essential_torus(n)
+    if mirror:
+        graph = module.essential_torus_graph(n)
+        for _node, data in graph.nodes(data=True):
+            data["pos"] = data["pos"].copy()
+            data["pos"][2] *= -1.0
+        for _u, _v, _key, data in graph.edges(keys=True, data=True):
+            data["pts"] = data["pts"].copy()
+            data["pts"][:, 2] *= -1.0
+        processor = PDCode(graph)
+        processor.compute(rotation_angles=(0.0, 0.0, 0.0))
+        assert len(processor.crossings) == n
+    else:
+        _graph, processor, _pdcode = module.prepare_essential_torus(n)
+
     yamada = Yamada.from_PDCode(processor)
     prepared = PreparedCompactStateBuilder.prepare(
         yamada.vertices,
@@ -45,7 +59,7 @@ def _prepared(n: int):
 
 @pytest.mark.parametrize("n", [3, 5, 7])
 def test_structural_recursion_matches_independent_legacy_state_sum(n):
-    """Structural recursion is exactly equal to the old 3**c implementation."""
+    """Generic structural recursion is exactly equal to the old 3**c implementation."""
     prepared = _prepared(n)
     evaluator = NativeCompactEvaluator(PythonCompactYamadaEvaluator)
     legacy = evaluator.compute_prepared_bulk_laurent(prepared)
@@ -55,17 +69,31 @@ def test_structural_recursion_matches_independent_legacy_state_sum(n):
     assert stats["calls"] >= 1
 
 
-def test_production_structural_dispatch_matches_legacy_at_eleven_crossings():
-    """Exercise the production threshold on a still-manageable exact oracle."""
+@pytest.mark.parametrize("n", [3, 5, 7, 9, 11])
+def test_certified_theta_closed_form_matches_legacy_state_sum(n):
+    """Published Theta(n) formula is identical to the retained exact oracle."""
     assert native_available()
-    prepared = _prepared(11)
+    prepared = _prepared(n)
+    oracle = NativeCompactEvaluator(PythonCompactYamadaEvaluator)
+    expected = oracle.compute_prepared_bulk_laurent(prepared)
 
-    old_evaluator = NativeCompactEvaluator(PythonCompactYamadaEvaluator)
-    expected = old_evaluator.compute_prepared_bulk_laurent(prepared)
-
-    new_evaluator = NativeCompactEvaluator(PythonCompactYamadaEvaluator)
-    actual = new_evaluator.compute_prepared_laurent(prepared)
+    optimized = NativeCompactEvaluator(PythonCompactYamadaEvaluator)
+    actual = optimized.compute_prepared_laurent(prepared)
     assert actual == expected
-    assert new_evaluator.structural_calls == 1
-    assert new_evaluator.last_structural_stats is not None
-    assert new_evaluator.last_structural_stats["inversion_steps"] >= 1
+    assert optimized.theta_twist_calls == 1
+    assert optimized.structural_calls == 0
+
+
+@pytest.mark.parametrize("n", [3, 5])
+def test_certified_theta_closed_form_matches_legacy_for_mirror(n):
+    """The closed form also preserves exact output under A <-> A^-1 mirroring."""
+    assert native_available()
+    prepared = _prepared(n, mirror=True)
+    oracle = NativeCompactEvaluator(PythonCompactYamadaEvaluator)
+    expected = oracle.compute_prepared_bulk_laurent(prepared)
+
+    optimized = NativeCompactEvaluator(PythonCompactYamadaEvaluator)
+    actual = optimized.compute_prepared_laurent(prepared)
+    assert actual == expected
+    assert optimized.theta_twist_calls == 1
+    assert optimized.structural_calls == 0
