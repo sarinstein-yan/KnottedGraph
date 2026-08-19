@@ -175,7 +175,7 @@ os.environ.setdefault(
 
 ''' + backend_block() + '''
 
-print("\nDependencies:")
+print("\\nDependencies:")
 for package in ["numpy", "networkx", "sympy", "shapely", "matplotlib", "plotly", "pyvista"]:
     print(f"{package:12s}: {importlib.util.find_spec(package) is not None}")
 
@@ -195,18 +195,19 @@ else:
             set_text(c, verify_code)
 
     # Renumber tutorial headings that followed the old 1.1 setup section.
-    mapping = {
-        "## 1.2 Build": "## 1.3 Build",
-        "## 1.3 Inspect": "## 1.4 Inspect",
-        "## 1.4 Apply": "## 1.5 Apply",
-        "## 1.5 Choose": "## 1.6 Choose",
-        "## 1.6 Compute": "## 1.7 Compute",
-        "## 1.7 Continue": "## 1.8 Continue",
-    }
+    # Apply in descending order to avoid 1.2 -> 1.3 -> 1.4 cascading.
+    mapping = (
+        ("## 1.7 Continue", "## 1.8 Continue"),
+        ("## 1.6 Compute", "## 1.7 Compute"),
+        ("## 1.5 Choose", "## 1.6 Choose"),
+        ("## 1.4 Apply", "## 1.5 Apply"),
+        ("## 1.3 Inspect", "## 1.4 Inspect"),
+        ("## 1.2 Build", "## 1.3 Build"),
+    )
     for c in nb["cells"]:
         if c.get("cell_type") == "markdown":
             s = text(c)
-            for a, b in mapping.items():
+            for a, b in mapping:
                 s = s.replace(a, b)
             set_text(c, s)
 
