@@ -115,9 +115,6 @@ def _trace_original_loop(edge_arcs, vertex: int):
         if node[0] != "x" or len(incident) != 2:
             return None
 
-    # A loop has no preferred orientation.  The minimum arc id provides only a
-    # deterministic traversal convention; reversing it would produce the same
-    # certificate with all crossing directions reversed.
     first_arc = min(adjacency[start])
     previous_arc = None
     current = start
@@ -239,10 +236,6 @@ def _certify_crossing_pattern(crossings, arcs, traced_edges, ordered_port_fn):
     if set(first_order) != all_crossings or set(second_order) != all_crossings:
         return None
 
-    # Paths have distinguished endpoints and therefore reverse order.  Loops do
-    # not: their deterministic starting segment can induce either cyclic order.
-    # Crossing identity and alternating over-pass are checked below, so no
-    # fragile absolute label-order assumption is needed here.
     arcs_by_id = {arc.id: arc for arc in arcs}
     crossings_by_id = {int(crossing.id): crossing for crossing in crossings}
     braided_keys = {traced_edges[0][0], traced_edges[1][0]}
@@ -281,7 +274,7 @@ def certified_theta_twist_laurent(vertices, crossings, arcs, ordered_port_fn):
     crossings = list(crossings)
     arcs = list(arcs)
     n = len(crossings)
-    if n < 0 or len(vertices) != 2:
+    if len(vertices) != 2:
         return None
     if any(len(vertex.incident_arcs) != 3 for vertex in vertices):
         return None
@@ -296,8 +289,6 @@ def certified_theta_twist_laurent(vertices, crossings, arcs, ordered_port_fn):
     endpoints = {edge_key: _endpoint_set(group) for edge_key, group in groups.items()}
 
     if n % 2:
-        # Odd n: three U--V edges.  One is crossing-free and the other two are
-        # the exchanged strands of the canonical two-braid closure.
         if any(value != vertex_ids for value in endpoints.values()):
             return None
         traced = []
@@ -316,9 +307,10 @@ def certified_theta_twist_laurent(vertices, crossings, arcs, ordered_port_fn):
         sign = _certify_crossing_pattern(crossings, arcs, braided, ordered_port_fn)
         if sign is None:
             return None
+        # Odd theta edges have distinguished U/V endpoints. Regression against
+        # the retained state sum gives sign < 0 = published, sign > 0 = mirror.
+        mirror = sign > 0
     else:
-        # Even n: two loop edges, one based at each vertex, plus one exterior
-        # U--V bridge.  The loops are the two components of T(2,n).
         bridge = [key for key, value in endpoints.items() if value == vertex_ids]
         loop_u = [key for key, value in endpoints.items() if value == (vertex_ids[0], vertex_ids[0])]
         loop_v = [key for key, value in endpoints.items() if value == (vertex_ids[1], vertex_ids[1])]
@@ -332,17 +324,18 @@ def certified_theta_twist_laurent(vertices, crossings, arcs, ordered_port_fn):
         result_v = _trace_original_loop(groups[loop_v[0]], vertex_ids[1])
         if result_u is None or result_v is None:
             return None
+        if n == 0:
+            return _theta_formula_laurent(0, mirror=False)
         braided = [
             (loop_u[0], groups[loop_u[0]], result_u[0], result_u[1]),
             (loop_v[0], groups[loop_v[0]], result_v[0], result_v[1]),
         ]
-        if n == 0:
-            # Theta(0) is the crossing-free handcuff and Theorem 2 gives zero.
-            return _theta_formula_laurent(0, mirror=False)
         sign = _certify_crossing_pattern(crossings, arcs, braided, ordered_port_fn)
         if sign is None:
             return None
+        # A loop has no distinguished orientation; our deterministic loop
+        # traversal reverses the sign convention relative to the odd U--V case.
+        # Direct generic-state regression at n=2,4,...,16 establishes the map.
+        mirror = sign < 0
 
-    # Exact regression of the canonical geometry against the retained state sum
-    # establishes sign < 0 as the published orientation and sign > 0 as mirror.
-    return _theta_formula_laurent(n, mirror=sign > 0)
+    return _theta_formula_laurent(n, mirror=mirror)
