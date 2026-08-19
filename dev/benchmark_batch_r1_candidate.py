@@ -1,9 +1,9 @@
-"""Second-round breakthrough probe: simultaneous exact R1 peeling.
+"""Second-round breakthrough probe: simultaneous R1 + exact inversion pruning.
 
-The candidate finds all currently visible Reidemeister-I curls in one scan,
-composes their local smoothing pairings, and rebuilds the prepared diagram once
-per batch rather than once per curl.  It remains family-agnostic; the published
-Dobrynin--Vesnin formula is used only after timing as an external oracle.
+The candidate applies all currently visible Reidemeister-I curls in one rebuild
+and avoids trying crossing inversions that cannot possibly create an RII pair.
+Both optimizations are family-agnostic.  The published Dobrynin--Vesnin formula
+is used only after timing as an external oracle.
 """
 from __future__ import annotations
 
@@ -24,9 +24,9 @@ from knotted_graph.invariants.yamada.fast import add, shift
 from knotted_graph.invariants.yamada.native import NativeCompactEvaluator
 from knotted_graph.invariants.yamada.polynomial import Yamada, _ordered_crossing_ports
 from knotted_graph.invariants.yamada.skein_hybrid import (
-    _best_inversion,
     _best_resolution,
     _skein_delta,
+    invert_crossing,
     resolve_crossing,
 )
 from knotted_graph.invariants.yamada.state_compact import (
@@ -54,7 +54,6 @@ def _resolution_tables(ordered_ports, port_count):
 
 
 def visible_r1_moves(prepared):
-    """Return all currently visible exact R1 moves as (crossing,pairs,shift)."""
     moves = []
     partner = prepared.arc_partner
     for crossing_index, ports in enumerate(prepared.ordered_ports):
@@ -75,13 +74,6 @@ def visible_r1_moves(prepared):
 
 
 def apply_r1_batch(prepared, moves):
-    """Apply a set of simultaneously visible local R1 smoothings in one rebuild.
-
-    The union of physical-arc and smoothing edges on removed crossing ports is a
-    degree-two relation.  Each connected component either has two surviving
-    endpoints, which are spliced, or no surviving endpoints, which is exactly a
-    detached circle.  Any malformed component conservatively rejects the batch.
-    """
     if not moves:
         return prepared, 0, 0
 
@@ -93,9 +85,6 @@ def apply_r1_batch(prepared, moves):
     }
     adjacency: dict[int, set[int]] = {port: set() for port in removed_ports}
     partner = prepared.arc_partner
-
-    # Include every physical arc incident on the removed set.  If it joins two
-    # removed curls the whole chain is handled as one connectivity component.
     for port in removed_ports:
         other = partner[port]
         adjacency.setdefault(port, set()).add(other)
@@ -133,15 +122,12 @@ def apply_r1_batch(prepared, moves):
         else:
             raise ValueError("R1 batch connectivity is not locally reducible")
 
-    active_ports = [
-        port for port in range(len(partner)) if port not in removed_ports
-    ]
+    active_ports = [p for p in range(len(partner)) if p not in removed_ports]
     old_to_new = {old: new for new, old in enumerate(active_ports)}
     updated_partner = list(partner)
     for left, right in splices:
         updated_partner[left] = right
         updated_partner[right] = left
-
     new_partner = []
     for old in active_ports:
         other = updated_partner[old]
@@ -169,7 +155,6 @@ def apply_r1_batch(prepared, moves):
     )
     new_fixed = [prepared.fixed_terminal_index[old] for old in active_ports]
     new_vertex_ids = list(prepared.vertex_ids)
-
     next_id = max((*prepared.vertex_ids, *prepared.crossing_ids), default=-1) + 1
     for loop_index in range(closed_loops):
         vertex_index = len(new_vertex_ids)
@@ -181,7 +166,7 @@ def apply_r1_batch(prepared, moves):
         new_crossing_for.extend((-1, -1))
 
     plus, minus = _resolution_tables(new_ordered, len(new_partner))
-    reduced = PreparedCompactStateBuilder(
+    return PreparedCompactStateBuilder(
         vertex_ids=tuple(new_vertex_ids),
         crossing_ids=tuple(prepared.crossing_ids[i] for i in surviving),
         ordered_ports=new_ordered,
@@ -190,8 +175,7 @@ def apply_r1_batch(prepared, moves):
         crossing_for_port=tuple(new_crossing_for),
         plus_partner=plus,
         minus_partner=minus,
-    )
-    return reduced, total_shift, len(moves)
+    ), total_shift, len(moves)
 
 
 def normalize_batch(prepared):
@@ -209,18 +193,71 @@ def normalize_batch(prepared):
         try:
             current, delta, count = apply_r1_batch(current, visible)
         except ValueError:
-            # Conservative exact fallback: if batch composition ever fails, peel
-            # only the first certified local curl and continue.
             current, delta, count = apply_r1_batch(current, visible[:1])
         exponent += delta
         r1_moves += count
         r1_batches += 1
 
 
+def inversion_candidate_indices(prepared):
+    """Return exactly the crossings whose inversion can create an immediate RII.
+
+    Inverting one crossing changes no relation between any other pair. Therefore
+    any newly available RII bigon must contain that crossing. Before inversion,
+    such a pair is joined by exactly two physical arcs at adjacent cyclic ports
+    at both crossings with opposite over/under parity at each joined endpoint.
+    """
+    crossing_count = len(prepared.ordered_ports)
+    port_position = [-1] * len(prepared.arc_partner)
+    for crossing, ports in enumerate(prepared.ordered_ports):
+        for position, port in enumerate(ports):
+            port_position[port] = position
+
+    candidates = set()
+    for first in range(crossing_count):
+        by_second: dict[int, list[tuple[int, int]]] = {}
+        for first_position, port in enumerate(prepared.ordered_ports[first]):
+            partner = prepared.arc_partner[port]
+            second = prepared.crossing_for_port[partner]
+            if second < 0 or second == first:
+                continue
+            by_second.setdefault(second, []).append(
+                (first_position, port_position[partner])
+            )
+        for second, shared in by_second.items():
+            if len(shared) != 2:
+                continue
+            first_positions = (shared[0][0], shared[1][0])
+            second_positions = (shared[0][1], shared[1][1])
+            if (first_positions[0] - first_positions[1]) % 4 not in (1, 3):
+                continue
+            if (second_positions[0] - second_positions[1]) % 4 not in (1, 3):
+                continue
+            if any((a % 2) == (b % 2) for a, b in shared):
+                continue
+            candidates.add(first)
+            candidates.add(second)
+    return tuple(sorted(candidates))
+
+
+def best_inversion_filtered(prepared, stats):
+    candidates = inversion_candidate_indices(prepared)
+    stats["inversion_scans"] += len(prepared.crossing_ids)
+    stats["inversion_candidates"] += len(candidates)
+    best = None
+    for crossing_index in candidates:
+        inverted = invert_crossing(prepared, crossing_index)
+        reduced, moves = inverted.reduce_reidemeister_ii()
+        if moves and (best is None or moves > best[0]):
+            best = moves, crossing_index, reduced
+    return best
+
+
 def candidate(prepared, evaluator):
     memo = _IsomorphicMemo()
     stats = dict(calls=0, r1_moves=0, r1_batches=0, rii_moves=0,
-                 memo_hits=0, inversions=0, resolutions=0, bulk=0, max_bulk=0)
+                 memo_hits=0, inversions=0, inversion_scans=0,
+                 inversion_candidates=0, resolutions=0, bulk=0, max_bulk=0)
 
     def rec(q):
         stats["calls"] += 1
@@ -240,7 +277,7 @@ def candidate(prepared, evaluator):
             stats["max_bulk"] = max(stats["max_bulk"], crossing_count)
             value = evaluator.compute_prepared_bulk_laurent(q)
         else:
-            inversion = _best_inversion(q)
+            inversion = best_inversion_filtered(q, stats)
             if inversion is not None:
                 _, crossing, inverted = inversion
                 stats["inversions"] += 1
@@ -288,10 +325,10 @@ def prepare(n, mirror=False):
 def run(n, mirror=False, compare_baseline=True):
     prepared = prepare(n, mirror=mirror)
     published = dv.published_theta_terms(n)
-    if mirror:
-        expected = tuple(sorted((-power, coeff) for power, coeff in published.items()))
-    else:
-        expected = tuple(sorted(published.items()))
+    expected = tuple(sorted(
+        ((-power, coeff) if mirror else (power, coeff))
+        for power, coeff in published.items()
+    ))
 
     baseline_s = None
     if compare_baseline:
