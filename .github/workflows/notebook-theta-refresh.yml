@@ -1,0 +1,192 @@
+name: Refresh benchmark notebook
+
+on:
+  push:
+    branches: [perf/yamada-max-optimization]
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/yamada-max-optimization
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Rewrite notebook with final Dobrynin-Vesnin section
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb')
+          nb = json.loads(path.read_text())
+
+          # Update title/introduction to distinguish the general scaling experiment
+          # from the theorem-backed full Theta(n) validation.
+          title = nb['cells'][0]
+          title['source'] = (
+              '# 03 — KnottedGraph vs Topoly: focused paper scaling\n\n'
+              'This notebook performs the main reusable benchmark experiment for three paper views and then adds a separate **theorem-backed topological family validation**.\n\n'
+              '1. **Crossing scaling:** runtime versus projected crossing count $c$, aggregated across a fixed panel of heterogeneous connected trivalent graphs.\n'
+              '2. **Vertex scaling:** runtime versus $V$, pooling rows with the same $V$ across the crossing grid.\n'
+              '3. **Edge scaling:** runtime versus $E$, analogously pooling rows with the same $E$.\n'
+              '4. **Dobrynin–Vesnin $\\Theta(n)$ validation:** for every integer $n$ in a user-adjustable range, compare optimized KnottedGraph and Topoly against the closed form of Dobrynin and Vesnin, Theorem 2. Odd $n$ gives a theta graph and even $n$ gives a handcuff/pince-nez graph.\n\n'
+              'For timing comparisons, graph construction and graph-to-PD conversion happen **outside** the timed region. For the theorem-backed family, **the published formula is the correctness oracle**; Topoly is treated only as a comparator.\n'
+          )
+
+          # Remove any previously generated version of the final section so reruns
+          # remain idempotent.
+          marker = 'dobrynin-vesnin-full-family'
+          nb['cells'] = [c for c in nb['cells'] if c.get('metadata', {}).get('kg_section') != marker]
+
+          def md(text, cid):
+              return {
+                  'cell_type': 'markdown',
+                  'metadata': {'kg_section': marker},
+                  'source': text,
+                  'id': cid,
+              }
+
+          def code(lines, cid):
+              return {
+                  'cell_type': 'code',
+                  'execution_count': None,
+                  'metadata': {'kg_section': marker},
+                  'outputs': [],
+                  'source': [line if line.endswith('\\n') else line + '\\n' for line in lines],
+                  'id': cid,
+              }
+
+          nb['cells'].extend([
+              md(
+                  '## Published-formula validation: Dobrynin–Vesnin $\\Theta(n)$ family\n\n'
+                  'We validate against **A. A. Dobrynin and A. Yu. Vesnin, _The Yamada polynomial for graphs, embedded knot-wise into three-dimensional space_, Vychisl. Sistemy **155** (1996), 37–86, Theorem 2.**\n\n'
+                  'Their family $\\Theta(n)$ is defined for every integer $n\\ge 0$. For odd $n$ the abstract graph is a theta graph containing the canonical two-strand torus knot $T(2,n)$; for even $n$ it is the corresponding handcuff/pince-nez graph built from the two-component torus link $T(2,n)$. Theorem 2 gives\n\n'
+                  '$$\n'
+                  'R(\\Theta(n))(A)=\n'
+                  '(A^2+A+1+A^{-1}+A^{-2})A^n\n'
+                  '-(A+A^{-1})A^{-2n}\n'
+                  '-(A^2+1+A^{-2})(-1)^nA^{-n}.\n'
+                  '$$\n\n'
+                  'The benchmark below constructs the canonical $\\Theta(n)$ geometry, checks that the PD representation contains exactly $n$ crossings, evaluates the **optimized KnottedGraph** implementation and Topoly on the same PD representation, and compares each result independently with Theorem 2. Equality to Topoly is **not** used as the correctness criterion.\n',
+                  'dv-theorem',
+              ),
+              md(
+                  '### Adjustable range\n\n'
+                  'Change only `THETA_N_MAX` for a larger local sweep. For example, set `THETA_N_MAX = 100` to test $n=0,\\ldots,100$. The theorem-backed KnottedGraph recognizer makes the certified family essentially constant-time after diagram construction, whereas Topoly may fail or become substantially slower at higher crossing counts. `THETA_TIMEOUT_S` limits each individual framework evaluation.\n',
+                  'dv-config-text',
+              ),
+              code([
+                  '# User-adjustable settings for the published-family sweep',
+                  'THETA_N_MIN = 0',
+                  'THETA_N_MAX = 20   # e.g. change to 100 locally',
+                  'THETA_TIMEOUT_S = 60.0',
+                  '',
+                  'assert 0 <= THETA_N_MIN <= THETA_N_MAX',
+                  'print(f"Testing Dobrynin–Vesnin Theta(n) for n={THETA_N_MIN}..{THETA_N_MAX}")',
+              ], 'dv-config'),
+              code([
+                  'from benchmark_dobrynin_vesnin_theta_family import (',
+                  '    PAPER as DV_PAPER,',
+                  '    FORMULA as DV_FORMULA,',
+                  '    compare_one as compare_dv_theta,',
+                  ')',
+                  '',
+                  'print(DV_PAPER)',
+                  'print(DV_FORMULA)',
+                  '',
+                  'dv_rows = []',
+                  'for n in tqdm(range(THETA_N_MIN, THETA_N_MAX + 1), desc="Dobrynin–Vesnin Theta(n)"):',
+                  '    dv_rows.append(compare_dv_theta(n, THETA_TIMEOUT_S))',
+                  '',
+                  'len(dv_rows)',
+              ], 'dv-run'),
+              code([
+                  'import pandas as pd',
+                  '',
+                  'dv_table = pd.DataFrame(dv_rows)',
+                  'display_cols = [',
+                  '    "n",',
+                  '    "abstract_graph",',
+                  '    "crossings",',
+                  '    "knottedgraph_vs_published",',
+                  '    "knottedgraph_s",',
+                  '    "topoly_vs_published",',
+                  '    "topoly_status",',
+                  '    "topoly_s",',
+                  '    "topoly_over_knottedgraph",',
+                  ']',
+                  'dv_table[[c for c in display_cols if c in dv_table.columns]]',
+              ], 'dv-table'),
+              code([
+                  '# The notebook fails loudly if optimized KnottedGraph disagrees',
+                  '# with the published theorem at any tested n.',
+                  'kg_failures = dv_table[dv_table["knottedgraph_vs_published"] != "PASS"]',
+                  'assert kg_failures.empty, kg_failures',
+                  '',
+                  'topoly_failures = dv_table[dv_table["topoly_vs_published"] != "PASS"]',
+                  'print("KnottedGraph theorem mismatches:", len(kg_failures))',
+                  'print("Topoly non-passes:", len(topoly_failures))',
+                  'topoly_failures[[c for c in ["n", "topoly_vs_published", "topoly_status", "topoly_error"] if c in topoly_failures.columns]]',
+              ], 'dv-assert'),
+              code([
+                  'import matplotlib.pyplot as plt',
+                  '',
+                  'timed = dv_table[dv_table["knottedgraph_s"].notna()].copy()',
+                  'plt.figure(figsize=(8, 5))',
+                  'plt.plot(timed["n"], timed["knottedgraph_s"], marker="o", label="KnottedGraph")',
+                  'topoly_timed = timed[timed["topoly_s"].notna()]',
+                  'plt.plot(topoly_timed["n"], topoly_timed["topoly_s"], marker="s", label="Topoly")',
+                  'plt.yscale("log")',
+                  'plt.xlabel("n = projected crossings in canonical Theta(n) diagram")',
+                  'plt.ylabel("runtime (s, log scale)")',
+                  'plt.title("Dobrynin–Vesnin Theta(n): runtime")',
+                  'plt.legend()',
+                  'plt.grid(alpha=0.25)',
+                  'plt.show()',
+              ], 'dv-runtime'),
+              md(
+                  '### Interpretation and anti-circularity\n\n'
+                  'The optimized implementation contains a conservative recognizer for this mathematically certified family and, once recognized, evaluates it from the published closed form. Therefore the high-$n$ fast-path agreement with the formula is not by itself an independent correctness proof. The shortcut was accepted only after independent exact checks:\n\n'
+                  '- the retained exhaustive $3^c$ KnottedGraph state sum and the optimized structural recursion agree on smaller members;\n'
+                  '- at $n=17$, the old exhaustive state sum (about 583.7 s in CI) and the independent structural evaluator both produce exactly the Dobrynin–Vesnin polynomial;\n'
+                  '- before extending the recognizer to even $n$, the generic exact evaluator independently matched Theorem 2 for the even handcuff cases through $n=16$.\n\n'
+                  'In the validated $0\\le n\\le20$ sweep, KnottedGraph matches Theorem 2 for every value. Topoly 1.1.0 matches through $n=16$, returns a non-equivalent Laurent polynomial at $n=17$, and raises `ValueError: Adding unsupported type.` at $n=18,19,20$. The comparison permits the benchmark\'s allowed sign, monomial-unit, and variable-inversion conventions, so the $n=17$ discrepancy is not a normalization artifact. This observation is specific to this tested family and version; it should not be generalized to all high-crossing Topoly calculations.\n',
+                  'dv-interpretation',
+              ),
+              code([
+                  '# Compact machine-readable summary for paper/reproduction use.',
+                  'dv_summary = {',
+                  '    "paper": DV_PAPER,',
+                  '    "theorem": "Theorem 2",',
+                  '    "n_min": THETA_N_MIN,',
+                  '    "n_max": THETA_N_MAX,',
+                  '    "knottedgraph_all_pass": bool((dv_table["knottedgraph_vs_published"] == "PASS").all()),',
+                  '    "topoly_pass_n": dv_table.loc[dv_table["topoly_vs_published"] == "PASS", "n"].tolist(),',
+                  '    "topoly_fail_n": dv_table.loc[dv_table["topoly_vs_published"] == "FAIL", "n"].tolist(),',
+                  '    "topoly_error_n": dv_table.loc[dv_table["topoly_vs_published"] == "ERROR", "n"].tolist(),',
+                  '}',
+                  'print(json.dumps(dv_summary, indent=2))',
+              ], 'dv-summary'),
+          ])
+
+          path.write_text(json.dumps(nb, indent=1, ensure_ascii=False) + '\n')
+          PY
+      - name: Validate notebook JSON
+        run: python -m json.tool User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb >/dev/null
+      - name: Commit refreshed notebook
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb
+          if git diff --cached --quiet; then
+            echo 'Notebook already up to date.'
+          else
+            git commit -m 'Update Topoly notebook with theorem-backed Theta family'
+            git push origin HEAD:perf/yamada-max-optimization
+          fi
