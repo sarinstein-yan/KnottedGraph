@@ -1,0 +1,79 @@
+name: Essential torus n17 reference oracle
+
+on:
+  pull_request:
+    paths:
+      - "src/knotted_graph/invariants/yamada/**"
+      - "dev/benchmark_topoly_essential_torus_scaling.py"
+      - ".github/workflows/essential-torus-reference17.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  reference-n17:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --group dev --group benchmark
+      - name: Compare legacy bulk, structural recursion and Topoly
+        run: |
+          uv run --no-sync python - <<'PY'
+          import importlib.util
+          from pathlib import Path
+          import sys
+          import time
+
+          ROOT = Path.cwd()
+          sys.path.insert(0, str(ROOT / "dev"))
+          from benchmark_topoly_essential_torus_scaling import prepare_essential_torus
+          from benchmark_topoly_extended_scaling import _kg_terms, _topoly_terms, _validate_laurent_unit
+          from knotted_graph.invariants.yamada.compact import PythonCompactYamadaEvaluator
+          from knotted_graph.invariants.yamada.diagram_structural import compute_structural_laurent
+          from knotted_graph.invariants.yamada.fast import to_sympy
+          from knotted_graph.invariants.yamada.native import NativeCompactEvaluator, native_available
+          from knotted_graph.invariants.yamada.polynomial import Yamada, _ordered_crossing_ports
+          from knotted_graph.invariants.yamada.state_compact import PreparedCompactStateBuilder
+          import sympy as sp
+
+          assert native_available()
+          A = sp.Symbol("A")
+          graph, processor, pdcode = prepare_essential_torus(17)
+          yamada = Yamada.from_PDCode(processor)
+          prepared = PreparedCompactStateBuilder.prepare(
+              yamada.vertices, yamada.crossings, yamada.arcs, _ordered_crossing_ports
+          ).reduce_reidemeister_ii()[0]
+          assert len(prepared.crossing_ids) == 17
+
+          structural_eval = NativeCompactEvaluator(PythonCompactYamadaEvaluator)
+          stats = {}
+          t0 = time.perf_counter()
+          structural = compute_structural_laurent(prepared, structural_eval, stats=stats)
+          structural_s = time.perf_counter() - t0
+          print("STRUCTURAL_SECONDS", structural_s, flush=True)
+          print("STRUCTURAL_STATS", stats, flush=True)
+          print("STRUCTURAL_TERMS", structural, flush=True)
+
+          legacy_eval = NativeCompactEvaluator(PythonCompactYamadaEvaluator)
+          t0 = time.perf_counter()
+          legacy = legacy_eval.compute_prepared_bulk_laurent(prepared)
+          legacy_s = time.perf_counter() - t0
+          print("LEGACY_SECONDS", legacy_s, flush=True)
+          print("LEGACY_TERMS", legacy, flush=True)
+          assert structural == legacy, "structural recursion changed the legacy exact output at n=17"
+
+          from topoly.invariants import Invariant, YamadaGraph
+          Invariant.known["Yamada"] = {}
+          t0 = time.perf_counter()
+          topoly = YamadaGraph(pdcode).point(max_cross=5000)
+          topoly_s = time.perf_counter() - t0
+          print("TOPOLY_SECONDS", topoly_s, flush=True)
+          print("TOPOLY", topoly, flush=True)
+          _validate_laurent_unit(_kg_terms(to_sympy(legacy, A)), _topoly_terms(topoly))
+          print("PASS: legacy, structural and Topoly agree at n=17", flush=True)
+          PY
