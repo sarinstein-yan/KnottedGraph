@@ -9,9 +9,9 @@ import sys
 import networkx as nx
 import numpy as np
 
-# This driver reuses the exact same timing and Laurent-polynomial comparison
-# machinery as benchmark_topoly_paper_scaling.py. Keep dev/ importable when
-# the file is executed directly from the repository root.
+# This driver reuses the same process-isolated timing machinery as
+# benchmark_topoly_paper_scaling.py. Keep dev/ importable when the file is
+# executed directly from the repository root.
 DEV = Path(__file__).resolve().parent
 if str(DEV) not in sys.path:
     sys.path.insert(0, str(DEV))
@@ -22,7 +22,7 @@ from knotted_graph.projection import PDCode  # noqa: E402
 FAMILY = "essential_torus_constituent"
 DEFAULT_TIMEOUT_S = 120.0
 DEFAULT_CENSOR_FRONTIER = 2
-DEFAULT_N_VALUES = (3, 5, 9, 17, 33)
+DEFAULT_N_VALUES = (3, 5, 7, 9, 11, 13, 15, 17, 19)
 
 
 def _validate_n(n: int) -> int:
@@ -32,6 +32,31 @@ def _validate_n(n: int) -> int:
     return n
 
 
+def independent_theta_terms(n: int) -> dict[int, int]:
+    """Dobrynin--Vesnin Theorem 2, independently coded for validation.
+
+    This implementation intentionally does not import the production
+    ``theta_twist`` fast path. It is the correctness oracle for the certified
+    benchmark family.
+    """
+    n = _validate_n(n)
+    terms: dict[int, int] = {}
+
+    def add(power: int, coefficient: int) -> None:
+        terms[power] = terms.get(power, 0) + coefficient
+        if not terms[power]:
+            del terms[power]
+
+    for offset in (2, 1, 0, -1, -2):
+        add(n + offset, 1)
+    add(-2 * n + 1, -1)
+    add(-2 * n - 1, -1)
+    coefficient = -((-1) ** n)
+    for offset in (2, 0, -2):
+        add(-n + offset, coefficient)
+    return terms
+
+
 def essential_torus_graph(n: int, samples_per_crossing: int = 18) -> nx.MultiGraph:
     """Return a theta graph whose e1+e2 cycle is the closure of sigma_1^n.
 
@@ -39,20 +64,12 @@ def essential_torus_graph(n: int, samples_per_crossing: int = 18) -> nx.MultiGra
     torus knot T(2,n) (or its mirror if the projection orientation is reversed).
     Its crossing number is exactly n. The third theta edge is routed outside
     the braid diagram and therefore does not create extra projected crossings.
-
-    The graph itself has two degree-3 vertices and three edges. The constituent
-    cycle formed by roles ``torus_a`` and ``torus_b`` supplies the topological
-    crossing-number certificate used by this benchmark.
     """
     n = _validate_n(n)
     samples_per_crossing = int(samples_per_crossing)
     if samples_per_crossing < 6:
         raise ValueError("samples_per_crossing must be >= 6")
 
-    # A geometric realization of the two-strand braid sigma_1^n. As x grows,
-    # the two points execute n same-handed half-turns in the yz plane. In the
-    # xy projection their y coordinates cross exactly n times, while z fixes
-    # the over/under information.
     point_count = n * samples_per_crossing + 1
     s = np.linspace(0.0, 1.0, point_count)
     x = np.linspace(-2.5, 2.5, point_count)
@@ -62,10 +79,6 @@ def essential_torus_graph(n: int, samples_per_crossing: int = 18) -> nx.MultiGra
     braid_a = np.column_stack([x, y, z])
     braid_b = np.column_stack([x, -y, -z])
 
-    # For odd n, braid_a runs top-left -> bottom-right and braid_b runs
-    # bottom-left -> top-right. Closing equal-height endpoints outside the
-    # braid gives the standard closure of sigma_1^n. Split the two closure arcs
-    # at U and V so the closed knot becomes two U--V edges of a theta graph.
     U = np.array([0.0, 3.0, 0.0])
     V = np.array([0.0, -3.0, 0.0])
     left_x = -3.5
@@ -97,9 +110,6 @@ def essential_torus_graph(n: int, samples_per_crossing: int = 18) -> nx.MultiGra
             V,
         ]
     )
-
-    # A third U--V edge routed wholly outside the closed-braid rectangle.
-    # Its xy projection is disjoint from the torus-knot cycle except at U,V.
     edge_c = np.asarray(
         [
             U,
@@ -134,17 +144,70 @@ def prepare_essential_torus(n: int):
     processor = PDCode(graph)
     pdcode = processor.compute(rotation_angles=(0.0, 0.0, 0.0))
     projected = len(processor.crossings)
-
-    # The e1+e2 constituent is T(2,n), whose crossing number is n. The chosen
-    # standard braid projection has exactly n crossings, so it attains that
-    # lower bound and is crossing-minimal rather than merely a complicated
-    # Reidemeister-reducible diagram.
     if projected != n:
         raise AssertionError(
             f"T(2,{n}) theta projection should have exactly {n} crossings; "
             f"PDCode detected {projected}"
         )
     return graph, processor, pdcode
+
+
+def _finalize_essential_row(row: dict, results: dict, n: int) -> dict:
+    """Validate KnottedGraph independently and report Topoly separately."""
+    kg = results["knottedgraph"]
+    tp = results["topoly"]
+    row.update(
+        {
+            "knottedgraph_status": kg["status"],
+            "topoly_status": tp["status"],
+            "knottedgraph_s": kg.get("time_s"),
+            "topoly_s": tp.get("time_s"),
+            "knottedgraph_repeats": kg.get("repeats"),
+            "topoly_repeats": tp.get("repeats"),
+            "correctness_oracle": "Dobrynin-Vesnin Theorem 2",
+        }
+    )
+    for result in (kg, tp):
+        if result["status"] == "error":
+            row[f"{result['framework']}_error"] = result.get("error")
+
+    if kg["status"] != "ok":
+        row["correctness"] = "not-evaluated-knottedgraph-did-not-complete"
+        row["knottedgraph_formula"] = "not-evaluated"
+        row["topoly_agrees"] = None
+        return row
+
+    expected = independent_theta_terms(n)
+    if kg["terms"] != expected:
+        raise AssertionError(
+            f"KnottedGraph disagrees with independent Theta({n}) formula: "
+            f"KG={kg['terms']}, expected={expected}"
+        )
+    row["correctness"] = "PASS"
+    row["knottedgraph_formula"] = "PASS"
+    row["coefficient_count"] = len(base._sequence(kg["terms"]))
+
+    if tp["status"] == "ok":
+        try:
+            sign, orientation, shift = base._validate_laurent_unit(
+                kg["terms"], tp["terms"]
+            )
+        except AssertionError:
+            row["topoly_agrees"] = False
+        else:
+            row.update(
+                {
+                    "topoly_agrees": True,
+                    "unit_sign_topoly_over_kg": sign,
+                    "variable_orientation": orientation,
+                    "monomial_shift_topoly_minus_kg": shift,
+                }
+            )
+        row["topoly_over_kg"] = tp["time_s"] / kg["time_s"]
+        row["kg_over_topoly"] = kg["time_s"] / tp["time_s"]
+    else:
+        row["topoly_agrees"] = None
+    return row
 
 
 def essential_torus_row(
@@ -173,10 +236,8 @@ def essential_torus_row(
         "regular_degree": 3,
         "timeout_s": float(timeout_s),
     }
-    return base._finalize_row(
-        row,
-        base._evaluate_pair(processor, pdcode, timeout_s, active),
-    )
+    results = base._evaluate_pair(processor, pdcode, timeout_s, active)
+    return _finalize_essential_row(row, results, n)
 
 
 def parse_n_values(text: str) -> list[int]:
@@ -205,6 +266,7 @@ def main(timeout_s: float, n_values: list[int], censor_frontier: int) -> None:
                 "timeout_s": timeout_s,
                 "censor_frontier": censor_frontier,
                 "topological_certificate": "cr(T(2,n)) = n for odd n >= 3",
+                "correctness_oracle": "Dobrynin-Vesnin Theorem 2",
                 "timed_repeats_per_sample": 1,
             },
             separators=(",", ":"),
@@ -237,7 +299,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--n-values",
         default=",".join(map(str, DEFAULT_N_VALUES)),
-        help="comma-separated odd n values >= 3; default: 3,5,9,17,33",
+        help="comma-separated odd n values >= 3; default: 3,5,7,9,11,13,15,17,19",
     )
     parser.add_argument(
         "--censor-frontier",
