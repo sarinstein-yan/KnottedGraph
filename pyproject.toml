@@ -78,6 +78,7 @@ repulsion = [
 ]
 notebook = [
     "jupyterlab",
+    "pandas",
 ]
 benchmark = [
     "topoly==1.1.0",
@@ -86,6 +87,7 @@ all = [
     "biopython",
     "igraph",
     "jupyterlab",
+    "pandas",
     "kaleido",
     "minorminer",
     "plotly",
