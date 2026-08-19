@@ -21,26 +21,72 @@ def _one(framework, processor, pdcode, timeout_s):
     return result
 
 
+def _independent_theta_terms(n: int) -> dict[int, int]:
+    """Dobrynin--Vesnin Theorem 2, coded independently of production.
+
+    This is intentionally not imported from ``theta_twist.py``.  It acts as an
+    external algebraic oracle for the certified benchmark family:
+
+        R(Theta(n)) = (A^2+A+1+A^-1+A^-2) A^n
+                      - (A+A^-1) A^(-2n)
+                      - (A^2+1+A^-2) (-1)^n A^(-n).
+    """
+    terms: dict[int, int] = {}
+
+    def add(power: int, coefficient: int) -> None:
+        terms[power] = terms.get(power, 0) + coefficient
+        if not terms[power]:
+            del terms[power]
+
+    for offset in (2, 1, 0, -1, -2):
+        add(n + offset, 1)
+    add(-2 * n + 1, -1)
+    add(-2 * n - 1, -1)
+    coefficient = -((-1) ** n)
+    for offset in (2, 0, -2):
+        add(-n + offset, coefficient)
+    return terms
+
+
 def benchmark_n(n: int, repeats: int, timeout_s: float):
     _graph, processor, pdcode = prepare_essential_torus(n)
+    expected = _independent_theta_terms(n)
     kg_times = []
     tp_times = []
+    topoly_agreement = None
     convention = None
 
     for repeat in range(repeats):
         kg = _one("knottedgraph", processor, pdcode, timeout_s)
         tp = _one("topoly", processor, pdcode, timeout_s)
-        sign, orientation, shift = base._validate_laurent_unit(
-            kg["terms"], tp["terms"]
-        )
-        current = (sign, orientation, shift)
-        if convention is None:
-            convention = current
-        elif current != convention:
+
+        # KnottedGraph correctness is checked against the independent published
+        # formula, not against the competitor.  The retained exhaustive oracle
+        # separately verifies the same output through n=17 in CI.
+        if kg["terms"] != expected:
             raise AssertionError(
-                f"T(2,{n}) convention changed across repeats: "
-                f"{convention} -> {current}"
+                f"KnottedGraph disagrees with the independent Theta({n}) formula: "
+                f"KG={kg['terms']}, expected={expected}"
             )
+
+        try:
+            current_convention = base._validate_laurent_unit(
+                kg["terms"], tp["terms"]
+            )
+        except AssertionError:
+            agrees = False
+            current_convention = None
+        else:
+            agrees = True
+
+        if topoly_agreement is None:
+            topoly_agreement = agrees
+            convention = current_convention
+        elif agrees != topoly_agreement or current_convention != convention:
+            raise AssertionError(
+                f"T(2,{n}) Topoly agreement/convention changed across repeats"
+            )
+
         kg_times.append(float(kg["time_s"]))
         tp_times.append(float(tp["time_s"]))
         print(
@@ -50,7 +96,8 @@ def benchmark_n(n: int, repeats: int, timeout_s: float):
                     "repeat": repeat,
                     "knottedgraph_s": kg_times[-1],
                     "topoly_s": tp_times[-1],
-                    "correctness": "PASS",
+                    "knottedgraph_formula": "PASS",
+                    "topoly_agrees": agrees,
                 },
                 separators=(",", ":"),
             ),
@@ -67,10 +114,11 @@ def benchmark_n(n: int, repeats: int, timeout_s: float):
         "topoly_median_s": tp_median,
         "topoly_over_knottedgraph": tp_median / kg_median,
         "knottedgraph_faster": kg_median < tp_median,
-        "unit_sign_topoly_over_kg": convention[0],
-        "variable_orientation": convention[1],
-        "monomial_shift_topoly_minus_kg": convention[2],
-        "correctness": "PASS",
+        "knottedgraph_formula": "PASS",
+        "topoly_agrees": bool(topoly_agreement),
+        "unit_sign_topoly_over_kg": convention[0] if convention else None,
+        "variable_orientation": convention[1] if convention else None,
+        "monomial_shift_topoly_minus_kg": convention[2] if convention else None,
     }
     print("MEDIAN=" + json.dumps(row, separators=(",", ":")), flush=True)
     return row
