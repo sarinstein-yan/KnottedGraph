@@ -1,0 +1,47 @@
+name: Productionize generic Yamada dispatch
+
+on:
+  pull_request:
+    branches: [Latest_Workplace]
+    paths:
+      - ".github/workflows/productionize-generic-yamada.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch-production-entry-point:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/yamada-max-optimization
+          fetch-depth: 0
+      - name: Remove theorem-backed public dispatch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/knotted_graph/invariants/yamada/polynomial.py')
+          s = p.read_text()
+          start_marker = '        # Recognize theorem-backed Theta(n) diagrams before building the\n'
+          end_marker = '        if theta_value is not None:\n            return theta_value\n\n'
+          if start_marker in s:
+              a = s.index(start_marker)
+              b = s.index(end_marker, a) + len(end_marker)
+              s = s[:a] + '        # Production evaluation is deliberately generic; published family\n        # formulas are used only by validation benchmarks.\n' + s[b:]
+              p.write_text(s)
+              print('removed theorem-backed public dispatch')
+          else:
+              print('public dispatch already generic')
+          PY
+      - name: Commit production entry-point change
+        run: |
+          if git diff --quiet; then
+            echo "No patch needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/knotted_graph/invariants/yamada/polynomial.py
+          git commit -m "Use generic Yamada evaluator in public API"
+          git push origin HEAD:perf/yamada-max-optimization
