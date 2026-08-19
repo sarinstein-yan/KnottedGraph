@@ -1,0 +1,24 @@
+name: Theta full recursion candidate
+
+on:
+  push:
+    branches: [perf/yamada-max-optimization]
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/yamada-max-optimization
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: uv sync --group dev --group benchmark
+      - name: Require native backend
+        run: uv run --no-sync python -c "from knotted_graph.invariants.yamada.native import native_available; assert native_available()"
+      - name: Benchmark exact generic global recursion
+        run: uv run --no-sync python dev/benchmark_theta_full_recursion_candidate.py
