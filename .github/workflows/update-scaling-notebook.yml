@@ -5,6 +5,7 @@ on:
     branches: [Latest_Workplace]
     paths:
       - ".github/workflows/update-scaling-notebook.yml"
+  workflow_dispatch:
 
 permissions:
   contents: write
