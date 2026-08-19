@@ -5,13 +5,55 @@ on:
     branches: [Latest_Workplace]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  normalize-notebooks:
+    name: Normalize notebook environments
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out optimization branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Normalize notebooks
+        run: python dev/normalize_notebook_environments.py
+
+      - name: Validate normalized notebooks
+        run: python dev/normalize_notebook_environments.py --check
+
+      - name: Commit normalized notebooks when needed
+        shell: bash
+        run: |
+          if git diff --quiet -- User_guide; then
+            echo "Notebook environments already normalized."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add User_guide
+          git commit -m "Normalize notebook package environments"
+          if [ -n "${{ github.head_ref }}" ]; then
+            git push origin HEAD:${{ github.head_ref }}
+          else
+            git push origin HEAD:${{ github.ref_name }}
+          fi
+
   execute-notebook:
     name: ${{ matrix.notebook }}
+    needs: normalize-notebooks
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     strategy:
@@ -50,24 +92,27 @@ jobs:
         run: |
           uv sync --extra all --group dev --group docs --group benchmark
 
-      - name: Verify branch-local import
+      - name: Verify installed package and native Yamada backend
         run: |
-          PYTHONPATH="$PWD/src" uv run --no-sync python - <<'PY'
+          uv run --no-sync python - <<'PY'
           from pathlib import Path
+          import sys
           import knotted_graph
-          root = Path.cwd().resolve()
-          path = Path(knotted_graph.__file__).resolve()
-          print(path)
-          assert root / "src" in path.parents
+          from knotted_graph.invariants.yamada.native import native_available, native_import_error
+          print("Python:", sys.executable)
+          print("KnottedGraph:", Path(knotted_graph.__file__).resolve())
+          print("Native Yamada backend:", native_available())
+          print("Native import error:", native_import_error())
+          assert native_available(), native_import_error()
           PY
 
-      - name: Audit notebook portability
+      - name: Audit notebook portability and environment semantics
         run: |
           uv run --no-sync python dev/validate_notebook_portability.py
+          uv run --no-sync python dev/normalize_notebook_environments.py --check
 
       - name: Execute notebook
         env:
-          PYTHONPATH: ${{ github.workspace }}/src
           PYTHONNOUSERSITE: '1'
           MPLBACKEND: Agg
           PYVISTA_OFF_SCREEN: 'true'
