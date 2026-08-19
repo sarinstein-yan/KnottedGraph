@@ -59,7 +59,7 @@ def _prepared(n: int, *, mirror: bool = False):
 
 @pytest.mark.parametrize("n", [3, 5, 7])
 def test_structural_recursion_matches_independent_legacy_state_sum(n):
-    """Generic structural recursion is exactly equal to the old 3**c implementation."""
+    """Generic structural recursion is exactly equal to the retained 3**c oracle."""
     prepared = _prepared(n)
     evaluator = NativeCompactEvaluator(PythonCompactYamadaEvaluator)
     legacy = evaluator.compute_prepared_bulk_laurent(prepared)
@@ -69,9 +69,9 @@ def test_structural_recursion_matches_independent_legacy_state_sum(n):
     assert stats["calls"] >= 1
 
 
-@pytest.mark.parametrize("n", [3, 5, 7, 9, 11])
-def test_certified_theta_closed_form_matches_legacy_state_sum(n):
-    """Published Theta(n) formula is identical to the retained exact oracle."""
+@pytest.mark.parametrize("n", [9, 11])
+def test_production_dispatch_is_generic_and_matches_legacy(n):
+    """High-crossing production dispatch uses structural recursion, never a formula."""
     assert native_available()
     prepared = _prepared(n)
     oracle = NativeCompactEvaluator(PythonCompactYamadaEvaluator)
@@ -80,20 +80,32 @@ def test_certified_theta_closed_form_matches_legacy_state_sum(n):
     optimized = NativeCompactEvaluator(PythonCompactYamadaEvaluator)
     actual = optimized.compute_prepared_laurent(prepared)
     assert actual == expected
-    assert optimized.theta_twist_calls == 1
-    assert optimized.structural_calls == 0
+    assert optimized.theta_twist_calls == 0
+    assert optimized.structural_calls == 1
+    assert optimized.last_structural_stats["r1_moves"] > 0
+    assert optimized.last_structural_stats["max_bulk_crossings"] <= 4
 
 
-@pytest.mark.parametrize("n", [3, 5])
-def test_certified_theta_closed_form_matches_legacy_for_mirror(n):
-    """The closed form also preserves exact output under A <-> A^-1 mirroring."""
+@pytest.mark.parametrize("mirror", [False, True])
+def test_r1_structural_path_preserves_both_crossing_orientations(mirror):
+    """Both A^-2 and A^+2 curl orientations agree with exhaustive evaluation."""
     assert native_available()
-    prepared = _prepared(n, mirror=True)
+    prepared = _prepared(9, mirror=mirror)
     oracle = NativeCompactEvaluator(PythonCompactYamadaEvaluator)
     expected = oracle.compute_prepared_bulk_laurent(prepared)
 
-    optimized = NativeCompactEvaluator(PythonCompactYamadaEvaluator)
-    actual = optimized.compute_prepared_laurent(prepared)
+    evaluator = NativeCompactEvaluator(PythonCompactYamadaEvaluator)
+    stats = {}
+    actual = compute_structural_laurent(prepared, evaluator, stats=stats)
     assert actual == expected
-    assert optimized.theta_twist_calls == 1
-    assert optimized.structural_calls == 0
+    assert stats["r1_moves"] > 0
+    assert stats["max_bulk_crossings"] <= 4
+
+
+def test_public_prepared_dispatch_never_uses_theta_shortcut():
+    """The former theorem-backed counter remains zero on a certified theta case."""
+    prepared = _prepared(9)
+    evaluator = NativeCompactEvaluator(PythonCompactYamadaEvaluator)
+    evaluator.compute_prepared_laurent(prepared)
+    assert evaluator.theta_twist_calls == 0
+    assert evaluator.structural_calls == 1
