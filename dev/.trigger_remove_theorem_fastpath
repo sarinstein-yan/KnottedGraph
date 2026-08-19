@@ -1,0 +1,1 @@
+Use the Dobrynin-Vesnin formula only as an external correctness oracle; do not use it in timed KnottedGraph evaluation.
