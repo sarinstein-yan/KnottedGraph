@@ -58,7 +58,8 @@ def _trace_physical_edge(prepared, start_port: int, target_vertex: int, opposite
         current = through
 
 
-def _crossing_sign(prepared, crossing_index: int, directions_a, directions_b):
+def _crossing_data(prepared, crossing_index: int, directions_a, directions_b):
+    """Return ``(oriented_sign, over_path)`` for one candidate braid crossing."""
     ports = prepared.ordered_ports[crossing_index]
     position = {port: index for index, port in enumerate(ports)}
     outgoing_positions = []
@@ -77,14 +78,17 @@ def _crossing_sign(prepared, crossing_index: int, directions_a, directions_b):
 
     if {pos % 2 for pos in outgoing_positions} != {0, 1}:
         return None
-    over_out = next(pos for pos in outgoing_positions if pos % 2 == 0)
-    under_out = next(pos for pos in outgoing_positions if pos % 2 == 1)
+    over_path = 0 if outgoing_positions[0] % 2 == 0 else 1
+    over_out = outgoing_positions[over_path]
+    under_out = outgoing_positions[1 - over_path]
     delta = (under_out - over_out) % 4
     if delta == 1:
-        return 1
-    if delta == 3:
-        return -1
-    return None
+        sign = 1
+    elif delta == 3:
+        sign = -1
+    else:
+        return None
+    return sign, over_path
 
 
 def certified_prepared_theta_twist_laurent(prepared):
@@ -92,9 +96,9 @@ def certified_prepared_theta_twist_laurent(prepared):
 
     Certification is intrinsic to the prepared combinatorial diagram and does
     not rely on benchmark labels or geometry. The fast path is deliberately
-    restricted to non-trivial odd members n >= 3; n=1 remains on the general
-    evaluator because it can occur as a local block in unrelated diagrams and
-    is not needed for the certified T(2,n) benchmark family.
+    restricted to non-trivial odd members n >= 3 and requires the defining
+    two-braid structure, including alternating physical over-strand identity.
+    This excludes the older constant-overstrand synthetic stress diagrams.
     """
     n = len(prepared.crossing_ids)
     if n < 3 or n % 2 == 0 or len(prepared.vertex_ids) != 2:
@@ -150,22 +154,30 @@ def certified_prepared_theta_twist_laurent(prepared):
         return None
 
     signs = []
-    for crossing_index in range(n):
-        sign = _crossing_sign(
+    over_paths = []
+    for crossing_index in order_a:
+        data = _crossing_data(
             prepared,
             crossing_index,
             directions_a,
             directions_b,
         )
-        if sign is None:
+        if data is None:
             return None
+        sign, over_path = data
         signs.append(sign)
+        over_paths.append(over_path)
     if len(set(signs)) != 1:
         return None
 
-    # Exact legacy-state regression on the benchmark geometry establishes that
-    # the sign convention returned above is opposite to the orientation used in
-    # the published formula: sign < 0 is the published Theta(n), while sign > 0
-    # is its mirror. This mapping is tested against the retained 3**c oracle for
-    # n=3,5,7,9,11 and against explicitly mirrored n=3,5 examples.
+    # A geometric sigma_1^n braid exchanges the two physical strands at every
+    # half-twist, so the physical edge carrying the over-pass alternates along
+    # either consistently oriented edge. Requiring that alternation is a strong
+    # intrinsic certificate and rejects the old zig-zag benchmark where one
+    # physical edge remains above the other at every projected intersection.
+    if any(left == right for left, right in zip(over_paths, over_paths[1:])):
+        return None
+
+    # Exact legacy-state regression establishes that sign < 0 is the published
+    # Dobrynin--Vesnin Theta(n) orientation, while sign > 0 is its mirror.
     return _theta_formula_laurent(n, mirror=signs[0] > 0)
