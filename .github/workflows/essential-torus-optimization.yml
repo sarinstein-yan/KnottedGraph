@@ -6,6 +6,7 @@ on:
       - "src/knotted_graph/invariants/yamada/**"
       - "dev/benchmark_topoly_essential_torus_scaling.py"
       - "dev/benchmark_topoly_essential_torus_gate.py"
+      - "dev/benchmark_regular_isotopy_normalizer_candidate.py"
       - "tests/invariants/yamada/test_diagram_structural_dispatch.py"
       - ".github/workflows/essential-torus-optimization.yml"
   workflow_dispatch:
@@ -54,3 +55,8 @@ jobs:
           --repeats 3
           --timeout 30
           --require-faster
+
+      - name: Probe fixed-point R1/RII normalizer through 81 crossings
+        run: >
+          uv run --no-sync python dev/benchmark_regular_isotopy_normalizer_candidate.py
+          --n-values 19,31,51,81
