@@ -1,15 +1,13 @@
-"""Benchmark generic exact crossing-recursion and isomorphism memo candidates.
+"""Benchmark generic exact crossing-recursion memoization candidates.
 
 The Dobrynin--Vesnin formula is used only after evaluation as a correctness
-oracle. It is never called by either candidate evaluator.
+oracle. It is never called by the candidate evaluators.
 """
 
 from __future__ import annotations
 
 import json
 import time
-
-import networkx as nx
 
 import benchmark_topoly_essential_torus_scaling as torus
 from knotted_graph.invariants.yamada.compact import PythonCompactYamadaEvaluator
@@ -56,123 +54,165 @@ def first_resolvable_crossing(prepared):
     return None
 
 
-def _iso_graph(prepared):
-    """Exact combinatorial diagram graph, invariant under internal relabeling.
+def _relation_graph(prepared):
+    """Return a finite directed colored graph encoding the prepared diagram.
 
-    Directed local crossing cycles preserve cyclic order. Port labels distinguish
-    over/under parity but not arbitrary crossing/terminal identifiers. Physical
-    arcs and terminal incidence are encoded as typed directed edges.
+    Node colors distinguish over/under crossing ports, graph-terminal ports and
+    unlabeled spatial-graph vertices. Edge colors distinguish physical arcs,
+    directed crossing cyclic order and terminal incidence. Thus graph
+    isomorphism is exactly the relabeling freedom we want to quotient out.
     """
-    graph = nx.DiGraph()
-    for port in range(len(prepared.arc_partner)):
-        crossing = prepared.crossing_for_port[port]
-        if crossing >= 0:
-            positions = prepared.ordered_ports[crossing]
-            position = positions.index(port)
-            label = f"port:{position % 2}"
-        else:
-            label = "port:terminal"
-        graph.add_node(("p", port), label=label)
+    port_count = len(prepared.arc_partner)
+    parity = [-1] * port_count
+    for ports in prepared.ordered_ports:
+        for position, port in enumerate(ports):
+            parity[port] = position % 2
 
-    # Physical arc pairing is undirected, represented by two directed edges.
+    terminal_values = sorted(
+        {terminal for terminal in prepared.fixed_terminal_index if terminal >= 0}
+    )
+    terminal_node = {
+        terminal: port_count + index
+        for index, terminal in enumerate(terminal_values)
+    }
+
+    labels = []
+    for port in range(port_count):
+        if prepared.crossing_for_port[port] >= 0:
+            labels.append(parity[port])  # 0=over port, 1=under port
+        else:
+            labels.append(2)  # terminal port
+    labels.extend([3] * len(terminal_values))  # unlabeled spatial-graph vertex
+
+    edges = []
+    # Physical arc pairing, encoded in both directions.
     for port, partner in enumerate(prepared.arc_partner):
         if port < partner:
-            graph.add_edge(("p", port), ("p", partner), kind="arc")
-            graph.add_edge(("p", partner), ("p", port), kind="arc")
-
-    # A directed four-cycle preserves crossing cyclic orientation. Rotation by
-    # two is allowed automatically and corresponds to the same crossing data.
+            edges.append((port, 0, partner))
+            edges.append((partner, 0, port))
+    # Directed cyclic order at each crossing.
     for ports in prepared.ordered_ports:
         for left, right in zip(ports, ports[1:] + ports[:1]):
-            graph.add_edge(("p", left), ("p", right), kind="cycle")
-
-    # Spatial-graph vertices are unlabeled combinatorial terminals.
-    terminal_ports = {}
+            edges.append((left, 1, right))
+    # Unordered terminal incidence, encoded in both directions.
     for port, terminal in enumerate(prepared.fixed_terminal_index):
         if terminal >= 0:
-            terminal_ports.setdefault(terminal, []).append(port)
-    for terminal, ports in terminal_ports.items():
-        vnode = ("v", terminal)
-        graph.add_node(vnode, label="vertex")
-        for port in ports:
-            graph.add_edge(vnode, ("p", port), kind="terminal")
-            graph.add_edge(("p", port), vnode, kind="terminal")
-    return graph
+            vnode = terminal_node[terminal]
+            edges.append((vnode, 2, port))
+            edges.append((port, 2, vnode))
+    return tuple(labels), tuple(edges)
 
 
-_NODE_MATCH = nx.algorithms.isomorphism.categorical_node_match("label", "")
-_EDGE_MATCH = nx.algorithms.isomorphism.categorical_edge_match("kind", "")
+def _canonical_colored_digraph(labels, edges):
+    """Exact canonical form by color refinement + individualization.
 
-
-class ExactIsoMemo:
-    """Hash-bucketed exact diagram-isomorphism memo.
-
-    Weisfeiler--Lehman hashes only select a bucket. Every apparent hit is
-    confirmed by exact directed graph isomorphism, so hash collisions cannot
-    change the result.
+    This is a small nauty-style canonical-labeling search. Color refinement is
+    deterministic and relabeling-invariant; if it is not discrete, every node
+    in one ambiguous color class is individualized in turn and the
+    lexicographically minimum recursively refined representation is selected.
+    Hence equality of returned tuples is exact graph isomorphism, not a hash.
     """
+    n = len(labels)
+    outgoing = [[] for _ in range(n)]
+    incoming = [[] for _ in range(n)]
+    for left, kind, right in edges:
+        outgoing[left].append((kind, right))
+        incoming[right].append((kind, left))
 
-    def __init__(self):
-        self.buckets = {}
-        self.size = 0
-        self.comparisons = 0
-        self.hits = 0
+    initial_values = sorted(set(labels))
+    initial_map = {value: index for index, value in enumerate(initial_values)}
+    initial = tuple(initial_map[value] for value in labels)
+    search_memo = {}
 
-    def _token(self, prepared):
-        graph = _iso_graph(prepared)
-        fingerprint = nx.weisfeiler_lehman_graph_hash(
-            graph,
-            node_attr="label",
-            edge_attr="kind",
-            iterations=5,
-        )
-        return (len(prepared.crossing_ids), fingerprint), graph
+    def refine(colors):
+        colors = tuple(colors)
+        while True:
+            signatures = []
+            for node in range(n):
+                neighborhood = []
+                neighborhood.extend(
+                    (0, kind, colors[neighbor])
+                    for kind, neighbor in outgoing[node]
+                )
+                neighborhood.extend(
+                    (1, kind, colors[neighbor])
+                    for kind, neighbor in incoming[node]
+                )
+                signatures.append((colors[node], tuple(sorted(neighborhood))))
+            unique = sorted(set(signatures))
+            mapping = {signature: index for index, signature in enumerate(unique)}
+            new_colors = tuple(mapping[signature] for signature in signatures)
+            if len(set(new_colors)) == len(set(colors)):
+                return new_colors
+            colors = new_colors
 
-    def get(self, prepared):
-        bucket_key, graph = self._token(prepared)
-        for other, value in self.buckets.get(bucket_key, ()):
-            self.comparisons += 1
-            if nx.is_isomorphic(
-                graph,
-                other,
-                node_match=_NODE_MATCH,
-                edge_match=_EDGE_MATCH,
-            ):
-                self.hits += 1
-                return True, value, bucket_key, graph
-        return False, None, bucket_key, graph
+    def canonical(colors):
+        colors = refine(colors)
+        cached = search_memo.get(colors)
+        if cached is not None:
+            return cached
 
-    def put_token(self, bucket_key, graph, value):
-        self.buckets.setdefault(bucket_key, []).append((graph, value))
-        self.size += 1
+        classes = {}
+        for node, color in enumerate(colors):
+            classes.setdefault(color, []).append(node)
+        ambiguous = [
+            (len(nodes), color, nodes)
+            for color, nodes in classes.items()
+            if len(nodes) > 1
+        ]
+        if not ambiguous:
+            order = sorted(range(n), key=colors.__getitem__)
+            code = (
+                tuple(labels[node] for node in order),
+                tuple(sorted((colors[left], kind, colors[right]) for left, kind, right in edges)),
+            )
+            search_memo[colors] = code
+            return code
+
+        _size, _color, nodes = min(ambiguous)
+        individualized_color = max(colors) + 1
+        best = None
+        for node in nodes:
+            branch = list(colors)
+            branch[node] = individualized_color
+            candidate = canonical(tuple(branch))
+            if best is None or candidate < best:
+                best = candidate
+        search_memo[colors] = best
+        return best
+
+    return canonical(initial)
 
 
-def full_recursive_laurent(prepared, evaluator, *, use_iso_memo=False, stats=None):
+def canonical_diagram_key(prepared):
+    labels, edges = _relation_graph(prepared)
+    return _canonical_colored_digraph(labels, edges)
+
+
+def full_recursive_laurent(prepared, evaluator, *, canonical=False, stats=None):
     """Exact global Yamada crossing recursion with shared partial-diagram memo."""
-    labeled_memo = {}
-    iso_memo = ExactIsoMemo() if use_iso_memo else None
+    memo = {}
     if stats is None:
         stats = {}
-    stats.update(calls=0, memo_hits=0, rii_moves=0, inversions=0, resolutions=0)
+    stats.update(
+        calls=0,
+        memo_hits=0,
+        rii_moves=0,
+        inversions=0,
+        resolutions=0,
+        key_seconds=0.0,
+    )
 
     def rec(current):
         stats["calls"] += 1
         current, moves = current.reduce_reidemeister_ii()
         stats["rii_moves"] += moves
-
-        if iso_memo is None:
-            key = diagram_key(current)
-            cached = labeled_memo.get(key)
-            if cached is not None:
-                stats["memo_hits"] += 1
-                return cached
-            token = key
-            token_graph = None
-        else:
-            hit, cached, token, token_graph = iso_memo.get(current)
-            if hit:
-                stats["memo_hits"] += 1
-                return cached
+        key_started = time.perf_counter()
+        key = canonical_diagram_key(current) if canonical else diagram_key(current)
+        stats["key_seconds"] += time.perf_counter() - key_started
+        if key in memo:
+            stats["memo_hits"] += 1
+            return memo[key]
 
         crossing_count = len(current.crossing_ids)
         if crossing_count == 0:
@@ -197,18 +237,11 @@ def full_recursive_laurent(prepared, evaluator, *, use_iso_memo=False, stats=Non
                         rec(vertex),
                     )
 
-        if iso_memo is None:
-            labeled_memo[token] = value
-        else:
-            iso_memo.put_token(token, token_graph, value)
+        memo[key] = value
         return value
 
     value = rec(prepared)
-    stats["memo_size"] = len(labeled_memo) if iso_memo is None else iso_memo.size
-    if iso_memo is not None:
-        stats["iso_comparisons"] = iso_memo.comparisons
-        stats["iso_hits"] = iso_memo.hits
-        stats["iso_buckets"] = len(iso_memo.buckets)
+    stats["memo_size"] = len(memo)
     return value
 
 
@@ -223,7 +256,7 @@ def prepared_theta(n):
     )
 
 
-def run_candidate(label, n, use_iso_memo):
+def run_candidate(label, n, canonical):
     prepared = prepared_theta(n)
     evaluator = NativeCompactEvaluator(PythonCompactYamadaEvaluator)
     expected = tuple(sorted(torus.independent_theta_terms(n).items()))
@@ -232,7 +265,7 @@ def run_candidate(label, n, use_iso_memo):
     actual = full_recursive_laurent(
         prepared,
         evaluator,
-        use_iso_memo=use_iso_memo,
+        canonical=canonical,
         stats=stats,
     )
     elapsed = time.perf_counter() - started
@@ -256,12 +289,10 @@ def run_candidate(label, n, use_iso_memo):
 
 
 def main():
-    # Small baseline establishes the cost of exact graph-isomorphism memoization.
     for n in (9, 11):
         run_candidate("labeled_global_recursion", n, False)
-    # If symmetry collapsing works, the high-n cases should become much smaller.
     for n in (9, 11, 13, 15, 17):
-        run_candidate("exact_isomorphism_global_recursion", n, True)
+        run_candidate("exact_canonical_global_recursion", n, True)
 
 
 if __name__ == "__main__":
