@@ -62,7 +62,6 @@ print("Native import error:", native_import_error())'''
 
 
 def replace_setup_source(source):
-    # Common old setup used by main/application notebooks.
     starts = [
         'PROJECT_ROOT = Path.cwd().resolve()\nwhile (\n    not (PROJECT_ROOT / "src").exists()',
         'PROJECT_ROOT = Path.cwd()\nwhile not (PROJECT_ROOT / "src").exists()',
@@ -71,12 +70,10 @@ def replace_setup_source(source):
         return source
 
     prefix = source.split("PROJECT_ROOT =", 1)[0]
-    # Preserve MPLCONFIGDIR and dependency reporting but remove source injection.
     tail = ""
     marker = 'os.environ.setdefault('
     if marker in source:
         tail = marker + source.split(marker, 1)[1]
-        # Strip stale status message if present; a later import cell does the package check.
         tail = tail.replace('print("project paths configured")\n', '')
     return prefix + find_root_block() + "\n\nDOC_ROOT = PROJECT_ROOT / \"doc\"\n\n" + tail
 
@@ -90,7 +87,6 @@ def ensure_backend_in_import_cell(nb):
         s = text(c)
         if "from knotted_graph" in s or "import knotted_graph" in s:
             insertion = backend_block() + "\n\n"
-            # Put provenance before other KnottedGraph imports, after stdlib/third-party imports.
             pos = s.find("from knotted_graph")
             if pos < 0:
                 pos = s.find("import knotted_graph")
@@ -101,18 +97,34 @@ def ensure_backend_in_import_cell(nb):
 
 
 def repair_getting_started(nb):
+    # Keep an already-normalized notebook current without rewriting its code cells.
+    for c in nb["cells"]:
+        if c.get("cell_type") != "markdown":
+            continue
+        s = text(c)
+        s = s.replace(
+            'python -m pip install -e ".[notebook]"',
+            'python -m pip install -e ".[notebook,viz]"',
+        )
+        s = s.replace(
+            "python -m pip install knotted_graph",
+            'python -m pip install "knotted_graph[notebook,viz]"',
+        )
+        set_text(c, s)
+
     install = '''## 1.1 Install KnottedGraph
 
 ### Recommended: source checkout in an isolated environment
 
 From the repository root (the directory containing `pyproject.toml`), create and
-activate a virtual environment, then install this checkout in editable mode:
+activate a virtual environment, then install this checkout in editable mode with the
+Jupyter and visualization extras used by this notebook:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate          # macOS / Linux
 python -m pip install -U pip
-python -m pip install -e ".[notebook]"
+python -m pip install -e ".[notebook,viz]"
 ```
 
 On macOS, Homebrew Python may reject a system-wide `pip install` with
@@ -125,10 +137,10 @@ For all optional application and benchmark dependencies, use:
 python -m pip install -e ".[all]"
 ```
 
-For a released PyPI installation instead of a source checkout:
+For a released PyPI installation that can run this notebook instead of a source checkout:
 
 ```bash
-python -m pip install knotted_graph
+python -m pip install "knotted_graph[notebook,viz]"
 ```
 
 After installing from source, restart Jupyter and select the kernel belonging to
@@ -185,17 +197,15 @@ if native_available():
 else:
     print("WARNING: exact Python Yamada fallback is active; high-crossing calculations may be slow.")'''
 
-    # Replace old installation markdown and setup markdown/cell.
     for c in nb["cells"]:
         if c.get("cell_type") == "markdown" and "## 1.1 Install the package" in text(c):
             set_text(c, install)
         elif c.get("cell_type") == "markdown" and "## Set up the notebook" in text(c):
             set_text(c, verify_md)
         elif c.get("id") == "b9105f36":
+            # This cell is deliberately reset to the canonical verification cell.
             set_text(c, verify_code)
 
-    # Renumber tutorial headings that followed the old 1.1 setup section.
-    # Apply in descending order to avoid 1.2 -> 1.3 -> 1.4 cascading.
     mapping = (
         ("## 1.7 Continue", "## 1.8 Continue"),
         ("## 1.6 Compute", "## 1.7 Compute"),
@@ -279,7 +289,10 @@ print("Topoly:", Path(topoly.__file__).resolve())
             set_text(c, s)
         elif c.get("id") == "run":
             s = text(c)
-            s = s.replace('env = dict(os.environ)\nenv["PYTHONPATH"] = os.pathsep.join([str(SRC), str(DEV)])\nenv["PYTHONNOUSERSITE"] = "1"\n', 'env = dict(os.environ)\nenv.pop("PYTHONPATH", None)\n')
+            s = s.replace(
+                'env = dict(os.environ)\nenv["PYTHONPATH"] = os.pathsep.join([str(SRC), str(DEV)])\nenv["PYTHONNOUSERSITE"] = "1"\n',
+                'env = dict(os.environ)\nenv.pop("PYTHONPATH", None)\n',
+            )
             set_text(c, s)
 
 
@@ -291,40 +304,51 @@ def repair_synthetic(nb):
         old = "ROOT=Path.cwd().resolve()\nwhile ROOT!=ROOT.parent and not (ROOT/'pyproject.toml').exists(): ROOT=ROOT.parent\nSRC=ROOT/'src'\nif not (SRC/'knotted_graph').exists(): raise RuntimeError('Run inside the KnottedGraph checkout.')\nif str(SRC) not in sys.path: sys.path.insert(0,str(SRC))\n\nimport knotted_graph\n"
         new = "ROOT=Path.cwd().resolve()\nwhile ROOT!=ROOT.parent and not (ROOT/'pyproject.toml').exists(): ROOT=ROOT.parent\nif not (ROOT/'pyproject.toml').exists(): raise RuntimeError('Run inside the KnottedGraph checkout.')\n\nimport knotted_graph\nfrom knotted_graph.invariants.yamada.native import native_available, native_import_error\nprint('Python executable:', sys.executable)\nprint('KnottedGraph:', Path(knotted_graph.__file__).resolve())\nprint('Native Yamada backend:', native_available())\nprint('Native import error:', native_import_error())\n"
         s = s.replace(old, new)
-        s = s.replace("\nkg_path=Path(knotted_graph.__file__).resolve()\nif SRC not in kg_path.parents: raise RuntimeError(f'Stale knotted_graph import: {kg_path}')\n", "\nkg_path=Path(knotted_graph.__file__).resolve()\n")
+        s = s.replace(
+            "\nkg_path=Path(knotted_graph.__file__).resolve()\nif SRC not in kg_path.parents: raise RuntimeError(f'Stale knotted_graph import: {kg_path}')\n",
+            "\nkg_path=Path(knotted_graph.__file__).resolve()\n",
+        )
         set_text(c, s)
 
 
 def repair_distinct(nb):
-    # Already uses installed-package semantics; only add interpreter provenance.
     for c in nb["cells"]:
         if c.get("id") == "imports":
             s = text(c)
             if 'print("Python executable:"' not in s:
-                s = s.replace('print("Native Yamada backend:", native_available())', 'print("Python executable:", sys.executable)\nprint("Native Yamada backend:", native_available())')
+                s = s.replace(
+                    'print("Native Yamada backend:", native_available())',
+                    'print("Python executable:", sys.executable)\nprint("Native Yamada backend:", native_available())',
+                )
             set_text(c, s)
 
 
 def repair_regression(nb):
-    # Historical branch comparison intentionally uses source worktrees; make that explicit.
+    # Historical comparison is the only intentional source-worktree exception.
     for c in nb["cells"]:
         if c.get("id") == "setup":
             s = text(c)
             if "Current notebook environment" not in s:
                 insert = '''\nimport knotted_graph\nfrom knotted_graph.invariants.yamada.native import native_available, native_import_error\nprint('Current notebook environment:', sys.executable)\nprint('Current KnottedGraph:', Path(knotted_graph.__file__).resolve())\nprint('Native Yamada backend:', native_available())\nprint('Native import error:', native_import_error())\nprint('NOTE: the historical regression subprocesses intentionally import each detached source worktree; this notebook is a correctness regression, not a performance benchmark.')\n'''
-                s = s.replace("DRIVER = ROOT / 'dev' / 'application_yamada_regression.py'\n", "DRIVER = ROOT / 'dev' / 'application_yamada_regression.py'\n" + insert)
+                s = s.replace(
+                    "DRIVER = ROOT / 'dev' / 'application_yamada_regression.py'\n",
+                    "DRIVER = ROOT / 'dev' / 'application_yamada_regression.py'\n" + insert,
+                )
             set_text(c, s)
 
 
 def repair_generic(nb):
     for c in nb["cells"]:
         if c.get("cell_type") == "code":
-            s = replace_setup_source(text(c))
-            set_text(c, s)
+            set_text(c, replace_setup_source(text(c)))
 
 
 def has_yamada(nb):
-    return any(any(m in text(c) for m in YAMADA_MARKERS) for c in nb["cells"] if c.get("cell_type") == "code")
+    return any(
+        any(m in text(c) for m in YAMADA_MARKERS)
+        for c in nb["cells"]
+        if c.get("cell_type") == "code"
+    )
 
 
 def validate(path, nb):
@@ -337,9 +361,13 @@ def validate(path, nb):
                     if frag in s:
                         raise AssertionError(f"{path}: stale source override: {frag}")
     if has_yamada(nb) and path not in PLOTTING_ONLY:
-        joined = "\n".join(text(c) for c in nb["cells"] if c.get("cell_type") == "code")
+        joined = "\n".join(
+            text(c) for c in nb["cells"] if c.get("cell_type") == "code"
+        )
         if "native_available" not in joined or "native_import_error" not in joined:
-            raise AssertionError(f"{path}: Yamada evaluation lacks native-backend provenance")
+            raise AssertionError(
+                f"{path}: Yamada evaluation lacks native-backend provenance"
+            )
 
 
 def process(path, check=False):
@@ -367,7 +395,9 @@ def process(path, check=False):
     after = json.dumps(nb, sort_keys=True)
     if check:
         if before != after:
-            raise AssertionError(f"{path} is not normalized; run this script without --check")
+            raise AssertionError(
+                f"{path} is not normalized; run this script without --check"
+            )
     elif before != after:
         path.write_text(json.dumps(nb, indent=1, ensure_ascii=False) + "\n")
         print("updated", path.relative_to(ROOT))
