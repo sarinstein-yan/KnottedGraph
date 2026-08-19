@@ -1,0 +1,117 @@
+name: Temporary update torus notebook
+
+on:
+  push:
+    branches: [perf/yamada-max-optimization]
+    paths:
+      - .github/workflows/temporary-update-torus-notebook.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/yamada-max-optimization
+      - name: Update notebook 03 certified torus section
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb')
+          nb = json.loads(path.read_text())
+          cells = {cell.get('id'): cell for cell in nb['cells']}
+
+          def set_source(cell_id, text):
+              cell = cells[cell_id]
+              if cell['cell_type'] == 'code':
+                  cell['source'] = [line + '\n' for line in text.rstrip('\n').splitlines()]
+                  cell['execution_count'] = None
+                  cell['outputs'] = []
+              else:
+                  cell['source'] = text
+
+          set_source('essential-torus-config', '''# Odd n values define T(2,n) constituent knots with certified crossing number n.
+          # The local paper run covers every odd crossing count below 20; CI keeps a small smoke pair.
+          ESSENTIAL_TORUS_N = [3, 5] if IS_CI else [3, 5, 7, 9, 11, 13, 15, 17, 19]
+          essential_raw_csv = RES / "topoly_yamada_essential_torus_raw.csv"
+          essential_figure_png = FIG / "topoly_vs_knottedgraph_essential_torus_crossings.png"
+          essential_figure_pdf = FIG / "topoly_vs_knottedgraph_essential_torus_crossings.pdf"
+
+          assert ESSENTIAL_TORUS_N == sorted(set(ESSENTIAL_TORUS_N))
+          assert all(n >= 3 and n % 2 == 1 for n in ESSENTIAL_TORUS_N)
+          print("Certified T(2,n) crossing grid:", ESSENTIAL_TORUS_N)'''.replace('          ', ''))
+
+          set_source('essential-torus-check-md', '''### 6.2 Independent correctness certificate and Topoly cross-check
+
+          The checks below separate facts that must not be conflated:
+
+          1. the **topological construction certificate** identifies the constituent cycle as $T(2,n)$ and the supplied diagram has exactly $n$ crossings;
+          2. KnottedGraph is checked against an **independently coded Dobrynin--Vesnin Theorem 2 formula** for this spatial theta family;
+          3. Topoly is an external implementation cross-check and timing comparator, not the correctness oracle.
+
+          Therefore a Topoly disagreement, timeout, or internal error is reported explicitly rather than being interpreted as a KnottedGraph correctness failure. A KnottedGraph/formula mismatch remains a hard benchmark failure.'''.replace('          ', ''))
+
+          set_source('essential-torus-check', '''assert {row["family"] for row in essential_rows} == {"essential_torus_constituent"}
+
+          for row in essential_rows:
+              n = int(row["size"])
+              assert n in ESSENTIAL_TORUS_N
+              assert row["constituent_knot"] == f"T(2,{n})"
+              assert int(row["certified_min_crossings"]) == n
+              assert int(row["crossings"]) == n
+              assert bool(row["crossing_minimal_diagram"])
+              assert int(row["V"]) == 2 and int(row["E"]) == 3
+              assert bool(row["connected"])
+              assert int(row["regular_degree"]) == 3
+              assert row["correctness"] == "PASS", row
+              assert row["knottedgraph_formula"] == "PASS", row
+              assert row["knottedgraph_status"] == "ok", row
+              assert row["pd_hash"]
+
+          essential_keys = list(dict.fromkeys(key for row in essential_rows for key in row))
+          with essential_raw_csv.open("w", newline="") as handle:
+              writer = csv.DictWriter(handle, fieldnames=essential_keys)
+              writer.writeheader()
+              writer.writerows(essential_rows)
+
+          topoly_agree = sum(row.get("topoly_agrees") is True for row in essential_rows)
+          topoly_disagree = sum(row.get("topoly_agrees") is False for row in essential_rows)
+          topoly_not_comparable = sum(row.get("topoly_agrees") is None for row in essential_rows)
+          print(f"PASS: all {len(essential_rows)} KnottedGraph rows match the independent theorem formula.")
+          print(
+              "Topoly cross-check: "
+              f"{topoly_agree} agree, {topoly_disagree} disagree, "
+              f"{topoly_not_comparable} not comparable after timeout/error/skip."
+          )
+          print("wrote", essential_raw_csv)'''.replace('          ', ''))
+
+          set_source('essential-torus-interpret', '''### 6.4 Interpretation
+
+          The two crossing experiments answer different questions and should be reported separately:
+
+          | Benchmark | What $c$ measures | Crossings essential? | Purpose |
+          | --- | --- | --- | --- |
+          | Controlled crossing family | supplied PD complexity | not necessarily | raw evaluator scaling |
+          | $T(2,n)$ constituent family | certified minimal crossing number | **yes** | topology-hard scaling |
+
+          The second family deliberately holds the abstract theta graph fixed while increasing embedding complexity. Because the certificate comes from a constituent knot with known crossing number, Reidemeister simplification cannot reduce these examples below the reported $n$ crossings.
+
+          For this family, **KnottedGraph correctness is established independently of Topoly** by the closed-form Dobrynin--Vesnin result. Topoly agreement is still recorded wherever Topoly completes, but it is shown as an external cross-check rather than used to define correctness. This distinction matters at larger examples where an external implementation may disagree or fail even though the theorem-backed KnottedGraph result remains independently verifiable.'''.replace('          ', ''))
+
+          path.write_text(json.dumps(nb, indent=1, ensure_ascii=False) + '\n')
+          PY
+      - name: Commit notebook update
+        run: |
+          if git diff --quiet -- User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb
+          git commit -m "Update certified torus benchmark validation semantics"
+          git fetch origin perf/yamada-max-optimization
+          git rebase origin/perf/yamada-max-optimization
+          git push origin HEAD:perf/yamada-max-optimization
