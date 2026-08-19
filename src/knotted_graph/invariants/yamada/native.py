@@ -5,10 +5,11 @@ the compact deletion--contraction recurrence and state summation run in C++.
 If the native int64 coefficient fast path overflows, the computation is rerun
 with the existing arbitrary-precision Python Laurent kernel, preserving exactness.
 
-High-crossing prepared diagrams additionally use an exact structural recursion
-that applies Reidemeister-II cancellation and skein identities before falling
-back to the legacy native ``3**c`` state sum. Small diagrams stay on the legacy
-C++ path because its constant factors are excellent there.
+Prepared diagrams first pass through conservative exact structural fast paths.
+The certified Dobrynin--Vesnin Theta(n) family is evaluated by its published
+closed form. Other high-crossing diagrams may use exact skein/RII recursion
+before falling back to the legacy native ``3**c`` state sum. Small generic
+diagrams stay on the legacy C++ path because its constant factors are excellent.
 """
 
 from __future__ import annotations
@@ -66,6 +67,7 @@ class NativeCompactEvaluator:
         self._native = _yamada_native.NativeEvaluator() if native_available() else None
         self.native_calls = 0
         self.fallback_calls = 0
+        self.theta_twist_calls = 0
         self.structural_calls = 0
         self.last_structural_stats = None
         self.memo = _MemoSizeProxy(self)
@@ -127,7 +129,7 @@ class NativeCompactEvaluator:
         """Exact legacy prepared-state sum with no structural redispatch.
 
         This method exists both as the production fallback and as an independent
-        regression oracle for the structural high-crossing path.
+        regression oracle for the structural high-crossing paths.
         """
         if self._native is not None and hasattr(self._native, "compute_prepared"):
             try:
@@ -166,7 +168,18 @@ class NativeCompactEvaluator:
         return total
 
     def compute_prepared_laurent(self, prepared):
-        """Evaluate a prepared diagram with exact size-aware dispatch."""
+        """Evaluate a prepared diagram with exact size-aware structural dispatch."""
+        # First try the strongest possible optimization: a mathematically
+        # certified family with a published closed form. The recognizer returns
+        # None for every diagram not proven to be the canonical odd-n theta
+        # two-braid family, so there is no heuristic acceptance here.
+        from .theta_twist_prepared import certified_prepared_theta_twist_laurent
+
+        theta_value = certified_prepared_theta_twist_laurent(prepared)
+        if theta_value is not None:
+            self.theta_twist_calls += 1
+            return theta_value
+
         crossing_count = len(prepared.crossing_ids)
         if crossing_count < STRUCTURAL_DISPATCH_MIN_CROSSINGS:
             return self.compute_prepared_bulk_laurent(prepared)
