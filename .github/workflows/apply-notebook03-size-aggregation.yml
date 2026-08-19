@@ -1,0 +1,34 @@
+name: Apply notebook 03 size aggregation update
+
+on:
+  push:
+    branches:
+      - perf/yamada-max-optimization
+
+permissions:
+  contents: write
+
+jobs:
+  rewrite:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/yamada-max-optimization
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Update notebook 03 plotting narrative
+        run: python dev/update_notebook03_size_aggregation.py
+      - name: Verify scope and commit
+        run: |
+          git diff --exit-code -- . ':!User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb' || {
+            echo 'Unexpected file changes'; exit 1;
+          }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb
+          git commit -m 'Average notebook 03 size views across repeated rows'
+          git push origin HEAD:perf/yamada-max-optimization
