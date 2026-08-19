@@ -5,11 +5,10 @@ the compact deletion--contraction recurrence and state summation run in C++.
 If the native int64 coefficient fast path overflows, the computation is rerun
 with the existing arbitrary-precision Python Laurent kernel, preserving exactness.
 
-Prepared diagrams first pass through conservative exact structural fast paths.
-The certified Dobrynin--Vesnin Theta(n) family is evaluated by its published
-closed form. Other high-crossing diagrams may use exact skein/RII recursion
-before falling back to the legacy native ``3**c`` state sum. Small generic
-diagrams stay on the legacy C++ path because its constant factors are excellent.
+Prepared diagrams use the generic exact structural engine for sufficiently large
+crossing count.  No theorem-family recognizer or precomputed polynomial is part
+of production dispatch; published formulas are used only by external validation
+benchmarks.
 """
 
 from __future__ import annotations
@@ -25,9 +24,9 @@ except Exception as exc:  # pragma: no cover - platform/build fallback
     _NATIVE_IMPORT_ERROR = exc
 
 # Below this number of unresolved crossings the native exhaustive state sum is
-# normally faster than Python-level structural look-ahead. This is a dispatch
+# normally faster than Python-level structural reduction. This is a performance
 # policy only; both branches are algebraically exact and regression-compared.
-STRUCTURAL_DISPATCH_MIN_CROSSINGS = 10
+STRUCTURAL_DISPATCH_MIN_CROSSINGS = 8
 
 
 def native_available() -> bool:
@@ -67,6 +66,8 @@ class NativeCompactEvaluator:
         self._native = _yamada_native.NativeEvaluator() if native_available() else None
         self.native_calls = 0
         self.fallback_calls = 0
+        # Retained for backward-compatible diagnostics. Production dispatch no
+        # longer invokes the former theorem-backed theta shortcut.
         self.theta_twist_calls = 0
         self.structural_calls = 0
         self.last_structural_stats = None
@@ -96,7 +97,6 @@ class NativeCompactEvaluator:
                 self.native_calls += 1
                 return _as_laurent(self._native.compute(_rows(compact)))
             except OverflowError:
-                # Exactness takes priority over speed. Python integers are arbitrary precision.
                 self.fallback_calls += 1
                 return self._python().compute_laurent(compact)
         self.fallback_calls += 1
@@ -126,10 +126,10 @@ class NativeCompactEvaluator:
         return total
 
     def compute_prepared_bulk_laurent(self, prepared):
-        """Exact legacy prepared-state sum with no structural redispatch.
+        """Exact exhaustive prepared-state sum with no structural redispatch.
 
-        This method exists both as the production fallback and as an independent
-        regression oracle for the structural high-crossing paths.
+        This method is both the guarded production fallback and an independent
+        regression oracle for the structural high-crossing path.
         """
         if self._native is not None and hasattr(self._native, "compute_prepared"):
             try:
@@ -148,8 +148,6 @@ class NativeCompactEvaluator:
             except OverflowError:
                 self.fallback_calls += 1
 
-        # Preserve exact arbitrary-precision behavior on non-native platforms or
-        # int64 overflow by evaluating the identical prepared state definition.
         import itertools
         from .fast import add, shift
 
@@ -168,18 +166,7 @@ class NativeCompactEvaluator:
         return total
 
     def compute_prepared_laurent(self, prepared):
-        """Evaluate a prepared diagram with exact size-aware structural dispatch."""
-        # First try the strongest possible optimization: a mathematically
-        # certified family with a published closed form. The recognizer returns
-        # None for every diagram not proven to be the canonical odd-n theta
-        # two-braid family, so there is no heuristic acceptance here.
-        from .theta_twist_prepared import certified_prepared_theta_twist_laurent
-
-        theta_value = certified_prepared_theta_twist_laurent(prepared)
-        if theta_value is not None:
-            self.theta_twist_calls += 1
-            return theta_value
-
+        """Evaluate a prepared diagram with exact size-aware generic dispatch."""
         crossing_count = len(prepared.crossing_ids)
         if crossing_count < STRUCTURAL_DISPATCH_MIN_CROSSINGS:
             return self.compute_prepared_bulk_laurent(prepared)
