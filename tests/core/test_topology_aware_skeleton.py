@@ -20,14 +20,25 @@ def _trivalent_t_skeleton(size=15):
     return image
 
 
-def _square_ring(size=15):
+def _diamond_ring(size=17):
+    """A planar digital cycle with exactly two 26-neighbours per voxel."""
     image = np.zeros((size, size, size), dtype=bool)
-    z = size // 2
-    lo, hi = 3, size - 4
-    image[lo : hi + 1, lo, z] = True
-    image[lo : hi + 1, hi, z] = True
-    image[lo, lo : hi + 1, z] = True
-    image[hi, lo : hi + 1, z] = True
+    c = size // 2
+    z = c
+    radius = 5
+    vertices = [
+        (c - radius, c),
+        (c, c + radius),
+        (c + radius, c),
+        (c, c - radius),
+    ]
+    for (x0, y0), (x1, y1) in zip(vertices, vertices[1:] + vertices[:1]):
+        steps = max(abs(x1 - x0), abs(y1 - y0))
+        for step in range(steps):
+            alpha = step / steps
+            x = int(round(x0 + alpha * (x1 - x0)))
+            y = int(round(y0 + alpha * (y1 - y0)))
+            image[x, y, z] = True
     return image
 
 
@@ -60,7 +71,21 @@ def test_topology_aware_edge_endpoints_match_collapsed_node_positions():
 
 
 def test_topology_aware_pure_ring_is_closed_self_loop():
-    graph = topology_aware_skeleton_image_to_graph(_square_ring(), junction_hops=1)
+    image = _diamond_ring()
+    foreground = np.argwhere(image)
+    foreground_set = {tuple(p) for p in foreground}
+    for point in foreground:
+        neighbours = 0
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for dz in (-1, 0, 1):
+                    if (dx, dy, dz) == (0, 0, 0):
+                        continue
+                    q = tuple(point + np.array([dx, dy, dz]))
+                    neighbours += q in foreground_set
+        assert neighbours == 2
+
+    graph = topology_aware_skeleton_image_to_graph(image, junction_hops=1)
     assert graph.number_of_nodes() == 1
     assert graph.number_of_edges() == 1
     u, v, data = next(iter(graph.edges(data=True)))
