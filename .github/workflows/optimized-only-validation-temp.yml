@@ -45,7 +45,6 @@ jobs:
           )
           bootstrap = importlib.util.module_from_spec(spec)
           spec.loader.exec_module(bootstrap)
-
           bootstrap.write_payload()
 
           old_marker = "compute_yamada_" + "polynomial_recursive("
@@ -84,52 +83,49 @@ jobs:
       - name: Normalize notebook package environments
         run: python dev/normalize_notebook_environments.py
 
-      - name: Install complete validation environment
+      - name: Install complete validation environment and build native extension
         run: uv sync --extra all --group dev --group docs --group benchmark
-
-      - name: Build native Yamada backend
-        run: uv run python dev/build_yamada_native.py
 
       - name: Verify native backend
         run: |
-          uv run python - <<'PY'
+          uv run --no-sync python - <<'PY'
           from knotted_graph.invariants.yamada.native import native_available, native_import_error
           assert native_available(), native_import_error()
           print('PASS: native Yamada backend available')
           PY
 
       - name: Check optimized-only migration is idempotent
-        run: uv run python dev/migrate_optimized_paths.py --check
+        run: uv run --no-sync python dev/migrate_optimized_paths.py --check
 
       - name: Repository consistency
-        run: uv run python dev/check_repository_consistency.py
+        run: uv run --no-sync python dev/check_repository_consistency.py
 
       - name: Notebook portability
-        run: uv run python dev/check_notebook_portability.py
+        run: uv run --no-sync python dev/check_notebook_portability.py
 
       - name: Ruff
-        run: uv run ruff check src tests dev
+        run: uv run --no-sync ruff check src tests dev
 
       - name: Full pytest suite
-        run: uv run pytest -q
+        run: uv run --no-sync pytest -q
 
       - name: Execute Yamada sanity notebook
         env:
           MPLBACKEND: Agg
           PYVISTA_OFF_SCREEN: 'true'
-        run: uv run jupyter nbconvert --to notebook --execute User_guide/benchmarks/01_sanity_checks.ipynb --output /tmp/01_sanity_checks.executed.ipynb --ExecutePreprocessor.timeout=1800
+        run: uv run --no-sync jupyter nbconvert --to notebook --execute User_guide/benchmarks/01_sanity_checks.ipynb --output /tmp/01_sanity_checks.executed.ipynb --ExecutePreprocessor.timeout=1800
 
       - name: Execute application output regression notebook
         env:
           MPLBACKEND: Agg
           PYVISTA_OFF_SCREEN: 'true'
-        run: uv run jupyter nbconvert --to notebook --execute User_guide/benchmarks/02_application_output_regression.ipynb --output /tmp/02_application_output_regression.executed.ipynb --ExecutePreprocessor.timeout=2400
+        run: uv run --no-sync jupyter nbconvert --to notebook --execute User_guide/benchmarks/02_application_output_regression.ipynb --output /tmp/02_application_output_regression.executed.ipynb --ExecutePreprocessor.timeout=2400
 
       - name: Execute 45-case ground-truth notebook
         env:
           MPLBACKEND: Agg
           PYVISTA_OFF_SCREEN: 'true'
-        run: uv run jupyter nbconvert --to notebook --execute User_guide/benchmarks/04_synthetic_ground_truth_validation.ipynb --output /tmp/04_synthetic_ground_truth_validation.executed.ipynb --ExecutePreprocessor.timeout=3600
+        run: uv run --no-sync jupyter nbconvert --to notebook --execute User_guide/benchmarks/04_synthetic_ground_truth_validation.ipynb --output /tmp/04_synthetic_ground_truth_validation.executed.ipynb --ExecutePreprocessor.timeout=3600
 
       - name: Remove temporary migration scaffolding
         run: |
