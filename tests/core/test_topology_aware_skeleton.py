@@ -9,11 +9,13 @@ from knotted_graph.extraction import (
 )
 
 
-def _trivalent_t_skeleton(size=15):
+def _trivalent_t_skeleton(size=25):
     image = np.zeros((size, size, size), dtype=bool)
     c = size // 2
     # Three long arms meeting at one physical junction. Under 26-connectivity,
     # voxels adjacent to the junction form a small multi-voxel branch blob.
+    # The arms are deliberately long enough that the endpoint zones and central
+    # junction zone remain disjoint for the two-hop production setting.
     image[2 : c + 1, c, c] = True
     image[c : size - 2, c, c] = True
     image[c, c : size - 2, c] = True
