@@ -51,7 +51,10 @@ def _two_diamond_rings(size=31):
             (c + radius, c),
             (c, c - radius),
         ]
-        for (x0, y0), (x1, y1) in zip(vertices, vertices[1:] + vertices[:1]):
+        for (x0, y0), (x1, y1) in zip(
+            vertices,
+            vertices[1:] + vertices[:1],
+        ):
             steps = max(abs(x1 - x0), abs(y1 - y0))
             for step in range(steps):
                 alpha = step / steps
@@ -82,9 +85,33 @@ def test_topology_aware_edge_endpoints_match_node_positions():
         points = np.asarray(data["pts"], dtype=float)
         u_pos = np.asarray(graph.nodes[u]["pos"], dtype=float)
         v_pos = np.asarray(graph.nodes[v]["pos"], dtype=float)
-        direct = np.array_equal(points[0], u_pos) and np.array_equal(points[-1], v_pos)
-        reverse = np.array_equal(points[0], v_pos) and np.array_equal(points[-1], u_pos)
+        direct = np.array_equal(points[0], u_pos) and np.array_equal(
+            points[-1], v_pos
+        )
+        reverse = np.array_equal(points[0], v_pos) and np.array_equal(
+            points[-1], u_pos
+        )
         assert direct or reverse
+
+
+def test_default_sparse_output_matches_poly2graph_exactly():
+    image = _trivalent_t_skeleton()
+    expected = skeleton_image_to_graph(image, backend="poly2graph")
+    actual = skeleton_image_to_graph(image)
+
+    assert list(expected.nodes()) == list(actual.nodes())
+    assert list(expected.edges(keys=True)) == list(actual.edges(keys=True))
+    for node in expected.nodes():
+        assert np.array_equal(
+            expected.nodes[node]["pos"],
+            actual.nodes[node]["pos"],
+        )
+    for u, v, key in expected.edges(keys=True):
+        assert np.array_equal(
+            expected[u][v][key]["pts"],
+            actual[u][v][key]["pts"],
+        )
+        assert expected[u][v][key]["weight"] == actual[u][v][key]["weight"]
 
 
 def test_topology_aware_pure_ring_is_closed_self_loop():
@@ -146,4 +173,7 @@ def test_topology_aware_rejects_non_3d_input():
 
 def test_dispatch_rejects_unknown_backend():
     with pytest.raises(ValueError, match="backend"):
-        skeleton_image_to_graph(np.zeros((8, 8, 8), dtype=bool), backend="unknown")
+        skeleton_image_to_graph(
+            np.zeros((8, 8, 8), dtype=bool),
+            backend="unknown",
+        )
