@@ -1,15 +1,13 @@
 """Convert skeletonized images into spatial graph objects.
 
 The topology-aware backend works directly on the sparse set of foreground
-skeleton voxels.  It avoids the full-volume marking/parsing scan used by
+skeleton voxels. It avoids the full-volume marking/parsing scan used by
 ``poly2graph`` and treats a junction as a *zone* rather than as an arbitrary
-single voxel.  This is important for 3-D thinning, where one physical
+single voxel. This is important for 3-D thinning, where one physical
 branch-point is commonly represented by a small connected cloud of voxels.
 """
 
 from __future__ import annotations
-
-from collections.abc import Iterable
 
 import networkx as nx
 import numpy as np
@@ -34,7 +32,7 @@ def _sparse_voxel_adjacency(image: np.ndarray) -> tuple[np.ndarray, list[list[in
 
     ``np.flatnonzero`` is deliberate here: for sparse one-voxel skeletons it is
     substantially faster than ``np.argwhere`` and avoids a second full-volume
-    scan.  Neighbour lookup is performed by vectorised binary searches in the
+    scan. Neighbour lookup is performed by vectorised binary searches in the
     already-sorted flat index array.
     """
     flat = np.flatnonzero(image)
@@ -62,7 +60,7 @@ def _sparse_voxel_adjacency(image: np.ndarray) -> tuple[np.ndarray, list[list[in
         if left.size == 0:
             continue
 
-        # Linear-index arithmetic can wrap across a row/plane boundary.  The
+        # Linear-index arithmetic can wrap across a row/plane boundary. The
         # coordinate check removes precisely those false neighbours.
         wanted = np.asarray((dx, dy, dz), dtype=np.intp)
         actual = coords[right] - coords[left]
@@ -105,6 +103,28 @@ def _zone_components(zone: set[int], adjacency: list[list[int]]) -> list[list[in
     return components
 
 
+def _trace_cycle(
+    coords: np.ndarray,
+    adjacency: list[list[int]],
+) -> np.ndarray:
+    """Return an ordered closed polyline for a pure degree-2 component."""
+    start = 0
+    previous = -1
+    current = start
+    order = [start]
+    for _ in range(len(coords) + 1):
+        candidates = [v for v in adjacency[current] if v != previous]
+        if not candidates:
+            break
+        nxt = candidates[0]
+        if nxt == start:
+            order.append(start)
+            return coords[order].astype(float, copy=True)
+        order.append(nxt)
+        previous, current = current, nxt
+    raise RuntimeError("pure skeleton cycle could not be traced")
+
+
 def _trace_zone_graph(
     coords: np.ndarray,
     adjacency: list[list[int]],
@@ -118,12 +138,18 @@ def _trace_zone_graph(
     degree = np.fromiter((len(row) for row in adjacency), dtype=np.int16)
     special = set(np.flatnonzero(degree != 2).tolist())
 
-    # A pure ring has no non-degree-2 voxels.  Represent it as one node with a
-    # self-loop, matching the multigraph convention used by the package.
+    # A pure ring has no non-degree-2 voxels. Represent it as one node with a
+    # geometrically closed self-loop, matching the package's multigraph model.
     if not special:
+        points = _trace_cycle(coords, adjacency)
         graph = nx.MultiGraph()
-        graph.add_node(0, pos=coords[0].astype(float))
-        graph.add_edge(0, 0, pts=coords.copy(), weight=float(len(coords)))
+        graph.add_node(0, pos=points[0].copy())
+        graph.add_edge(
+            0,
+            0,
+            pts=points,
+            weight=float(np.linalg.norm(np.diff(points, axis=0), axis=1).sum()),
+        )
         return graph
 
     zone = _expand_zone(special, adjacency, junction_hops)
@@ -175,7 +201,18 @@ def _trace_zone_graph(
                     continue
 
                 target_component = component_of[current]
-                points = coords[path].astype(float, copy=False)
+                points = coords[path].astype(float, copy=True)
+                # The collapsed junction-zone centroid is the graph vertex, so
+                # embedded edge polylines must terminate exactly there.
+                points[0] = np.asarray(graph.nodes[source_component]["pos"], dtype=float)
+                points[-1] = np.asarray(graph.nodes[target_component]["pos"], dtype=float)
+                keep = np.ones(len(points), dtype=bool)
+                if len(points) > 1:
+                    keep[1:] = np.any(np.diff(points, axis=0) != 0, axis=1)
+                points = points[keep]
+                if len(points) < 2:
+                    continue
+
                 length = float(
                     np.linalg.norm(np.diff(points, axis=0), axis=1).sum()
                 )
@@ -200,7 +237,7 @@ def _topology_score(graph: nx.MultiGraph, max_junction_degree: int) -> tuple[int
     """Score obvious junction artefacts without using ground-truth information."""
     probe = nx.MultiGraph(graph)
 
-    # Degree-2 subdivisions are topologically immaterial.  Suppressing them in
+    # Degree-2 subdivisions are topologically immaterial. Suppressing them in
     # the *score only* prevents a discretisation-dependent split from affecting
     # adaptive junction-zone selection while leaving the returned geometry
     # untouched for the package's normal simplification stage.
@@ -244,10 +281,10 @@ def topology_aware_skeleton_image_to_graph(
         Number of voxel-graph hops absorbed into every endpoint/junction zone.
         Two is a conservative default for Lee-thinned 3-D volumes.
     max_junction_degree
-        Optional topology hint.  When supplied, one slightly larger junction
+        Optional topology hint. When supplied, one slightly larger junction
         zone is evaluated only if the first result contains an obvious degree
-        defect, and the lower-defect result is returned.  ``3`` is appropriate
-        for the degree-at-most-three spatial graphs used by Yamada validation.
+        defect, and the lower-defect result is returned. ``3`` is appropriate
+        for degree-at-most-three spatial graphs.
     adaptive_extra_hops
         Number of additional graph hops considered by the adaptive retry.
 
