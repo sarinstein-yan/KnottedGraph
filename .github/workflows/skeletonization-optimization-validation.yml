@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - Skeltonization_optimization
+      - analysis/skeletonization-45-breakthrough
     paths-ignore:
       - dev/skeletonization_validation_results.txt
   workflow_dispatch:
@@ -118,6 +119,7 @@ jobs:
         run: |
           {
             echo "commit=${GITHUB_SHA}"
+            echo "branch=${GITHUB_REF_NAME}"
             echo "native=${{ steps.native.outcome }}"
             echo "unit=${{ steps.unit.outcome }}"
             echo "portability=${{ steps.portability.outcome }}"
@@ -135,7 +137,7 @@ jobs:
           git add -- dev/skeletonization_validation_results.txt
           if ! git diff --cached --quiet; then
             git commit -m "Record skeletonization optimization validation [skip ci]"
-            git push origin HEAD:Skeltonization_optimization
+            git push origin HEAD:"${GITHUB_REF_NAME}"
           fi
 
       - name: Enforce validation gates
