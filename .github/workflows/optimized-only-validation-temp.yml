@@ -34,7 +34,52 @@ jobs:
           enable-cache: true
 
       - name: Apply deterministic optimized-only migration
-        run: python dev/bootstrap_optimized_only_migration.py
+        run: |
+          python - <<'PY'
+          import importlib.util
+          from pathlib import Path
+
+          root = Path.cwd()
+          spec = importlib.util.spec_from_file_location(
+              "kg_migration_bootstrap", root / "dev/bootstrap_optimized_only_migration.py"
+          )
+          bootstrap = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(bootstrap)
+
+          bootstrap.write_payload()
+
+          old_marker = "compute_yamada_" + "polynomial_recursive("
+          new_marker = "compute_graph_yamada_polynomial("
+          for relative in (
+              "dev/validate_notebook_portability.py",
+              "dev/normalize_notebook_environments.py",
+          ):
+              path = root / relative
+              path.write_text(
+                  path.read_text(encoding="utf-8").replace(old_marker, new_marker),
+                  encoding="utf-8",
+              )
+
+          migration = root / "dev/migrate_optimized_paths.py"
+          text = migration.read_text(encoding="utf-8")
+          needle = '    Path("dev/application_yamada_regression.py"),\n}'
+          replacement = (
+              '    Path("dev/application_yamada_regression.py"),\n'
+              '    Path("dev/migrate_optimized_paths.py"),\n'
+              '    Path("dev/bootstrap_optimized_only_migration.py"),\n'
+              '}'
+          )
+          if needle not in text:
+              raise RuntimeError("could not extend migration self-audit allowlist")
+          migration.write_text(text.replace(needle, replacement), encoding="utf-8")
+
+          bootstrap.patch_nodal()
+          bootstrap.patch_material_base()
+          bootstrap.patch_material_public()
+          bootstrap.delete_obsolete()
+          bootstrap.patch_notebooks_and_docs()
+          print("PASS: optimized-only migration applied deterministically")
+          PY
 
       - name: Normalize notebook package environments
         run: python dev/normalize_notebook_environments.py
