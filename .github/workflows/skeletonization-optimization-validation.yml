@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - Skeltonization_optimization
-      - analysis/skeletonization-45-breakthrough
     paths-ignore:
       - dev/skeletonization_validation_results.txt
   workflow_dispatch:
@@ -25,22 +24,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Mark validation started
-        shell: bash
-        run: |
-          {
-            echo "commit=${GITHUB_SHA}"
-            echo "branch=${GITHUB_REF_NAME}"
-            echo "status=started"
-          } > dev/skeletonization_validation_results.txt
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- dev/skeletonization_validation_results.txt
-          if ! git diff --cached --quiet; then
-            git commit -m "Record skeletonization validation start [skip ci]"
-            git push origin HEAD:"${GITHUB_REF_NAME}"
-          fi
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -135,7 +118,6 @@ jobs:
         run: |
           {
             echo "commit=${GITHUB_SHA}"
-            echo "branch=${GITHUB_REF_NAME}"
             echo "native=${{ steps.native.outcome }}"
             echo "unit=${{ steps.unit.outcome }}"
             echo "portability=${{ steps.portability.outcome }}"
@@ -148,10 +130,12 @@ jobs:
               if test -f "/tmp/${item}.log"; then cat "/tmp/${item}.log"; else echo "not run"; fi
             done
           } > dev/skeletonization_validation_results.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- dev/skeletonization_validation_results.txt
           if ! git diff --cached --quiet; then
             git commit -m "Record skeletonization optimization validation [skip ci]"
-            git push origin HEAD:"${GITHUB_REF_NAME}"
+            git push origin HEAD:Skeltonization_optimization
           fi
 
       - name: Enforce validation gates
