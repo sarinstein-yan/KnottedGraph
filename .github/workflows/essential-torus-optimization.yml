@@ -8,6 +8,7 @@ on:
       - "dev/benchmark_topoly_essential_torus_gate.py"
       - "dev/benchmark_regular_isotopy_normalizer_candidate.py"
       - "dev/benchmark_batch_r1_candidate.py"
+      - "dev/benchmark_r1_queue_candidate.py"
       - "tests/invariants/yamada/test_diagram_structural_dispatch.py"
       - ".github/workflows/essential-torus-optimization.yml"
   workflow_dispatch:
@@ -49,9 +50,9 @@ jobs:
       - name: Published and independent Yamada sanity checks
         run: uv run --no-sync python dev/run_yamada_sanity_checks.py
 
-      - name: Probe simultaneous R1 peeling through 161 crossings
+      - name: Probe queue-based R1 closure through 161 crossings
         run: >
-          uv run --no-sync python dev/benchmark_batch_r1_candidate.py
+          uv run --no-sync python dev/benchmark_r1_queue_candidate.py
           --n-values 19,31,51,81
           --mirror-n 19
           --candidate-only 121,161
