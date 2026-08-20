@@ -12,10 +12,6 @@ from knotted_graph.extraction import (
 def _trivalent_t_skeleton(size=25):
     image = np.zeros((size, size, size), dtype=bool)
     c = size // 2
-    # Three long arms meeting at one physical junction. Under 26-connectivity,
-    # voxels adjacent to the junction form a small multi-voxel branch blob.
-    # The arms are deliberately long enough that the endpoint zones and central
-    # junction zone remain disjoint for the two-hop production setting.
     image[2 : c + 1, c, c] = True
     image[c : size - 2, c, c] = True
     image[c, c : size - 2, c] = True
@@ -44,10 +40,30 @@ def _diamond_ring(size=17):
     return image
 
 
-def test_topology_aware_collapses_voxel_junction_blob():
+def _two_diamond_rings(size=31):
+    image = np.zeros((size, size, size), dtype=bool)
+    for z in (8, 22):
+        c = size // 2
+        radius = 5
+        vertices = [
+            (c - radius, c),
+            (c, c + radius),
+            (c + radius, c),
+            (c, c - radius),
+        ]
+        for (x0, y0), (x1, y1) in zip(vertices, vertices[1:] + vertices[:1]):
+            steps = max(abs(x1 - x0), abs(y1 - y0))
+            for step in range(steps):
+                alpha = step / steps
+                x = int(round(x0 + alpha * (x1 - x0)))
+                y = int(round(y0 + alpha * (y1 - y0)))
+                image[x, y, z] = True
+    return image
+
+
+def test_topology_aware_collapses_voxel_junction_blob_with_valence_hint():
     graph = topology_aware_skeleton_image_to_graph(
         _trivalent_t_skeleton(),
-        junction_hops=2,
         max_junction_degree=3,
     )
     assert isinstance(graph, nx.MultiGraph)
@@ -57,10 +73,9 @@ def test_topology_aware_collapses_voxel_junction_blob():
     ensure_embedding(graph, copy=False, normalize=False)
 
 
-def test_topology_aware_edge_endpoints_match_collapsed_node_positions():
+def test_topology_aware_edge_endpoints_match_node_positions():
     graph = topology_aware_skeleton_image_to_graph(
         _trivalent_t_skeleton(),
-        junction_hops=2,
         max_junction_degree=3,
     )
     for u, v, data in graph.edges(data=True):
@@ -87,7 +102,7 @@ def test_topology_aware_pure_ring_is_closed_self_loop():
                     neighbours += q in foreground_set
         assert neighbours == 2
 
-    graph = topology_aware_skeleton_image_to_graph(image, junction_hops=1)
+    graph = topology_aware_skeleton_image_to_graph(image)
     assert graph.number_of_nodes() == 1
     assert graph.number_of_edges() == 1
     u, v, data = next(iter(graph.edges(data=True)))
@@ -97,6 +112,31 @@ def test_topology_aware_pure_ring_is_closed_self_loop():
     assert np.array_equal(points[0], node_pos)
     assert np.array_equal(points[-1], node_pos)
     ensure_embedding(graph, copy=False, normalize=False)
+
+
+def test_disconnected_ring_components_are_all_preserved():
+    graph = topology_aware_skeleton_image_to_graph(_two_diamond_rings())
+    assert graph.number_of_nodes() == 2
+    assert graph.number_of_edges() == 2
+    assert nx.number_connected_components(graph) == 2
+    assert all(u == v for u, v in graph.edges())
+
+
+def test_auto_dispatch_uses_topology_aware_for_3d(monkeypatch):
+    import poly2graph
+
+    def fail_if_called(_image):
+        raise AssertionError("poly2graph should not be used for 3-D auto dispatch")
+
+    monkeypatch.setattr(poly2graph, "skeleton2graph", fail_if_called)
+    graph = skeleton_image_to_graph(_diamond_ring())
+    assert graph.number_of_edges() == 1
+
+
+def test_explicit_poly2graph_backend_remains_available():
+    image = _diamond_ring()
+    graph = skeleton_image_to_graph(image, backend="poly2graph")
+    assert isinstance(graph, nx.MultiGraph)
 
 
 def test_topology_aware_rejects_non_3d_input():
