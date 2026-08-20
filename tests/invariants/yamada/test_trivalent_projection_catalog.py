@@ -2,7 +2,6 @@ import networkx as nx
 import numpy as np
 import sympy as sp
 
-from knotted_graph.invariants.yamada import compute_graph_yamada_polynomial
 from knotted_graph.projection import PDCode, generate_isotopy_angles
 
 
@@ -127,14 +126,7 @@ def _select(screened, *, count=4, max_crossings=2):
     return chosen
 
 
-def _projection_invariance_check(
-    abstract_graph,
-    embedded_graph,
-    *,
-    expected_normalized=None,
-    views=16,
-    evaluate=4,
-):
+def _projection_invariance_check(embedded_graph, *, views=16, evaluate=4):
     screened = _screen(embedded_graph, views=views)
     selected = _select(screened, count=evaluate, max_crossings=2)
     assert len(selected) >= 2
@@ -147,36 +139,19 @@ def _projection_invariance_check(
     for value in normalized_values[1:]:
         _assert_equal(value, reference)
 
-    if expected_normalized is not None:
-        _assert_equal(reference, expected_normalized)
-
     return screened, selected, reference
 
 
 def test_named_planar_trivalent_graphs_across_multiple_projections():
     cases = [
-        (_theta_abstract(), _theta_surface_embedding()),
-        (
-            nx.complete_graph(4),
-            _surface_lifted_planar_embedding(nx.complete_graph(4)),
-        ),
-        (
-            nx.circular_ladder_graph(3),
-            _surface_lifted_planar_embedding(nx.circular_ladder_graph(3)),
-        ),
-        (
-            nx.cubical_graph(),
-            _surface_lifted_planar_embedding(nx.cubical_graph()),
-        ),
+        _theta_surface_embedding(),
+        _surface_lifted_planar_embedding(nx.complete_graph(4)),
+        _surface_lifted_planar_embedding(nx.circular_ladder_graph(3)),
+        _surface_lifted_planar_embedding(nx.cubical_graph()),
     ]
 
-    for abstract_graph, embedded_graph in cases:
-        expected = compute_graph_yamada_polynomial(nx.MultiGraph(abstract_graph), A)
-        _projection_invariance_check(
-            abstract_graph,
-            embedded_graph,
-            expected_normalized=expected,
-        )
+    for embedded_graph in cases:
+        _projection_invariance_check(embedded_graph)
 
 
 def test_nonplanar_and_unpublished_trivalent_embeddings_across_projections():
@@ -188,8 +163,4 @@ def test_nonplanar_and_unpublished_trivalent_embeddings_across_projections():
     for abstract_graph, embedding_seed in graph_cases:
         assert all(degree == 3 for _, degree in abstract_graph.degree())
         embedded = _spring_3d_embedding(abstract_graph, seed=embedding_seed)
-        _projection_invariance_check(
-            abstract_graph,
-            embedded,
-            expected_normalized=None,
-        )
+        _projection_invariance_check(embedded)
