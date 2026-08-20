@@ -112,7 +112,7 @@ jobs:
         run: uv run --no-sync python dev/check_repository_consistency.py
 
       - name: Notebook portability
-        run: uv run --no-sync python dev/check_notebook_portability.py
+        run: uv run --no-sync python dev/validate_notebook_portability.py
 
       - name: Ruff
         run: uv run --no-sync ruff check src tests dev
