@@ -64,6 +64,22 @@ def _two_diamond_rings(size=31):
     return image
 
 
+def _assert_raw_graph_equal(expected, actual):
+    assert list(expected.nodes()) == list(actual.nodes())
+    assert list(expected.edges(keys=True)) == list(actual.edges(keys=True))
+    for node in expected.nodes():
+        assert np.array_equal(
+            expected.nodes[node]["pos"],
+            actual.nodes[node]["pos"],
+        )
+    for u, v, key in expected.edges(keys=True):
+        assert np.array_equal(
+            expected[u][v][key]["pts"],
+            actual[u][v][key]["pts"],
+        )
+        assert expected[u][v][key]["weight"] == actual[u][v][key]["weight"]
+
+
 def test_topology_aware_collapses_voxel_junction_blob_with_valence_hint():
     graph = topology_aware_skeleton_image_to_graph(
         _trivalent_t_skeleton(),
@@ -98,20 +114,18 @@ def test_default_sparse_output_matches_poly2graph_exactly():
     image = _trivalent_t_skeleton()
     expected = skeleton_image_to_graph(image, backend="poly2graph")
     actual = skeleton_image_to_graph(image)
+    _assert_raw_graph_equal(expected, actual)
 
-    assert list(expected.nodes()) == list(actual.nodes())
-    assert list(expected.edges(keys=True)) == list(actual.edges(keys=True))
-    for node in expected.nodes():
-        assert np.array_equal(
-            expected.nodes[node]["pos"],
-            actual.nodes[node]["pos"],
-        )
-    for u, v, key in expected.edges(keys=True):
-        assert np.array_equal(
-            expected[u][v][key]["pts"],
-            actual[u][v][key]["pts"],
-        )
-        assert expected[u][v][key]["weight"] == actual[u][v][key]["weight"]
+
+def test_cropped_default_preserves_global_coordinates_and_order_exactly():
+    image = np.pad(
+        _trivalent_t_skeleton(),
+        ((11, 23), (7, 19), (5, 17)),
+        mode="constant",
+    )
+    expected = skeleton_image_to_graph(image, backend="poly2graph")
+    actual = skeleton_image_to_graph(image)
+    _assert_raw_graph_equal(expected, actual)
 
 
 def test_topology_aware_pure_ring_is_closed_self_loop():
