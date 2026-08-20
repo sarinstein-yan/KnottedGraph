@@ -171,9 +171,7 @@ def test_named_planar_trivalent_graphs_across_multiple_projections():
     ]
 
     for abstract_graph, embedded_graph in cases:
-        expected = compute_graph_yamada_polynomial(
-            nx.MultiGraph(abstract_graph), A, normalize=True
-        )
+        expected = compute_graph_yamada_polynomial(nx.MultiGraph(abstract_graph), A)
         _projection_invariance_check(
             abstract_graph,
             embedded_graph,
