@@ -9,7 +9,10 @@ import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PAYLOAD = "".join(path.read_text(encoding="utf-8") for path in sorted((ROOT / "dev/.migration_payload").glob("part*.txt")))
+PAYLOAD = "".join(
+    path.read_text(encoding="utf-8")
+    for path in sorted((ROOT / "dev/.migration_payload").glob("part*.txt"))
+)
 
 
 def write_payload() -> None:
@@ -99,11 +102,52 @@ def patch_material_public() -> None:
         r"\n    @cached_property\n    def _skeleton_image\(self\).*?(?=\n    @cached_property|\n    def |\Z)",
         re.S,
     )
-    text = pattern.sub("", text, count=1)
-    path.write_text(text, encoding="utf-8")
+    path.write_text(pattern.sub("", text, count=1), encoding="utf-8")
+
+
+def patch_ground_truth_notebook() -> None:
+    path = ROOT / "User_guide/benchmarks/04_synthetic_ground_truth_validation.ipynb"
+    notebook = json.loads(path.read_text(encoding="utf-8"))
+    cells = {cell.get("id"): cell for cell in notebook["cells"]}
+    cells["title"]["source"] = [
+        "# 04 — 45-case synthetic ground-truth skeleton recovery\n",
+        "\n",
+        "This benchmark contains **exactly 45 admissible reconstruction tests**: the original 38 cases plus seven distinct connected bridgeless cubic families: **Frucht, Möbius–Kantor, Desargues, Pappus, truncated tetrahedron, truncated cube, and Tutte**.\n",
+        "\n",
+        "Every case now exercises the same **current production pipeline** used by users: occupied-box Lee skeletonization followed by the canonical sparse topology-aware extractor. Recovered abstract graphs are compared directly with their independently known graph ground truth; no obsolete skeleton backend is executed.\n",
+        "\n",
+        "The truncated-tetrahedron challenge is particularly important because it requires the persistence selector to avoid a clean-looking split-junction reconstruction.\n",
+        "\n",
+        "Yamada validation remains separate and is evaluated only on embedded graphs with maximum degree $\\le 2$."
+    ]
+    cells["run45"]["source"] = [
+        "script = ROOT / 'dev' / 'run_skeletonization_45_validation.py'\n",
+        "proc = subprocess.run(\n",
+        "    [sys.executable, str(script)],\n",
+        "    cwd=ROOT,\n",
+        "    text=True,\n",
+        "    capture_output=True,\n",
+        ")\n",
+        "print(proc.stdout)\n",
+        "if proc.returncode:\n",
+        "    raise RuntimeError(\n",
+        "        f'45-case skeletonization validation failed.\\n'\n",
+        "        f'STDOUT:\\n{proc.stdout}\\nSTDERR:\\n{proc.stderr}'\n",
+        "    )\n",
+        "assert 'TOTAL=45 CURRENT=45/45' in proc.stdout\n",
+        "assert 'NEW_CHALLENGE_CASES=7/7' in proc.stdout\n",
+        "assert 'PASS: 45/45 current reconstructions and degree<=2 Yamada checks.' in proc.stdout\n",
+    ]
+    cells["accept"]["source"] = [
+        "## Acceptance criterion\n",
+        "\n",
+        "A pass requires all **45/45** current production reconstructions, all **7/7** newly added challenge families, and successful degree-$\\le2$ Yamada deformation checks. Performance is measured separately on the current production architecture rather than by retaining an obsolete parser in this correctness benchmark."
+    ]
+    path.write_text(json.dumps(notebook, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def patch_notebooks_and_docs() -> None:
+    patch_ground_truth_notebook()
     replace_text(
         "doc/developer/architecture.md",
         '`knotted_graph.extraction.skeleton_image_to_graph` is the canonical\nskeleton-to-graph entry point. For every 3-D image, `backend="auto"` uses the\nsecond-generation sparse extractor: empty image margins are cropped before\nforeground indexing, 26-neighbour adjacency is generated in exact historical\nlexicographic order, and returned coordinates remain in the original global\nvoxel frame. `knotted_graph.extraction.skeleton` exports the same function\nobjects, so the package and submodule import paths cannot diverge.\n\nThe historical `poly2graph.skeleton2graph` parser is retained only behind the\nexplicit `backend="poly2graph"` compatibility route used by regression and\nbenchmark code. It is not a normal 3-D production path.',
