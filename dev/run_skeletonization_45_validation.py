@@ -7,15 +7,10 @@ import time
 import networkx as nx
 import numpy as np
 import sympy as sp
-from skimage.morphology import ball, dilation, skeletonize
+from skimage.morphology import ball, dilation
 
-from knotted_graph.core import (
-    contract_short_edges,
-    remove_leaf_nodes,
-    simplify_edges,
-    smooth_edges,
-)
-from knotted_graph.extraction import skeleton_image_to_graph
+from knotted_graph.core import remove_leaf_nodes, simplify_edges, smooth_edges
+from knotted_graph.extraction import skeleton_image_to_graph, skeletonize_volume
 from knotted_graph.invariants.yamada.native import native_available, native_import_error
 from knotted_graph.projection import compute_yamada_polynomial
 
@@ -104,12 +99,7 @@ def straight_clearance(graph, positions):
         for a, b in edges[index + 1 :]:
             if {u, v} & {a, b}:
                 continue
-            best = min(
-                best,
-                segment_distance(
-                    positions[u], positions[v], positions[a], positions[b]
-                ),
-            )
+            best = min(best, segment_distance(positions[u], positions[v], positions[a], positions[b]))
     return best
 
 
@@ -127,9 +117,7 @@ def cubic_case(name, graph, planar, seed, cap):
     else:
         positions = None
         for trial in range(250):
-            layout = nx.spring_layout(
-                graph, dim=3, seed=seed + trial, iterations=700
-            )
+            layout = nx.spring_layout(graph, dim=3, seed=seed + trial, iterations=700)
             xyz = normalize([layout[node] for node in graph])
             candidate = {node: xyz[index] for index, node in enumerate(graph)}
             if straight_clearance(graph, candidate) > 0.055:
@@ -164,9 +152,6 @@ ORIGINAL_CASES = [
     cubic_case("heawood", nx.heawood_graph(), False, 19, 0.024),
 ]
 
-# One deterministic, independently admissible reconstruction from each of seven
-# new connected bridgeless cubic graph families. The radius is part of the case
-# specification rather than being chosen after observing extraction output.
 CHALLENGE_CASES = [
     (fixed_spring_case("frucht", nx.frucht_graph(), 702), 1),
     (fixed_spring_case("moebius_kantor", nx.moebius_kantor_graph(), 710), 2),
@@ -180,15 +165,9 @@ CHALLENGE_CASES = [
 
 def rotation_xyz(a, b, c):
     a, b, c = np.deg2rad([a, b, c])
-    rx = np.array(
-        [[1, 0, 0], [0, np.cos(a), -np.sin(a)], [0, np.sin(a), np.cos(a)]]
-    )
-    ry = np.array(
-        [[np.cos(b), 0, np.sin(b)], [0, 1, 0], [-np.sin(b), 0, np.cos(b)]]
-    )
-    rz = np.array(
-        [[np.cos(c), -np.sin(c), 0], [np.sin(c), np.cos(c), 0], [0, 0, 1]]
-    )
+    rx = np.array([[1, 0, 0], [0, np.cos(a), -np.sin(a)], [0, np.sin(a), np.cos(a)]])
+    ry = np.array([[np.cos(b), 0, np.sin(b)], [0, 1, 0], [-np.sin(b), 0, np.cos(b)]])
+    rz = np.array([[np.cos(c), -np.sin(c), 0], [np.sin(c), np.cos(c), 0], [0, 0, 1]])
     return rz @ ry @ rx
 
 
@@ -236,10 +215,7 @@ def interior_separation(graph):
         for a, b, q0 in edges[index + 1 :]:
             p, q = (trimmed(p0), trimmed(q0)) if {u, v} & {a, b} else (p0, q0)
             for start in range(0, len(p), 128):
-                distances2 = np.sum(
-                    (p[start : start + 128, None, :] - q[None, :, :]) ** 2,
-                    axis=-1,
-                )
+                distances2 = np.sum((p[start : start + 128, None, :] - q[None, :, :]) ** 2, axis=-1)
                 best = min(best, float(np.sqrt(distances2.min())))
     return best
 
@@ -247,8 +223,7 @@ def interior_separation(graph):
 def admissible(case, graph, radius):
     physical_radius = radius * DX
     separation = interior_separation(graph)
-    limit = min(case.radius_cap, CLEARANCE_FRACTION * separation)
-    return physical_radius <= limit
+    return physical_radius <= min(case.radius_cap, CLEARANCE_FRACTION * separation)
 
 
 def resample(points, step):
@@ -281,16 +256,7 @@ def to_world(graph):
     return graph
 
 
-def cleanup_baseline(graph):
-    graph = remove_leaf_nodes(graph)
-    graph = simplify_edges(graph)
-    graph = contract_short_edges(graph, min_length=2.5 * DX, copy=False)
-    graph = remove_leaf_nodes(graph)
-    graph = simplify_edges(graph)
-    return smooth_edges(graph, epsilon=2 * DX, copy=False)
-
-
-def cleanup_optimized(graph):
+def cleanup(graph):
     graph = remove_leaf_nodes(graph)
     graph = simplify_edges(graph)
     return smooth_edges(graph, epsilon=2 * DX, copy=False)
@@ -304,7 +270,6 @@ def run_reconstruction_suite():
             for radius in RADII:
                 if admissible(case, target, radius):
                     rows.append((case, transform_name, radius, target, "original"))
-
     assert len(rows) == 38, len(rows)
 
     for case, radius in CHALLENGE_CASES:
@@ -314,81 +279,58 @@ def run_reconstruction_suite():
                 f"Challenge case {case.name} is not geometrically admissible at r={radius}"
             )
         rows.append((case, "affine", radius, target, "challenge"))
-
     assert len(rows) == 45, len(rows)
+
     records = []
     for index, (case, transform_name, radius, target, group) in enumerate(rows, 1):
         volume = voxelize(target, radius)
         start = time.perf_counter()
-        skeleton = skeletonize(volume, method="lee")
+        skeleton = skeletonize_volume(volume)
         skeleton_time = time.perf_counter() - start
 
-        baseline_times = []
-        optimized_times = []
+        extraction_times = []
+        extracted = None
         for _ in range(3):
             start = time.perf_counter()
-            baseline = skeleton_image_to_graph(skeleton, backend="poly2graph")
-            baseline_times.append(time.perf_counter() - start)
-            start = time.perf_counter()
-            optimized = skeleton_image_to_graph(
-                skeleton,
-                backend="topology_aware",
-                max_junction_degree=3,
-            )
-            optimized_times.append(time.perf_counter() - start)
+            extracted = skeleton_image_to_graph(skeleton, max_junction_degree=3)
+            extraction_times.append(time.perf_counter() - start)
+        assert extracted is not None
 
-        baseline_clean = cleanup_baseline(to_world(baseline))
-        optimized_clean = cleanup_optimized(to_world(optimized))
+        reconstructed = cleanup(to_world(extracted))
         truth = nx.MultiGraph(case.graph)
-        baseline_ok = nx.is_isomorphic(truth, baseline_clean)
-        optimized_ok = nx.is_isomorphic(truth, optimized_clean)
+        correct = nx.is_isomorphic(truth, reconstructed)
         record = {
             "index": index,
             "group": group,
             "case": case.name,
             "transform": transform_name,
             "radius": radius,
-            "baseline": baseline_ok,
-            "optimized": optimized_ok,
-            "baseline_extract": statistics.median(baseline_times),
-            "optimized_extract": statistics.median(optimized_times),
-            "skeleton_time": skeleton_time,
+            "correct": correct,
+            "extract_seconds": statistics.median(extraction_times),
+            "skeleton_seconds": skeleton_time,
         }
         records.append(record)
         print(record)
 
-    baseline_pass = sum(row["baseline"] for row in records)
-    optimized_pass = sum(row["optimized"] for row in records)
-    challenge_pass = sum(
-        row["optimized"] for row in records if row["group"] == "challenge"
-    )
-    baseline_time = statistics.median(row["baseline_extract"] for row in records)
-    optimized_time = statistics.median(row["optimized_extract"] for row in records)
-    speedup = baseline_time / optimized_time
-
-    print(f"TOTAL=45 BASELINE={baseline_pass}/45 OPTIMIZED={optimized_pass}/45")
+    passed = sum(row["correct"] for row in records)
+    challenge_pass = sum(row["correct"] for row in records if row["group"] == "challenge")
+    median_extract = statistics.median(row["extract_seconds"] for row in records)
+    median_skeleton = statistics.median(row["skeleton_seconds"] for row in records)
+    print(f"TOTAL=45 CURRENT={passed}/45")
     print(f"NEW_CHALLENGE_CASES={challenge_pass}/7")
     print(
-        "MEDIAN_EXTRACT "
-        f"baseline={1e3 * baseline_time:.3f} ms "
-        f"optimized={1e3 * optimized_time:.3f} ms "
-        f"speedup={speedup:.3f}x"
+        "MEDIAN_CURRENT "
+        f"skeleton={1e3 * median_skeleton:.3f} ms "
+        f"extract={1e3 * median_extract:.3f} ms"
     )
-    assert optimized_pass == 45
+    assert passed == 45
     assert challenge_pass == 7
-    assert optimized_pass > baseline_pass
-    assert optimized_time < baseline_time
-    assert speedup >= 1.50
     return records
 
 
 def cycle_graph(offset=(0, 0, 0), radius=0.6, samples=180):
     theta = np.linspace(0, 2 * np.pi, samples, endpoint=True)
-    points = np.c_[
-        radius * np.cos(theta),
-        radius * np.sin(theta),
-        np.zeros_like(theta),
-    ] + np.asarray(offset, dtype=float)
+    points = np.c_[radius * np.cos(theta), radius * np.sin(theta), np.zeros_like(theta)] + np.asarray(offset, dtype=float)
     points[-1] = points[0]
     graph = nx.MultiGraph()
     graph.add_node(0, pos=points[0].copy())
@@ -423,13 +365,13 @@ def run_degree_two_yamada_check():
         assert max(dict(graph.degree()).values()) <= 2
         deformed = affine_embedded(graph)
         assert max(dict(deformed.degree()).values()) <= 2
-        old = sp.expand(compute_yamada_polynomial(graph, A, n_jobs=1))
-        new = sp.expand(compute_yamada_polynomial(deformed, A, n_jobs=1))
-        print(label, old, new)
-        assert sp.expand(old - new) == 0
+        base_value = sp.expand(compute_yamada_polynomial(graph, A, n_jobs=1))
+        deformed_value = sp.expand(compute_yamada_polynomial(deformed, A, n_jobs=1))
+        print(label, base_value, deformed_value)
+        assert sp.expand(base_value - deformed_value) == 0
 
 
 if __name__ == "__main__":
     run_reconstruction_suite()
     run_degree_two_yamada_check()
-    print("PASS: 45/45 optimized reconstructions and degree<=2 Yamada checks.")
+    print("PASS: 45/45 current reconstructions and degree<=2 Yamada checks.")

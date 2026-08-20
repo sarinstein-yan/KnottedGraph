@@ -1,4 +1,4 @@
-"""Sparse zero-radius parser with exact historical edge-order semantics."""
+"""Exact sparse zero-radius parser for 3-D voxel skeletons."""
 
 from __future__ import annotations
 
@@ -6,17 +6,14 @@ import networkx as nx
 import numpy as np
 
 
-def trace_zero_radius_compatible(
+def trace_zero_radius(
     coords: np.ndarray,
     adjacency: list[list[int]],
 ) -> nx.MultiGraph:
-    """Reproduce ``poly2graph`` scan semantics without a full-volume pass.
+    """Trace sparse 26-neighbour skeleton voxels deterministically.
 
-    Node blobs are discovered in global foreground-scan order. Edges are then
-    started by scanning every node voxel in that same order. During a trace,
-    the historical parser keeps the last matching edge neighbour in its
-    lexicographic 3x3x3 offset scan; preserving that detail makes downstream
-    edge insertion order and point arrays exactly compatible.
+    Node zones are discovered in foreground-scan order and chains are inserted
+    deterministically so repeated runs preserve node, edge and polyline order.
     """
     n_voxels = len(coords)
     if n_voxels == 0:
@@ -45,8 +42,6 @@ def trace_zero_radius_compatible(
                     stack.append(v)
                 if not is_node_voxel[v]:
                     has_edge_neighbour = True
-
-        # Match skeleton2graph(..., iso=False): omit isolated voxel blobs.
         if not has_edge_neighbour:
             continue
         component.sort()
@@ -70,12 +65,10 @@ def trace_zero_radius_compatible(
         second_node_voxel = -1
         current = start
         path: list[int] = []
-
         for _ in range(n_voxels + 1):
             path.append(current)
             edge_alive[current] = False
             next_edge = -1
-
             for neighbour in adjacency[current]:
                 label = int(node_label[neighbour])
                 if label >= 0:
@@ -85,28 +78,20 @@ def trace_zero_radius_compatible(
                     else:
                         second_node = label
                         second_node_voxel = neighbour
-                # Deliberately overwrite: poly2graph's historical tracer uses
-                # newp=cp and therefore follows the last live edge neighbour.
                 if edge_alive[neighbour]:
                     next_edge = neighbour
-
             if second_node >= 0:
-                points = coords[
-                    [first_node_voxel, *path, second_node_voxel]
-                ].astype(float, copy=True)
+                points = coords[[first_node_voxel, *path, second_node_voxel]].astype(
+                    float, copy=True
+                )
                 points[0] = node_positions[first_node]
                 points[-1] = node_positions[second_node]
                 return first_node, second_node, points
-
             if next_edge < 0:
-                raise RuntimeError(
-                    "skeleton edge trace terminated without a node"
-                )
+                raise RuntimeError("skeleton edge trace terminated without a node")
             current = next_edge
-
         raise RuntimeError("skeleton edge trace did not terminate")
 
-    # Global foreground-scan order, matching poly2graph _parse_struc.
     for node_voxel in range(n_voxels):
         if node_label[node_voxel] < 0:
             continue
@@ -117,16 +102,9 @@ def trace_zero_radius_compatible(
                     source,
                     target,
                     pts=points,
-                    weight=float(
-                        np.linalg.norm(
-                            np.diff(points, axis=0),
-                            axis=1,
-                        ).sum()
-                    ),
+                    weight=float(np.linalg.norm(np.diff(points, axis=0), axis=1).sum()),
                 )
 
-    # Remaining degree-2 components are rings. Promote their first foreground
-    # voxel to a node exactly as poly2graph's ring=True path does.
     for voxel in range(n_voxels):
         if not edge_alive[voxel]:
             continue
@@ -136,7 +114,6 @@ def trace_zero_radius_compatible(
         node_label[voxel] = node_id
         edge_alive[voxel] = False
         graph.add_node(node_id, pos=position)
-
         for neighbour in adjacency[voxel]:
             if edge_alive[neighbour]:
                 source, target, points = trace(neighbour)
@@ -144,12 +121,6 @@ def trace_zero_radius_compatible(
                     source,
                     target,
                     pts=points,
-                    weight=float(
-                        np.linalg.norm(
-                            np.diff(points, axis=0),
-                            axis=1,
-                        ).sum()
-                    ),
+                    weight=float(np.linalg.norm(np.diff(points, axis=0), axis=1).sum()),
                 )
-
     return graph

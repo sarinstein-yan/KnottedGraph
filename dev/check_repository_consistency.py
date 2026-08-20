@@ -61,7 +61,8 @@ def tracked_files() -> list[Path]:
         text=True,
         capture_output=True,
     ).stdout
-    return [ROOT / line for line in out.splitlines() if line]
+    paths = [ROOT / line for line in out.splitlines() if line]
+    return [path for path in paths if path.exists()]
 
 
 def text_of(path: Path) -> str | None:

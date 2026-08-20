@@ -1,11 +1,11 @@
 """Persistence-based topology repair for sparse 3-D skeleton graphs.
 
-The first sparse optimizer could return a clean-looking degree-valid graph even
-when a voxelized junction was still split into several graph vertices. The
-selector here therefore requires topology persistence across adjacent
-junction-zone scales whenever one-hop expansion could still merge surviving
-node zones. If no persistent valence-valid correction is demonstrated, it fails
-closed to the zero-radius graph.
+A digital junction can occupy several voxels and thereby create a locally
+fragmented graph even when every visible vertex satisfies a nominal valence
+bound.  The selector below traces the same sparse skeleton at adjacent
+junction-zone scales and accepts a correction only when the reduced topology is
+stable.  If persistence cannot be demonstrated it fails closed to the exact
+zero-radius sparse trace.
 """
 
 from __future__ import annotations
@@ -13,7 +13,12 @@ from __future__ import annotations
 import networkx as nx
 import numpy as np
 
-from . import _legacy_skeleton as _legacy_sparse
+from ._tracing import (
+    adjacency_components,
+    reduced_weighted,
+    remove_leaves_for_diagnostic,
+    trace_component,
+)
 
 
 def _prepared_components(
@@ -22,13 +27,10 @@ def _prepared_components(
 ) -> list[tuple[np.ndarray, list[list[int]]]]:
     """Prepare connected components once for repeated multi-scale traces."""
     prepared: list[tuple[np.ndarray, list[list[int]]]] = []
-    for indices in _legacy_sparse._adjacency_components(adjacency):
+    for indices in adjacency_components(adjacency):
         remap = {old: index for index, old in enumerate(indices)}
         local_coords = coords[np.asarray(indices, dtype=np.intp)]
-        local_adjacency = [
-            [remap[v] for v in adjacency[old]]
-            for old in indices
-        ]
+        local_adjacency = [[remap[v] for v in adjacency[old]] for old in indices]
         prepared.append((local_coords, local_adjacency))
     return prepared
 
@@ -40,7 +42,7 @@ def _trace_prepared(
     graph = nx.MultiGraph()
     next_id = 0
     for local_coords, local_adjacency in prepared:
-        local = _legacy_sparse._trace_component(
+        local = trace_component(
             local_coords,
             local_adjacency,
             junction_hops=hops,
@@ -49,10 +51,7 @@ def _trace_prepared(
         local = nx.relabel_nodes(local, mapping, copy=True)
         graph = nx.compose(graph, local)
         next_id += local.number_of_nodes()
-
-    graph.remove_nodes_from(
-        [node for node, degree in graph.degree() if degree == 0]
-    )
+    graph.remove_nodes_from([node for node, degree in graph.degree() if degree == 0])
     return graph
 
 
@@ -70,10 +69,7 @@ def _core_fingerprint(graph: nx.MultiGraph) -> tuple:
     return tuple(sorted(components))
 
 
-def _anomaly_from_reduced(
-    reduced: nx.MultiGraph,
-    ratio: float,
-) -> int:
+def _anomaly_from_reduced(reduced: nx.MultiGraph, ratio: float) -> int:
     count = 0
     pairs: set[tuple[object, object]] = set()
     for u, v in reduced.edges():
@@ -87,7 +83,6 @@ def _anomaly_from_reduced(
         ]
         refs_u: list[float] = []
         refs_v: list[float] = []
-
         for a, b, _, data in reduced.edges(u, keys=True, data=True):
             other = b if a == u else a
             if other not in (u, v):
@@ -96,7 +91,6 @@ def _anomaly_from_reduced(
             other = b if a == v else a
             if other not in (u, v):
                 refs_v.append(float(data.get("weight", 0.0)))
-
         if not refs_u or not refs_v:
             continue
         scale = min(float(np.median(refs_u)), float(np.median(refs_v)))
@@ -104,7 +98,6 @@ def _anomaly_from_reduced(
             continue
         if min(pair_lengths) / scale < ratio:
             count += 1
-
     return count
 
 
@@ -115,12 +108,9 @@ def _diagnostic_summary(
     anomaly_ratio: float,
 ) -> tuple[nx.MultiGraph, bool, tuple, bool]:
     """Return reduced topology, cleanliness, fingerprint and one-hop safety."""
-    pruned = _legacy_sparse._remove_leaves_for_diagnostic(graph)
-    reduced = _legacy_sparse._reduced_weighted(pruned)
-    max_observed_degree = max(
-        (degree for _, degree in reduced.degree()),
-        default=0,
-    )
+    pruned = remove_leaves_for_diagnostic(graph)
+    reduced = reduced_weighted(pruned)
+    max_observed_degree = max((degree for _, degree in reduced.degree()), default=0)
     anomaly_count = _anomaly_from_reduced(reduced, anomaly_ratio)
     clean = max_observed_degree <= max_degree and anomaly_count == 0
 
@@ -132,9 +122,7 @@ def _diagnostic_summary(
         and len(data.get("pts", ())) < 5
         for u, v, data in graph.edges(data=True)
     )
-    one_hop_safe = not has_mergeable_short_edge
-
-    return reduced, clean, _core_fingerprint(reduced), one_hop_safe
+    return reduced, clean, _core_fingerprint(reduced), not has_mergeable_short_edge
 
 
 def constrained_persistent_extract(
@@ -172,5 +160,4 @@ def constrained_persistent_extract(
         ):
             return previous[0]
         previous = current
-
     return base[0]

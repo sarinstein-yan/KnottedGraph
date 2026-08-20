@@ -26,9 +26,7 @@ def _theta_surface_embedding(amplitude=5.0, samples=41):
 
     def zfun(x, y):
         return amplitude * (
-            0.45 * np.sin(0.8 * x)
-            + 0.30 * np.cos(1.1 * y)
-            + 0.03 * x * y
+            0.45 * np.sin(0.8 * x) + 0.30 * np.cos(1.1 * y) + 0.03 * x * y
         )
 
     endpoints = {"u": (-3.0, 0.0), "v": (3.0, 0.0)}
@@ -49,9 +47,7 @@ def _surface_lifted_planar_embedding(graph, *, amplitude=5.0, samples=11, scale=
 
     def zfun(x, y):
         return amplitude * (
-            0.45 * np.sin(0.8 * x)
-            + 0.30 * np.cos(1.1 * y)
-            + 0.12 * x * y / scale**2
+            0.45 * np.sin(0.8 * x) + 0.30 * np.cos(1.1 * y) + 0.12 * x * y / scale**2
         )
 
     for node, xy in pos2.items():
@@ -63,9 +59,7 @@ def _surface_lifted_planar_embedding(graph, *, amplitude=5.0, samples=11, scale=
         p1 = scale * np.asarray(pos2[v], dtype=float)
         t = np.linspace(0.0, 1.0, samples)
         xy = (1.0 - t[:, None]) * p0 + t[:, None] * p1
-        pts = np.column_stack(
-            [xy[:, 0], xy[:, 1], [zfun(x, y) for x, y in xy]]
-        )
+        pts = np.column_stack([xy[:, 0], xy[:, 1], [zfun(x, y) for x, y in xy]])
         embedded.add_edge(u, v, pts=pts)
     return embedded
 

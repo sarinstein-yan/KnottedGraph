@@ -10,7 +10,7 @@ UG = ROOT / "User_guide"
 
 YAMADA_MARKERS = (
     "compute_yamada_polynomial(",
-    "compute_yamada_polynomial_recursive(",
+    "compute_graph_yamada_polynomial(",
     "Yamada(",
 )
 

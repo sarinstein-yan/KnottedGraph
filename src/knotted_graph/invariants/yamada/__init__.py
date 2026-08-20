@@ -1,26 +1,29 @@
-"""Yamada polynomial evaluation backends."""
+"""Exact optimized Yamada polynomial APIs."""
 
-from . import polynomial as _polynomial
-from . import recursive as _recursive
-from .polynomial import *
-from .recursive import *
+from __future__ import annotations
 
+import networkx as nx
+import sympy as sp
 
-def compute_yamada_polynomial_recursive(G, variable):
-    """Compute crossing-free Yamada polynomial with the fastest exact backend.
-
-    This preserves the historical public function name and signature. The
-    original ``YamadaRecursiveEvaluator`` remains available as an independent
-    SymPy reference implementation; production calls use the compact/native
-    evaluator with transparent arbitrary-precision fallback.
-    """
-    from .compact import CompactYamadaEvaluator
-
-    return CompactYamadaEvaluator().compute(G, variable)
+from .algebra import laurent_y_to_sigma_polynomial
+from .compact import CompactYamadaEvaluator
+from .polynomial import (
+    Yamada,
+    compute_yamada_from_states,
+)
 
 
-# A direct import from ``knotted_graph.invariants.yamada.recursive`` should see
-# the same optimized public helper after package initialization.
-_recursive.compute_yamada_polynomial_recursive = compute_yamada_polynomial_recursive
+def compute_graph_yamada_polynomial(
+    graph: nx.MultiGraph,
+    variable: sp.Symbol,
+) -> sp.Expr:
+    """Compute the crossing-free Yamada polynomial with the fastest exact backend."""
+    return CompactYamadaEvaluator().compute(graph, variable)
 
-__all__ = _polynomial.__all__ + _recursive.__all__
+
+__all__ = [
+    "Yamada",
+    "compute_graph_yamada_polynomial",
+    "compute_yamada_from_states",
+    "laurent_y_to_sigma_polynomial",
+]

@@ -21,7 +21,6 @@ from typing import Any, Optional, Union
 import networkx as nx
 import numpy as np
 import pyvista as pv
-import skimage.morphology as morph
 import sympy as sp
 from numpy.typing import NDArray
 
@@ -34,7 +33,7 @@ from knotted_graph.core import (
     smooth_edges,
     total_edge_pts,
 )
-from knotted_graph.extraction import skeleton_image_to_graph
+from knotted_graph.extraction import skeleton_image_to_graph, skeletonize_volume
 
 
 class MaterialFermiSurface(NodalSkeleton):
@@ -295,14 +294,16 @@ class MaterialFermiSurface(NodalSkeleton):
 
     @cached_property
     def _skeleton_image(self) -> NDArray:
-        """Morphological skeleton of the thickened nodal region."""
-        skel = morph.skeletonize(self._interior_mask, method="lee")
-        if np.sum(skel) == 0:
-            raise ValueError(
-                "The skeleton image is empty. "
-                "Try increasing gap_tol, checking band_pair, or enlarging the k-span."
-            )
-        return skel
+        """Optimized Lee skeleton of the thickened nodal region."""
+        try:
+            return skeletonize_volume(self._interior_mask)
+        except ValueError as exc:
+            if "does not contain any True voxels" in str(exc):
+                raise ValueError(
+                    "The skeleton image is empty. "
+                    "Try increasing gap_tol, checking band_pair, or enlarging the k-span."
+                ) from exc
+            raise
 
     @property
     def berry_curvature(self):

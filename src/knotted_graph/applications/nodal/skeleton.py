@@ -2,7 +2,6 @@ import numpy as np
 import sympy as sp
 import networkx as nx
 import matplotlib.pyplot as plt
-import skimage.morphology as morph
 from functools import cached_property
 from tabulate import tabulate
 import minorminer
@@ -18,7 +17,7 @@ from knotted_graph.core import (
     is_trivalent,
     idx_to_coord,
 )
-from knotted_graph.extraction import skeleton_image_to_graph
+from knotted_graph.extraction import skeleton_image_to_graph, skeletonize_volume
 from knotted_graph.projection import PDCode, compute_yamada_polynomial
 
 from typing import Tuple, Union, Optional, Any, Dict, Sequence
@@ -344,34 +343,16 @@ class NodalSkeleton:
 
     @cached_property
     def _skeleton_image(self) -> NDArray:
-        """A binary image of the skeleton (medial axis) of the exceptional
-        surface."""
-        mask = self._interior_mask
-        occupied = [
-            np.flatnonzero(mask.any(axis=axes))
-            for axes in ((1, 2), (0, 2), (0, 1))
-        ]
-
-        if any(len(indices) == 0 for indices in occupied):
-            image = np.zeros_like(mask, dtype=bool)
-        else:
-            slices = tuple(
-                slice(
-                    max(0, int(indices[0]) - 1),
-                    min(mask.shape[axis], int(indices[-1]) + 2),
-                )
-                for axis, indices in enumerate(occupied)
-            )
-            skeleton_crop = morph.skeletonize(mask[slices], method='lee')
-            image = np.zeros_like(mask, dtype=bool)
-            image[slices] = skeleton_crop
-
-        if np.sum(image) == 0:
-            raise ValueError(
-                "The skeleton image is empty. "
-                "Ensure the Hamiltonian has a non-empty exceptional surface."
-            )
-        return image
+        """Optimized Lee skeleton in the original global voxel frame."""
+        try:
+            return skeletonize_volume(self._interior_mask)
+        except ValueError as exc:
+            if "does not contain any True voxels" in str(exc):
+                raise ValueError(
+                    "The skeleton image is empty. "
+                    "Ensure the Hamiltonian has a non-empty exceptional surface."
+                ) from exc
+            raise
 
     @cached_property
     def skeleton_coords(self) -> NDArray:

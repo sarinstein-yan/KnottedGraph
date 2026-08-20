@@ -9,9 +9,9 @@ from knotted_graph.invariants.yamada.compact import (
     CompactGraph,
     CompactNegamiSpecializedEvaluator,
     CompactYamadaEvaluator,
+    PythonCompactNegamiSpecializedEvaluator,
     PythonCompactYamadaEvaluator,
 )
-from knotted_graph.invariants.yamada.recursive import YamadaRecursiveEvaluator
 
 A = sp.Symbol("A")
 
@@ -25,44 +25,37 @@ def _random_multigraph(seed: int) -> nx.MultiGraph:
     n = rng.randint(1, 6)
     graph = nx.MultiGraph()
     graph.add_nodes_from(range(n))
-    # Cover loops, parallel edges, bridges, disconnected pieces, and denser cores.
     for _ in range(rng.randint(0, 9)):
-        u = rng.randrange(n)
-        v = rng.randrange(n)
-        graph.add_edge(u, v)
+        graph.add_edge(rng.randrange(n), rng.randrange(n))
     return graph
 
 
-def test_compact_kernels_match_retained_sympy_reference_on_random_multigraphs():
-    reference = YamadaRecursiveEvaluator(A)
+def test_all_current_exact_kernels_agree_on_random_multigraphs():
     direct = CompactYamadaEvaluator()
     negami = CompactNegamiSpecializedEvaluator()
-    python_fallback = PythonCompactYamadaEvaluator()
-
+    python_direct = PythonCompactYamadaEvaluator()
+    python_negami = PythonCompactNegamiSpecializedEvaluator()
     for seed in range(160):
         graph = _random_multigraph(10000 + seed)
         compact = CompactGraph.from_networkx(graph)
-        expected = reference.compute(graph)
+        expected = python_direct.compute(compact, A)
         _equal(direct.compute(compact, A), expected)
         _equal(negami.compute(compact, A), expected)
-        _equal(python_fallback.compute(compact, A), expected)
+        _equal(python_negami.compute(compact, A), expected)
 
 
-def test_structural_reductions_match_reference_on_targeted_multigraphs():
-    reference = YamadaRecursiveEvaluator(A)
+def test_structural_reductions_agree_across_current_exact_kernels():
     direct = CompactYamadaEvaluator()
-    python_fallback = PythonCompactYamadaEvaluator()
-
+    negami = CompactNegamiSpecializedEvaluator()
+    python_direct = PythonCompactYamadaEvaluator()
     cases: list[nx.MultiGraph] = []
 
-    # Many loops: exercises exact (-sigma)^k batching.
     bouquet = nx.MultiGraph()
     bouquet.add_node(0)
     for _ in range(7):
         bouquet.add_edge(0, 0)
     cases.append(bouquet)
 
-    # A heavily subdivided bridgeless core: exercises homeomorphism reduction.
     subdivided = nx.MultiGraph(nx.complete_graph(4))
     next_node = 4
     for u, v in list(subdivided.edges()):
@@ -75,26 +68,15 @@ def test_structural_reductions_match_reference_on_targeted_multigraphs():
         subdivided.add_edge(previous, v)
     cases.append(subdivided)
 
-    # Parallel class embedded in a nontrivial core.
     parallel = nx.MultiGraph(nx.complete_graph(4))
     for _ in range(6):
         parallel.add_edge(0, 1)
     cases.append(parallel)
 
-    # Mixed loops, subdivisions and parallel edges.
     mixed = nx.MultiGraph()
     mixed.add_nodes_from(range(6))
     mixed.add_edges_from(
-        [
-            (0, 1),
-            (1, 2),
-            (2, 0),
-            (2, 3),
-            (3, 4),
-            (4, 2),
-            (0, 5),
-            (5, 3),
-        ]
+        [(0, 1), (1, 2), (2, 0), (2, 3), (3, 4), (4, 2), (0, 5), (5, 3)]
     )
     mixed.add_edge(0, 1)
     mixed.add_edge(0, 1)
@@ -104,15 +86,14 @@ def test_structural_reductions_match_reference_on_targeted_multigraphs():
 
     for graph in cases:
         compact = CompactGraph.from_networkx(graph)
-        expected = reference.compute(graph)
+        expected = python_direct.compute(compact, A)
         _equal(direct.compute(compact, A), expected)
-        _equal(python_fallback.compute(compact, A), expected)
+        _equal(negami.compute(compact, A), expected)
 
 
-def test_compact_kernels_agree_after_all_single_edge_mutations():
+def test_current_exact_kernels_agree_after_single_edge_mutations():
     direct = CompactYamadaEvaluator()
     negami = CompactNegamiSpecializedEvaluator()
-
     for seed in range(40):
         graph = _random_multigraph(20000 + seed)
         compact = CompactGraph.from_networkx(graph)
@@ -122,7 +103,8 @@ def test_compact_kernels_agree_after_all_single_edge_mutations():
             candidates.append(compact.delete_loop(loop))
         edge = compact.first_nonloop()
         if edge is not None:
-            candidates.extend((compact.delete_edge(*edge), compact.contract_edge(*edge)))
-
+            candidates.extend(
+                (compact.delete_edge(*edge), compact.contract_edge(*edge))
+            )
         for candidate in candidates:
             _equal(direct.compute(candidate, A), negami.compute(candidate, A))

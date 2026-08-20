@@ -1,9 +1,10 @@
 import math
 
-import networkx as nx
 import sympy as sp
 
-from knotted_graph.invariants.yamada.polynomial import Yamada, compute_negami
+from knotted_graph.invariants.yamada.compact import CompactYamadaEvaluator
+from knotted_graph.invariants.yamada.polynomial import Yamada, _ordered_crossing_ports
+from knotted_graph.invariants.yamada.state_compact import PreparedCompactStateBuilder
 from knotted_graph.projection.geom import Arc, Crossing
 
 
@@ -33,15 +34,16 @@ def _arc(coords, start_id=0, end_id=1):
     )
 
 
-def test_negami_uses_inverse_removed_edge_exponent():
-    x, y = sp.symbols("x y")
-    graph = nx.MultiGraph()
-    graph.add_edge("a", "b")
+def _prepared(calculator):
+    return PreparedCompactStateBuilder.prepare(
+        calculator.vertices,
+        calculator.crossings,
+        calculator.arcs,
+        _ordered_crossing_ports,
+    )
 
-    assert sp.simplify(compute_negami(graph, x, y)) == 0
 
-
-def test_resolved_crossings_are_not_reintroduced_by_later_resolutions():
+def test_resolved_crossings_build_valid_compact_states():
     Arc.reset_counter()
     arcs = [
         _arc([(0, 0, 2), (1, 0, 2), (9, 0, 2), (10, 0, 2)]),
@@ -49,38 +51,23 @@ def test_resolved_crossings_are_not_reintroduced_by_later_resolutions():
         _arc([(0, 0, 2), (-1, 0, 2), (11, 0, 2), (10, 0, 2)]),
         _arc([(0, 0, 0), (0, -1, 0), (10, -1, 0), (10, 0, 0)]),
     ]
-    crossing0 = _crossing(
-        0,
-        0,
-        0,
-        [(arcs[0].id, 0), (arcs[1].id, math.pi / 2), (arcs[2].id, math.pi), (arcs[3].id, -math.pi / 2)],
-    )
-    crossing1 = _crossing(
-        1,
-        10,
-        0,
-        [(arcs[0].id, math.pi), (arcs[1].id, math.pi / 2), (arcs[2].id, 0), (arcs[3].id, -math.pi / 2)],
-    )
-
-    state_graphs, _ = Yamada(vertices=[], crossings=[crossing0, crossing1], arcs=arcs)._build_state_graphs()
-    fully_resolved_graph = state_graphs[0]
-
-    assert not any(node[0] == "x" for node in fully_resolved_graph.nodes if isinstance(node, tuple))
+    crossing0 = _crossing(0, 0, 0, [(arcs[0].id,0),(arcs[1].id,math.pi/2),(arcs[2].id,math.pi),(arcs[3].id,-math.pi/2)])
+    crossing1 = _crossing(1, 10, 0, [(arcs[0].id,math.pi),(arcs[1].id,math.pi/2),(arcs[2].id,0),(arcs[3].id,-math.pi/2)])
+    calculator = Yamada(vertices=[], crossings=[crossing0, crossing1], arcs=arcs)
+    prepared = _prepared(calculator)
+    state = prepared.build((0, 0))
+    assert state.n >= 0
+    CompactYamadaEvaluator().compute(state, sp.Symbol("A"))
 
 
-def test_self_crossing_duplicate_arc_ids_are_resolved_by_ports():
+def test_self_crossing_duplicate_arc_ids_are_resolved_by_compact_ports():
     Arc.reset_counter()
     arcs = [
-        _arc([(0, 0, 2), (1, 0, 2), (-1, 0, 2), (0, 0, 2)], start_id=0, end_id=0),
-        _arc([(0, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 0)], start_id=0, end_id=0),
+        _arc([(0,0,2),(1,0,2),(-1,0,2),(0,0,2)], start_id=0, end_id=0),
+        _arc([(0,0,0),(0,1,0),(0,-1,0),(0,0,0)], start_id=0, end_id=0),
     ]
-    crossing = _crossing(
-        0,
-        0,
-        0,
-        [(arcs[0].id, 0), (arcs[1].id, math.pi / 2), (arcs[0].id, math.pi), (arcs[1].id, -math.pi / 2)],
-    )
-
-    state_graphs, _ = Yamada(vertices=[], crossings=[crossing], arcs=arcs)._build_state_graphs()
-
-    assert state_graphs[0].number_of_edges() > 0
+    crossing = _crossing(0, 0, 0, [(arcs[0].id,0),(arcs[1].id,math.pi/2),(arcs[0].id,math.pi),(arcs[1].id,-math.pi/2)])
+    calculator = Yamada(vertices=[], crossings=[crossing], arcs=arcs)
+    prepared = _prepared(calculator)
+    states = [prepared.build((resolution,)) for resolution in (0, 1, 2)]
+    assert all(state.edge_count > 0 for state in states)

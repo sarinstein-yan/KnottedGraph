@@ -81,11 +81,11 @@ Compute a Yamada polynomial directly from a crossing-free graph:
 import sympy as sp
 
 from knotted_graph.core import ThetaGraph
-from knotted_graph.invariants.yamada import compute_yamada_polynomial_recursive
+from knotted_graph.invariants.yamada import compute_graph_yamada_polynomial
 
 A = sp.Symbol("A")
 theta = ThetaGraph(3)
-compute_yamada_polynomial_recursive(theta, A)
+compute_graph_yamada_polynomial(theta, A)
 ```
 
 For embedded spatial graphs, project the graph to a planar diagram and compute

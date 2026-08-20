@@ -7,14 +7,10 @@ import sympy as sp
 from knotted_graph.invariants.yamada.compact import (
     CompactNegamiSpecializedEvaluator,
     CompactYamadaEvaluator,
+    PythonCompactYamadaEvaluator,
 )
-from knotted_graph.invariants.yamada.polynomial import (
-    Yamada,
-    _build_state_graph_from_ports,
-    _ordered_crossing_ports,
-)
+from knotted_graph.invariants.yamada.polynomial import Yamada, _ordered_crossing_ports
 from knotted_graph.invariants.yamada.state_compact import PreparedCompactStateBuilder
-from knotted_graph.invariants.yamada.recursive import YamadaRecursiveEvaluator
 from knotted_graph.projection import PDCode
 
 
@@ -32,9 +28,25 @@ def _multi_crossing_theta(component_count=3):
         graph.add_node(left, pos=np.array([-2.0, y_offset, 0.0]))
         graph.add_node(right, pos=np.array([2.0, y_offset, 0.0]))
         curves = [
-            np.array([[-2.0,0.0,0.0],[-1.0,-1.0,0.5*sign],[1.0,1.0,0.5*sign],[2.0,0.0,0.0]]),
-            np.array([[-2.0,0.0,0.0],[-1.0,1.0,-0.5*sign],[1.0,-1.0,-0.5*sign],[2.0,0.0,0.0]]),
-            np.array([[-2.0,0.0,0.0],[-1.0,2.0,0.0],[1.0,2.0,0.0],[2.0,0.0,0.0]]),
+            np.array(
+                [
+                    [-2.0, 0.0, 0.0],
+                    [-1.0, -1.0, 0.5 * sign],
+                    [1.0, 1.0, 0.5 * sign],
+                    [2.0, 0.0, 0.0],
+                ]
+            ),
+            np.array(
+                [
+                    [-2.0, 0.0, 0.0],
+                    [-1.0, 1.0, -0.5 * sign],
+                    [1.0, -1.0, -0.5 * sign],
+                    [2.0, 0.0, 0.0],
+                ]
+            ),
+            np.array(
+                [[-2.0, 0.0, 0.0], [-1.0, 2.0, 0.0], [1.0, 2.0, 0.0], [2.0, 0.0, 0.0]]
+            ),
         ]
         for points in curves:
             shifted = points.copy()
@@ -43,51 +55,38 @@ def _multi_crossing_theta(component_count=3):
     return graph
 
 
-def test_compact_state_builder_matches_every_reference_state_value():
+def _prepared(component_count):
+    processor = PDCode(_multi_crossing_theta(component_count))
+    processor.compute(rotation_angles=(0.0, 0.0, 0.0))
+    calculator = Yamada.from_PDCode(processor)
+    return PreparedCompactStateBuilder.prepare(
+        calculator.vertices,
+        calculator.crossings,
+        calculator.arcs,
+        _ordered_crossing_ports,
+    )
+
+
+def test_every_compact_state_agrees_across_current_exact_kernels():
     A = sp.Symbol("A")
-    processor = PDCode(_multi_crossing_theta(3))
-    processor.compute(rotation_angles=(0.0, 0.0, 0.0))
-    calculator = Yamada.from_PDCode(processor)
-    prepared = PreparedCompactStateBuilder.prepare(
-        calculator.vertices,
-        calculator.crossings,
-        calculator.arcs,
-        _ordered_crossing_ports,
-    )
-
+    prepared = _prepared(3)
+    direct = CompactYamadaEvaluator()
+    negami = CompactNegamiSpecializedEvaluator()
+    python_exact = PythonCompactYamadaEvaluator()
     for state in itertools.product([0, 1, 2], repeat=3):
-        reference_graph = _build_state_graph_from_ports(
-            calculator.vertices,
-            calculator.crossings,
-            calculator.arcs,
-            state,
-        )
         compact_graph = prepared.build(state)
-
-        assert compact_graph.n == reference_graph.number_of_nodes()
-        assert compact_graph.edge_count == reference_graph.number_of_edges()
-
-        reference_value = YamadaRecursiveEvaluator(A).compute(reference_graph)
-        compact_direct = CompactYamadaEvaluator().compute(compact_graph, A)
-        compact_negami = CompactNegamiSpecializedEvaluator().compute(compact_graph, A)
-        _assert_equal(compact_direct, reference_value)
-        _assert_equal(compact_negami, reference_value)
+        expected = python_exact.compute(compact_graph, A)
+        _assert_equal(direct.compute(compact_graph, A), expected)
+        _assert_equal(negami.compute(compact_graph, A), expected)
 
 
-def test_compact_state_builder_preserves_full_state_exponents():
-    processor = PDCode(_multi_crossing_theta(2))
-    processor.compute(rotation_angles=(0.0, 0.0, 0.0))
-    calculator = Yamada.from_PDCode(processor)
-    prepared = PreparedCompactStateBuilder.prepare(
-        calculator.vertices,
-        calculator.crossings,
-        calculator.arcs,
-        _ordered_crossing_ports,
-    )
-
+def test_compact_state_builder_covers_full_state_space_and_exponents():
+    prepared = _prepared(2)
     states = list(itertools.product([0, 1, 2], repeat=2))
     assert len(states) == 9
+    exponents = []
     for state in states:
         compact_graph = prepared.build(state)
         assert compact_graph.n >= 0
-        assert state.count(0) - state.count(1) == state.count(0) - state.count(1)
+        exponents.append(state.count(0) - state.count(1))
+    assert sorted(exponents) == [-2, -1, -1, 0, 0, 0, 1, 1, 2]

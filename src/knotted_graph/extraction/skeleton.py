@@ -1,23 +1,65 @@
-"""Public skeleton-to-graph extraction API.
-
-All normal 3-D calls use the second-generation sparse optimizer.  The historical
-``poly2graph`` conversion remains available only through an explicit
-``backend='poly2graph'`` request for regression and compatibility work.
-"""
+"""Canonical optimized skeletonization and skeleton-to-graph APIs."""
 
 from __future__ import annotations
 
 import networkx as nx
 import numpy as np
 from numpy.typing import ArrayLike
+from skimage import morphology
 
-from . import _legacy_skeleton as _legacy
 from ._optimized import extract as _optimized_extract
 
 __all__ = [
+    "skeletonize_volume",
     "skeleton_image_to_graph",
     "topology_aware_skeleton_image_to_graph",
 ]
+
+
+def skeletonize_volume(mask: ArrayLike, *, padding: int = 1) -> np.ndarray:
+    """Skeletonize only the occupied 3-D bounding box and restore global indices.
+
+    Cropping empty margins changes only the amount of work performed by Lee
+    thinning. A small zero-valued padding is retained around the occupied box so
+    boundary conditions match full-volume thinning for interior objects.
+    """
+    image = np.asarray(mask, dtype=bool)
+    if image.ndim != 3:
+        raise ValueError("mask must be a three-dimensional array")
+    if padding < 0:
+        raise ValueError("padding must be non-negative")
+
+    occupied = np.argwhere(image)
+    if occupied.size == 0:
+        raise ValueError("The interior mask does not contain any True voxels.")
+
+    starts = np.maximum(occupied.min(axis=0) - padding, 0)
+    stops = np.minimum(occupied.max(axis=0) + padding + 1, image.shape)
+    slices = tuple(slice(int(lo), int(hi)) for lo, hi in zip(starts, stops))
+    cropped = image[slices]
+    local = morphology.skeletonize(cropped, method="lee")
+
+    skeleton = np.zeros_like(image, dtype=bool)
+    skeleton[slices] = local
+    if not np.any(skeleton):
+        raise ValueError("Skeletonization produced no points.")
+    return skeleton
+
+
+def skeleton_image_to_graph(
+    skeleton_image: ArrayLike,
+    *,
+    max_junction_degree: int | None = None,
+    adaptive_max_hops: int = 4,
+    anomaly_ratio: float = 0.15,
+) -> nx.MultiGraph:
+    """Convert a 3-D skeleton image with the canonical sparse extractor."""
+    return _optimized_extract(
+        np.asarray(skeleton_image),
+        max_junction_degree=max_junction_degree,
+        adaptive_max_hops=adaptive_max_hops,
+        anomaly_ratio=anomaly_ratio,
+    )
 
 
 def topology_aware_skeleton_image_to_graph(
@@ -27,59 +69,9 @@ def topology_aware_skeleton_image_to_graph(
     adaptive_max_hops: int = 4,
     anomaly_ratio: float = 0.15,
 ) -> nx.MultiGraph:
-    """Convert a 3-D skeleton with the production sparse optimizer.
-
-    With ``max_junction_degree=None`` the conversion is topology-preserving and
-    exactly compatible with the historical zero-radius parser while avoiding a
-    full-volume scan.  Supplying a degree bound enables the fail-closed,
-    persistence-based junction repair validated by the synthetic benchmark.
-    """
-    return _optimized_extract(
-        np.asarray(skeleton_image, dtype=bool),
-        max_junction_degree=max_junction_degree,
-        adaptive_max_hops=adaptive_max_hops,
-        anomaly_ratio=anomaly_ratio,
-    )
-
-
-def skeleton_image_to_graph(
-    skeleton_image: ArrayLike,
-    *,
-    backend: str = "auto",
-    max_junction_degree: int | None = None,
-    adaptive_max_hops: int = 4,
-    anomaly_ratio: float = 0.15,
-) -> nx.MultiGraph:
-    """Convert a skeleton image into an embedded ``networkx.MultiGraph``.
-
-    ``backend='auto'`` selects the optimized sparse parser for every 3-D input.
-    Non-3-D inputs retain the historical compatibility behavior.  The legacy
-    parser can be selected explicitly with ``backend='poly2graph'``.
-
-    ``max_junction_degree`` is intentionally optional: a known physical or
-    mathematical valence bound may be supplied to enable persistent junction
-    repair, while generic spatial graphs remain topology-preserving by default.
-    """
-    image = np.asarray(skeleton_image)
-    if backend == "auto":
-        backend = "topology_aware" if image.ndim == 3 else "poly2graph"
-
-    if backend == "topology_aware":
-        return topology_aware_skeleton_image_to_graph(
-            image,
-            max_junction_degree=max_junction_degree,
-            adaptive_max_hops=adaptive_max_hops,
-            anomaly_ratio=anomaly_ratio,
-        )
-
-    if backend != "poly2graph":
-        raise ValueError(
-            "backend must be 'auto', 'poly2graph', or 'topology_aware'"
-        )
-
-    return _legacy.skeleton_image_to_graph(
-        image,
-        backend="poly2graph",
+    """Alias for :func:`skeleton_image_to_graph` with explicit topology controls."""
+    return skeleton_image_to_graph(
+        skeleton_image,
         max_junction_degree=max_junction_degree,
         adaptive_max_hops=adaptive_max_hops,
         anomaly_ratio=anomaly_ratio,
