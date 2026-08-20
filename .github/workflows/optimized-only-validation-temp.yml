@@ -156,10 +156,15 @@ jobs:
           rm -f dev/bootstrap_optimized_only_migration.py
           rm -f .github/workflows/optimized-only-validation-temp.yml
 
-      - name: Commit validated migration
+      - name: Commit and publish validated non-workflow tree
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          # The Actions token cannot publish workflow-file changes. Restore the
+          # two workflow files here; the GitHub connector will apply the already
+          # validated tests.yml edit and remove this temporary workflow afterward.
+          git restore --source=HEAD -- .github/workflows/tests.yml
+          git restore --source=HEAD -- .github/workflows/optimized-only-validation-temp.yml
           git add -A
           if git diff --cached --quiet; then
             echo 'No migration changes to commit.'
