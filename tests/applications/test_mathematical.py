@@ -8,7 +8,7 @@ from knotted_graph.applications.mathematical import (
     graph_summary,
     plot_structured_multigraph,
 )
-from knotted_graph.invariants.yamada import compute_yamada_polynomial_recursive
+from knotted_graph.invariants.yamada import compute_graph_yamada_polynomial
 
 
 matplotlib.use("Agg")
@@ -55,6 +55,6 @@ def test_representative_catalog_yamada_values_are_computable():
         ("cylinder", (2, 3)),
     ]:
         graph, _pos = build_graph_case(family_name, *args)
-        value = compute_yamada_polynomial_recursive(graph, Y)
+        value = compute_graph_yamada_polynomial(graph, Y)
 
         assert value != 0
