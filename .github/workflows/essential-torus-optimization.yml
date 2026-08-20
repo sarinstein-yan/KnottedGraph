@@ -6,13 +6,8 @@ on:
       - "src/knotted_graph/invariants/yamada/**"
       - "dev/benchmark_topoly_essential_torus_scaling.py"
       - "dev/benchmark_topoly_essential_torus_gate.py"
-      - "dev/benchmark_regular_isotopy_normalizer_candidate.py"
-      - "dev/benchmark_batch_r1_candidate.py"
-      - "dev/benchmark_r1_queue_candidate.py"
-      - "dev/benchmark_bounded_inversion_candidate.py"
-      - "dev/benchmark_local_rii_candidate.py"
-      - "dev/benchmark_labeled_memo_candidate.py"
-      - "tests/invariants/yamada/test_diagram_structural_dispatch.py"
+      - "dev/run_yamada_sanity_checks.py"
+      - "tests/invariants/yamada/**"
       - ".github/workflows/essential-torus-optimization.yml"
   workflow_dispatch:
 
@@ -46,7 +41,7 @@ jobs:
           assert native_available(), native_import_error()
           PY
 
-      - name: Exact structural-dispatch tests
+      - name: Exact production structural tests
         run: >
           uv run --no-sync pytest -q
           tests/invariants/yamada/test_reidemeister_ii_preprocessing.py
@@ -57,14 +52,7 @@ jobs:
       - name: Published and independent Yamada sanity checks
         run: uv run --no-sync python dev/run_yamada_sanity_checks.py
 
-      - name: Probe exact labeled memo through 19 crossings
-        run: >
-          uv run --no-sync python dev/benchmark_labeled_memo_candidate.py
-          --n-values 9,13,17,19
-          --mirror-n 19
-          --high-n ""
-
-      - name: Generic KG versus Topoly on certified odd Theta family
+      - name: Generic public KG versus Topoly on certified odd Theta family
         run: >
           uv run --no-sync python dev/benchmark_topoly_essential_torus_gate.py
           --n-values 3,5,7,9,11,13,15,17,19
