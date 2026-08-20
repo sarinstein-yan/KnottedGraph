@@ -100,7 +100,6 @@ jobs:
           --cov-report=xml
           --cov-fail-under=61
 
-
   wheel:
     name: Native wheel (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -143,11 +142,11 @@ jobs:
           import sympy as sp
           import knotted_graph
           from knotted_graph.core import ThetaGraph
-          from knotted_graph.invariants.yamada import compute_yamada_polynomial_recursive
+          from knotted_graph.invariants.yamada import compute_graph_yamada_polynomial
           from knotted_graph.invariants.yamada.native import native_available
 
           A = sp.Symbol("A")
-          result = compute_yamada_polynomial_recursive(ThetaGraph(3), A)
+          result = compute_graph_yamada_polynomial(ThetaGraph(3), A)
           print("version:", knotted_graph.__version__)
           print("native Yamada backend:", native_available())
           print("Theta_3:", result)
