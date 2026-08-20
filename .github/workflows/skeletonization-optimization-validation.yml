@@ -26,6 +26,22 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Mark validation started
+        shell: bash
+        run: |
+          {
+            echo "commit=${GITHUB_SHA}"
+            echo "branch=${GITHUB_REF_NAME}"
+            echo "status=started"
+          } > dev/skeletonization_validation_results.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- dev/skeletonization_validation_results.txt
+          if ! git diff --cached --quiet; then
+            git commit -m "Record skeletonization validation start [skip ci]"
+            git push origin HEAD:"${GITHUB_REF_NAME}"
+          fi
+
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
@@ -132,8 +148,6 @@ jobs:
               if test -f "/tmp/${item}.log"; then cat "/tmp/${item}.log"; else echo "not run"; fi
             done
           } > dev/skeletonization_validation_results.txt
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- dev/skeletonization_validation_results.txt
           if ! git diff --cached --quiet; then
             git commit -m "Record skeletonization optimization validation [skip ci]"
