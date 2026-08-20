@@ -13,16 +13,45 @@ import numpy as np
 # benchmark_topoly_paper_scaling.py. Keep dev/ importable when the file is
 # executed directly from the repository root.
 DEV = Path(__file__).resolve().parent
+ROOT = DEV.parent
 if str(DEV) not in sys.path:
     sys.path.insert(0, str(DEV))
 
 import benchmark_topoly_paper_scaling as base  # noqa: E402
+import knotted_graph  # noqa: E402
+from knotted_graph.invariants.yamada import diagram_structural as structural  # noqa: E402
 from knotted_graph.projection import PDCode  # noqa: E402
 
 FAMILY = "essential_torus_constituent"
 DEFAULT_TIMEOUT_S = 120.0
 DEFAULT_CENSOR_FRONTIER = 2
 DEFAULT_N_VALUES = (3, 5, 7, 9, 11, 13, 15, 17, 19)
+
+
+def _require_current_production_engine() -> None:
+    """Refuse to benchmark a stale installed KnottedGraph package.
+
+    The notebook launches this file in a subprocess.  Without this guard a
+    notebook kernel pointing at an older site-packages installation can produce
+    apparently valid but obsolete timings even when the checked-out benchmark
+    scripts are current.
+    """
+    package_path = Path(knotted_graph.__file__).resolve()
+    engine_path = Path(structural.__file__).resolve()
+    if ROOT not in package_path.parents or ROOT not in engine_path.parents:
+        raise RuntimeError(
+            "Stale KnottedGraph installation detected. This benchmark must import "
+            f"the current checkout at {ROOT}. Imported package={package_path}; "
+            f"structural engine={engine_path}. Reinstall this checkout and restart "
+            "the notebook kernel."
+        )
+    required = ("_reduce_r1_queue", "_first_local_inversion")
+    missing = [name for name in required if not hasattr(structural, name)]
+    if missing:
+        raise RuntimeError(
+            "The imported production Yamada engine predates the current "
+            f"optimization; missing {missing}. Reinstall this checkout."
+        )
 
 
 def _validate_n(n: int) -> int:
@@ -35,9 +64,8 @@ def _validate_n(n: int) -> int:
 def independent_theta_terms(n: int) -> dict[int, int]:
     """Dobrynin--Vesnin Theorem 2, independently coded for validation.
 
-    This implementation intentionally does not import the production
-    ``theta_twist`` fast path. It is the correctness oracle for the certified
-    benchmark family.
+    This function is an external correctness oracle only.  Production timed
+    evaluation does not import or call it and has no Theta-family recognizer.
     """
     n = _validate_n(n)
     terms: dict[int, int] = {}
@@ -253,6 +281,7 @@ def main(timeout_s: float, n_values: list[int], censor_frontier: int) -> None:
     if censor_frontier < 1:
         raise ValueError("censor_frontier must be >= 1")
 
+    _require_current_production_engine()
     active = {"knottedgraph": True, "topoly": True}
     consecutive = {"knottedgraph": 0, "topoly": 0}
     rows: list[dict] = []
@@ -268,6 +297,9 @@ def main(timeout_s: float, n_values: list[int], censor_frontier: int) -> None:
                 "topological_certificate": "cr(T(2,n)) = n for odd n >= 3",
                 "correctness_oracle": "Dobrynin-Vesnin Theorem 2",
                 "timed_repeats_per_sample": 1,
+                "production_engine": (
+                    "queue-R1 + first-success inversion + local RII + exact isomorphism memo"
+                ),
             },
             separators=(",", ":"),
         ),
