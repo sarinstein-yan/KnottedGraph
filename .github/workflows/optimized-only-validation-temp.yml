@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/optimized-only-validation-20260821
+  pull_request:
+    branches:
+      - perf/yamada-max-optimization
 
 permissions:
   contents: write
