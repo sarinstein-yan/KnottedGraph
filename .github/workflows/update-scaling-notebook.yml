@@ -21,7 +21,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Add generic Theta validation section
+
+      - name: Patch notebook for production-engine verification
         run: |
           python - <<'PY'
           import json
@@ -29,72 +30,120 @@ jobs:
 
           path = Path('User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb')
           nb = json.loads(path.read_text())
-          marker = '## Certified Dobrynin--Vesnin family: generic production validation'
-          if any(marker in ''.join(cell.get('source', [])) for cell in nb['cells']):
-              print('section already present')
-              raise SystemExit
+          cells = nb['cells']
 
-          markdown = r'''## Certified Dobrynin--Vesnin family: generic production validation
+          def cell_by_id(cell_id):
+              for cell in cells:
+                  if cell.get('id') == cell_id:
+                      return cell
+              raise RuntimeError(f'missing notebook cell: {cell_id}')
 
-The high-crossing comparison is additionally checked against an **analytic correctness oracle**, rather than treating either implementation as ground truth.
+          # 1) Make stale/site-packages imports impossible to miss.
+          setup = cell_by_id('setup')
+          setup_text = ''.join(setup.get('source', []))
+          marker = '# PRODUCTION_YAMADA_ENGINE_GUARD'
+          if marker not in setup_text:
+              setup_text += r'''
 
-**Reference.** A. A. Dobrynin and A. Yu. Vesnin, *The Yamada polynomial for graphs, embedded knot-wise into three-dimensional space*, **Vychisl. Sistemy 155** (1996), 37--86, **Theorem 2**.
+# PRODUCTION_YAMADA_ENGINE_GUARD
+from knotted_graph.invariants.yamada import diagram_structural as _production_structural
 
-For the canonical family $\Theta(n)$, with odd $n$ giving a theta graph and even $n$ a pince-nez/handcuff graph, Theorem 2 states
-
-$$
-R(\Theta(n))(A)=
-(A^2+A+1+A^{-1}+A^{-2})A^n
--(A+A^{-1})A^{-2n}
--(A^2+1+A^{-2})(-1)^nA^{-n}.
-$$
-
-### Why this is not a theorem lookup
-
-The production KnottedGraph evaluator does **not** recognize $\Theta(n)$ and does not call this formula. The theorem is expanded independently only after the timed calculation and is used as an external oracle. High-crossing production evaluation instead uses generic exact operations:
-
-1. conservative Reidemeister-II cancellation;
-2. exact Reidemeister-I curl reduction, $R(D_-)=A^{-2}R(D)$ and $R(D_+)=A^{2}R(D)$ in the package convention;
-3. crossing inversion plus the Yamada skein identity;
-4. exact memoization modulo prepared-diagram combinatorial isomorphism; and
-5. the native exhaustive state evaluator only on small irreducible residual states.
-
-The R1 factors were independently checked against the retained exhaustive state sum in **190 local comparisons across both orientations and multiple surrounding graph contexts**. The native isomorphism fingerprint is only a bucket filter; cache reuse requires a complete exact bijection, so hash collisions cannot change an answer.
-
-### Clean public-API result
-
-In the production validation run, KnottedGraph matched Dobrynin--Vesnin Theorem 2 **term-for-term for every $n=0,\ldots,20$**. Topoly 1.1.0 agreed through $n=16$ up to the allowed sign/monomial/variable-inversion conventions, returned a non-equivalent polynomial at $n=17$, and raised `ValueError: Adding unsupported type.` at $n=18,19,20$.
-
-At $n=17$, the same-run public timings were **0.0662 s for KnottedGraph** and **1.4262 s for Topoly**, a ratio of about **21.5x**. This statement is specific to the certified $\Theta(n)$ benchmark family; it is not a general claim that all Topoly computations above 16 crossings fail.
-
-The companion page `dobrynin_vesnin_theta_validation.md` records the complete $n=0,\ldots,20$ table and the non-circular legacy checks.
+kg_source = Path(knotted_graph.__file__).resolve()
+structural_source = Path(_production_structural.__file__).resolve()
+if ROOT not in kg_source.parents or ROOT not in structural_source.parents:
+    raise RuntimeError(
+        "This notebook is importing a stale KnottedGraph installation instead of "
+        f"this checkout. KnottedGraph={kg_source}; structural engine={structural_source}. "
+        "Reinstall this checkout and restart the kernel."
+    )
+if not hasattr(_production_structural, '_reduce_r1_queue'):
+    raise RuntimeError('Production queue-R1 optimization is missing from this checkout.')
+if not hasattr(_production_structural, '_first_local_inversion'):
+    raise RuntimeError('Production first-local-inversion optimization is missing from this checkout.')
+print('Production structural engine:', structural_source)
+print('Optimization engine: queue-R1 + first-success inversion + local RII + exact isomorphism memo')
 '''
-          code = '''# Reproduce the full certified public-API comparison (n = 0,...,20).\n# The Dobrynin--Vesnin formula is used only as the post-computation oracle.\nimport subprocess\nimport sys\n\nsubprocess.run(\n    [\n        sys.executable,\n        \"../../dev/benchmark_dobrynin_vesnin_theta_family.py\",\n        \"--start\", \"0\",\n        \"--stop\", \"20\",\n        \"--timeout\", \"25\",\n    ],\n    check=True,\n)\n'''
+              setup['source'] = setup_text.splitlines(keepends=True)
+              setup['outputs'] = []
+              setup['execution_count'] = None
 
-          nb['cells'].extend([
-              {
-                  'cell_type': 'markdown',
-                  'metadata': {},
-                  'source': markdown.splitlines(keepends=True),
-              },
-              {
-                  'cell_type': 'code',
-                  'execution_count': None,
-                  'metadata': {},
-                  'outputs': [],
-                  'source': code.splitlines(keepends=True),
-              },
-          ])
+          # 2) Render the exact essential-torus results from the run as a compact table.
+          table_source = r'''from IPython.display import Markdown, display
+
+lines = [
+    "| crossings | KnottedGraph | Topoly | Topoly / KG |",
+    "|---:|---:|---:|---:|",
+]
+paired_rows = []
+for row in essential_rows:
+    n = int(row["crossings"])
+    kg = row.get("knottedgraph_s")
+    tp = row.get("topoly_s")
+    kg_text = f"{float(kg):.4f} s" if kg is not None else row.get("knottedgraph_status", "—")
+    if row.get("topoly_status") == "ok" and tp is not None:
+        tp_text = f"{float(tp):.4f} s"
+        ratio = float(tp) / float(kg)
+        ratio_text = f"**{ratio:.1f}×**"
+        paired_rows.append(row)
+    else:
+        tp_text = row.get("topoly_status", "—")
+        ratio_text = "—"
+    lines.append(f"| {n} | {kg_text} | {tp_text} | {ratio_text} |")
+
+display(Markdown("\n".join(lines)))
+
+# This section is specifically the optimized production public-API benchmark.
+# A stale/old evaluator should fail here instead of silently producing the old
+# n=11/n=13 crossover timings.
+if paired_rows:
+    assert all(float(r["knottedgraph_s"]) < float(r["topoly_s"]) for r in paired_rows), (
+        "Optimized production KnottedGraph was not faster than Topoly on every "
+        "completed certified odd-Theta comparison. Check the imported package path above."
+    )
+'''
+          table_cell = {
+              'cell_type': 'code',
+              'execution_count': None,
+              'metadata': {},
+              'outputs': [],
+              'source': table_source.splitlines(keepends=True),
+              'id': 'essential-torus-optimized-table',
+          }
+          existing = next((i for i, c in enumerate(cells) if c.get('id') == table_cell['id']), None)
+          if existing is not None:
+              cells[existing] = table_cell
+          else:
+              run_index = next(i for i, c in enumerate(cells) if c.get('id') == 'essential-torus-run')
+              cells.insert(run_index + 1, table_cell)
+
+          # 3) Refresh the explanatory production-validation text so it describes
+          # the algorithm actually dispatched by Yamada.compute today.
+          validation_marker = '## Certified Dobrynin--Vesnin family: generic production validation'
+          for cell in cells:
+              text = ''.join(cell.get('source', []))
+              if validation_marker in text:
+                  cell['source'] = r'''## Certified Dobrynin--Vesnin family: generic production validation
+
+The Dobrynin--Vesnin closed form is used **only as an external correctness oracle**. The timed KnottedGraph call goes through the ordinary public `Yamada(...).compute(...)` production path.
+
+The current production structural engine is generic and exact: it performs maximal queue-based Reidemeister-I closure, uses the first skein inversion that exposes a local Reidemeister-II cancellation, checks only physical neighbors for that newly created RII pair, memoizes partial prepared diagrams with an exact isomorphism check, and sends only small irreducible residual states to the native exhaustive kernel.
+
+On the GitHub production check for the current branch, KnottedGraph matched Dobrynin--Vesnin Theorem 2 term-for-term through $n=20$. For the certified odd family, KnottedGraph was faster than Topoly at every completed comparison through $n=17$; Topoly returned a non-equivalent polynomial at $n=17$ and errors at $n=19$ in the odd-family gate. Exact timings are machine-dependent, so the table above is recomputed from your current environment rather than hard-coded.
+'''.splitlines(keepends=True)
+                  break
+
           path.write_text(json.dumps(nb, indent=1, ensure_ascii=False) + '\n')
-          print('updated', path)
+          print('patched', path)
           PY
+
       - name: Commit notebook update
         run: |
           if git diff --quiet -- User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb; then
+            echo "Notebook already has production optimization guard and table."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb
-          git commit -m "Document generic Yamada breakthrough in scaling notebook"
+          git commit -m "Make scaling notebook use optimized production Yamada"
           git push origin HEAD:perf/yamada-max-optimization
