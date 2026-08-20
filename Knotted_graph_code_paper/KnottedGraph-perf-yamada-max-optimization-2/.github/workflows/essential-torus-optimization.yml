@@ -1,0 +1,61 @@
+name: Essential torus Yamada optimization
+
+on:
+  pull_request:
+    paths:
+      - "src/knotted_graph/invariants/yamada/**"
+      - "dev/benchmark_topoly_essential_torus_scaling.py"
+      - "dev/benchmark_topoly_essential_torus_gate.py"
+      - "dev/run_yamada_sanity_checks.py"
+      - "tests/invariants/yamada/**"
+      - ".github/workflows/essential-torus-optimization.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  exactness-and-performance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/yamada-max-optimization
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install benchmark environment
+        run: uv sync --group dev --group benchmark
+
+      - name: Require native Yamada backend
+        run: |
+          uv run --no-sync python - <<'PY'
+          from knotted_graph.invariants.yamada.native import native_available, native_import_error
+          assert native_available(), native_import_error()
+          PY
+
+      - name: Exact production structural tests
+        run: >
+          uv run --no-sync pytest -q
+          tests/invariants/yamada/test_reidemeister_ii_preprocessing.py
+          tests/invariants/yamada/test_diagram_structural_dispatch.py
+          tests/invariants/yamada/test_skein_hybrid_candidate.py
+          tests/invariants/yamada/test_native_prepared_state_sum.py
+
+      - name: Published and independent Yamada sanity checks
+        run: uv run --no-sync python dev/run_yamada_sanity_checks.py
+
+      - name: Generic public KG versus Topoly on certified odd Theta family
+        run: >
+          uv run --no-sync python dev/benchmark_topoly_essential_torus_gate.py
+          --n-values 3,5,7,9,11,13,15,17,19
+          --repeats 3
+          --timeout 30
+          --require-faster

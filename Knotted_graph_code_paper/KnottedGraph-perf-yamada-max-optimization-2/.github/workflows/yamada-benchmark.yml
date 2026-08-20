@@ -1,0 +1,198 @@
+name: Yamada benchmark
+
+on:
+  pull_request:
+    paths:
+      - "CMakeLists.txt"
+      - "pyproject.toml"
+      - "src/knotted_graph/invariants/yamada/**"
+      - "src/knotted_graph/projection/**"
+      - "src/knotted_graph/applications/nodal/**"
+      - "src/knotted_graph/extraction/**"
+      - "src/knotted_graph/core/**"
+      - "dev/benchmark_yamada_kernel.py"
+      - "dev/benchmark_yamada_end_to_end.py"
+      - "dev/benchmark_yamada_dispatch.py"
+      - "dev/benchmark_yamada_pipeline_breakdown.py"
+      - "dev/benchmark_state_dedup.py"
+      - "dev/benchmark_projection_index.py"
+      - "dev/benchmark_crossing_bulk_query.py"
+      - "dev/benchmark_crossing_vectorized.py"
+      - "dev/benchmark_compact_optimization_candidates.py"
+      - "dev/benchmark_laurent_arithmetic_candidates.py"
+      - "dev/benchmark_native_yamada_candidate.py"
+      - "dev/benchmark_flow_structural_reductions.py"
+      - "dev/benchmark_skeletonization_candidates.py"
+      - "dev/benchmark_nodal_memory_candidates.py"
+      - "dev/yamada_output_fingerprint.py"
+      - "dev/application_yamada_regression.py"
+      - "dev/run_yamada_sanity_checks.py"
+      - "dev/benchmark_topoly_extended_scaling.py"
+      - "dev/benchmark_topoly_random_cubic_ensemble.py"
+      - "dev/generate_topoly_random_cubic_corpus.py"
+      - "dev/benchmark_data/topoly_random_cubic_v1.jsonl"
+      - "dev/plot_topoly_scaling.py"
+      - "tests/benchmarks/test_topoly_paper_setup.py"
+      - "User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb"
+      - ".github/workflows/yamada-benchmark.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kernel-benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install environment
+        run: uv sync --group dev
+      - name: Require production native backend
+        run: |
+          uv run --no-sync python - <<'PY'
+          from knotted_graph.invariants.yamada.native import native_available
+          assert native_available(), "native backend was not built"
+          print("production native Yamada backend: active")
+          PY
+      - name: Compare retained SymPy evaluators with exact Laurent kernels
+        run: uv run --no-sync python dev/benchmark_yamada_kernel.py
+      - name: Benchmark recurrence optimization candidates with exact equality gates
+        run: uv run --no-sync python dev/benchmark_compact_optimization_candidates.py
+      - name: Benchmark Laurent arithmetic candidates with exact equality gates
+        run: uv run --no-sync python dev/benchmark_laurent_arithmetic_candidates.py
+      - name: Benchmark production C++ backend with exact fuzz, overflow and state-sum gates
+        run: uv run --no-sync python dev/benchmark_native_yamada_candidate.py
+      - name: Benchmark exact flow-structure reductions
+        run: uv run --no-sync python dev/benchmark_flow_structural_reductions.py
+      - name: Profile remaining projection and invariant costs
+        run: uv run --no-sync python dev/benchmark_yamada_pipeline_breakdown.py
+      - name: Compare public dispatch with compact serial
+        run: uv run --no-sync python dev/benchmark_yamada_dispatch.py
+      - name: Measure repeated compact states
+        run: uv run --no-sync python dev/benchmark_state_dedup.py
+      - name: Benchmark indexed projection crossing lookup
+        run: uv run --no-sync python dev/benchmark_projection_index.py
+      - name: Benchmark bulk crossing candidate query
+        run: uv run --no-sync python dev/benchmark_crossing_bulk_query.py
+      - name: Benchmark vectorized crossing candidate processing
+        run: uv run --no-sync python dev/benchmark_crossing_vectorized.py
+
+  skeletonization-benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install environment
+        run: uv sync --extra all --group dev
+      - name: Benchmark exact skeletonization candidates
+        run: uv run --no-sync python dev/benchmark_skeletonization_candidates.py
+      - name: Benchmark lazy-grid and streamed-spectrum memory candidates
+        run: uv run --no-sync python dev/benchmark_nodal_memory_candidates.py
+      - name: Run nodal regression tests
+        run: uv run --no-sync pytest -q tests/applications/test_nodal_regressions.py
+      - name: Run application output regression notebook
+        env:
+          MPLBACKEND: Agg
+          PYVISTA_OFF_SCREEN: "true"
+        run: uv run --no-sync python dev/execute_notebook.py User_guide/benchmarks/02_application_output_regression.ipynb --timeout 7200
+
+  output-equivalence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Fingerprint optimized branch
+        run: |
+          uv sync --group dev
+          uv run --no-sync python - <<'PY'
+          from knotted_graph.invariants.yamada.native import native_available
+          assert native_available(), "optimized fingerprint is not using native backend"
+          PY
+          uv run --no-sync python dev/yamada_output_fingerprint.py > /tmp/optimized-fingerprint.json
+      - name: Fingerprint Latest_Workplace
+        run: |
+          git worktree add /tmp/KnottedGraph-reference origin/Latest_Workplace
+          cd /tmp/KnottedGraph-reference
+          uv sync --group dev
+          uv run --no-sync python "$GITHUB_WORKSPACE/dev/yamada_output_fingerprint.py" > /tmp/reference-fingerprint.json
+      - name: Require byte-identical public outputs
+        run: |
+          diff -u /tmp/reference-fingerprint.json /tmp/optimized-fingerprint.json
+          echo "All cross-branch PD codes, crossing counts, and Yamada polynomial strings match."
+      - name: Run published/independent sanity checks
+        run: uv run --no-sync python dev/run_yamada_sanity_checks.py
+
+  end-to-end:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Benchmark optimized branch
+        run: |
+          uv sync --group dev
+          uv run --no-sync python - <<'PY'
+          from knotted_graph.invariants.yamada.native import native_available
+          assert native_available()
+          PY
+          uv run --no-sync python dev/benchmark_yamada_end_to_end.py | tee /tmp/optimized.txt
+      - name: Benchmark Latest_Workplace
+        run: |
+          git worktree add /tmp/KnottedGraph-base origin/Latest_Workplace
+          cd /tmp/KnottedGraph-base
+          uv sync --group dev
+          uv run --no-sync python "$GITHUB_WORKSPACE/dev/benchmark_yamada_end_to_end.py" | tee /tmp/baseline.txt
+      - name: Print paired results
+        run: |
+          echo "===== optimized ====="
+          cat /tmp/optimized.txt
+          echo "===== Latest_Workplace ====="
+          cat /tmp/baseline.txt
+
+  topoly-comparison:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install environment and Topoly
+        run: |
+          uv sync --group dev --group benchmark
+      - name: Require production native backend
+        run: |
+          uv run --no-sync python - <<'PY'
+          from knotted_graph.invariants.yamada.native import native_available
+          assert native_available()
+          PY
+      - name: Validate paper benchmark design
+        run: uv run --no-sync pytest -q tests/benchmarks/test_topoly_paper_setup.py
+      - name: Smoke-test controlled identical-PD ensemble scaling
+        run: uv run --no-sync python dev/benchmark_topoly_extended_scaling.py --profile smoke --embeddings 2 --timeout 10
+      - name: Smoke-test heterogeneous connected-cubic ensemble
+        run: uv run --no-sync python dev/benchmark_topoly_random_cubic_ensemble.py --profile smoke --samples-per-v 2 --timeout 10
