@@ -6,8 +6,8 @@ import networkx as nx
 import numpy as np
 from numpy.typing import ArrayLike
 
-from . import skeleton as _skeleton
-from ._sparse_compat import trace_zero_radius_compatible
+from . import skeleton as _legacy
+from ._optimized import extract as _optimized_extract
 
 __all__ = [
     "skeleton_image_to_graph",
@@ -22,17 +22,9 @@ def topology_aware_skeleton_image_to_graph(
     adaptive_max_hops: int = 4,
     anomaly_ratio: float = 0.15,
 ) -> nx.MultiGraph:
-    """Convert a 3-D skeleton with sparse exact-compatible default semantics."""
-    image = np.asarray(skeleton_image, dtype=bool)
-    if image.ndim != 3:
-        raise ValueError("skeleton_image must be a three-dimensional array")
-
-    if max_junction_degree is None:
-        _, coords, adjacency = _skeleton._sparse_voxel_adjacency(image)
-        return trace_zero_radius_compatible(coords, adjacency)
-
-    return _skeleton.topology_aware_skeleton_image_to_graph(
-        image,
+    """Convert a 3-D skeleton using the production sparse optimizer."""
+    return _optimized_extract(
+        np.asarray(skeleton_image, dtype=bool),
         max_junction_degree=max_junction_degree,
         adaptive_max_hops=adaptive_max_hops,
         anomaly_ratio=anomaly_ratio,
@@ -47,7 +39,12 @@ def skeleton_image_to_graph(
     adaptive_max_hops: int = 4,
     anomaly_ratio: float = 0.15,
 ) -> nx.MultiGraph:
-    """Convert a skeleton image, optimizing every normal 3-D call by default."""
+    """Convert a skeleton image, optimizing every normal 3-D call by default.
+
+    ``backend='auto'`` selects the optimized sparse parser for 3-D inputs while
+    retaining the historical ``poly2graph`` path for non-3-D compatibility.
+    ``backend='poly2graph'`` remains available explicitly for regression tests.
+    """
     image = np.asarray(skeleton_image)
     if backend == "auto":
         backend = "topology_aware" if image.ndim == 3 else "poly2graph"
@@ -60,7 +57,7 @@ def skeleton_image_to_graph(
             anomaly_ratio=anomaly_ratio,
         )
 
-    return _skeleton.skeleton_image_to_graph(
+    return _legacy.skeleton_image_to_graph(
         image,
         backend=backend,
         max_junction_degree=max_junction_degree,
