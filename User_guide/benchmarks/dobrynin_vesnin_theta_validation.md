@@ -21,9 +21,11 @@ The expected Laurent coefficients in `dev/benchmark_dobrynin_vesnin_theta_family
 
 No recognition of $\Theta(n)$ or use of Theorem 2 occurs in the timed KnottedGraph calculation. High-crossing diagrams are handled by a generic exact structural evaluator combining:
 
+- exact Reidemeister-I curl removal with the library convention $R(D_{-})=A^{-2}R(D)$ and $R(D_{+})=A^{2}R(D)$;
+- a queue-based maximal R1 closure that rewires an entire newly exposed curl chain before rebuilding the immutable prepared diagram;
 - conservative Reidemeister-II cancellation;
-- exact Reidemeister-I curl removal, with the library convention $R(D_{-})=A^{-2}R(D)$ and $R(D_{+})=A^{2}R(D)$;
-- crossing inversion plus the Yamada skein relation;
+- crossing inversion plus the Yamada skein relation, taking the first inversion that exposes an exact RII cancellation rather than exhaustively optimizing a non-mathematical branch-score heuristic;
+- locality-preserving RII search after inversion: only crossings physically adjacent to the changed crossing need testing, because an unchanged remote pair cannot become RII;
 - exact prepared-diagram memoization modulo combinatorial isomorphism; and
 - the retained native exhaustive state sum only for small irreducible residual diagrams.
 
@@ -46,37 +48,37 @@ Therefore a Topoly mismatch below cannot be explained only by an overall sign, L
 
 ### Independent non-circular checks
 
-Before the current R1 optimization existed, the retained exhaustive state evaluator independently established the same polynomial. For the odd $n=17$ case, the $3^{17}$ reference calculation took about 583.74 s and agreed coefficient-for-coefficient with the structural result and with Theorem 2. For even cases, generic state calculations independently matched the theorem for $n=0,2,4,\ldots,16$ before the high-crossing optimization was introduced.
+Before the current structural optimizations existed, the retained exhaustive state evaluator independently established the same polynomial. For the odd $n=17$ case, the $3^{17}$ reference calculation took about 583.74 s and agreed coefficient-for-coefficient with the structural result and with Theorem 2. For even cases, generic state calculations independently matched the theorem for $n=0,2,4,\ldots,16$ before the high-crossing optimization was introduced.
 
 The current CI additionally asserts that the old `theta_twist_calls` diagnostic remains zero on a certified $\Theta(9)$ input, proving that the production path is generic rather than theorem-dispatched.
 
 ## Public-API results through 20 crossings
 
-These timings are from the clean production-validation run after theorem shortcuts were removed from both public and prepared dispatch.
+These timings are from the production validation after queue-based R1 closure and local first-success inversion/RII search were promoted into the actual public evaluator. They are benchmark-run measurements rather than hardware-independent constants.
 
 | $n$ | graph | KnottedGraph (s) | KG vs theorem | Topoly (s) | Topoly vs theorem |
 |---:|:---|---:|:---:|---:|:---:|
-| 0 | handcuff | 0.0010 | PASS | 5.3443 | PASS |
-| 1 | theta | 0.0259 | PASS | 0.9338 | PASS |
-| 2 | handcuff | 0.0278 | PASS | 0.9323 | PASS |
-| 3 | theta | 0.0269 | PASS | 0.9204 | PASS |
-| 4 | handcuff | 0.0291 | PASS | 0.9905 | PASS |
-| 5 | theta | 0.0287 | PASS | 0.9483 | PASS |
-| 6 | handcuff | 0.0309 | PASS | 0.9434 | PASS |
-| 7 | theta | 0.0346 | PASS | 0.9561 | PASS |
-| 8 | handcuff | 0.0340 | PASS | 0.9765 | PASS |
-| 9 | theta | 0.0351 | PASS | 0.9995 | PASS |
-| 10 | handcuff | 0.0377 | PASS | 1.0512 | PASS |
-| 11 | theta | 0.0394 | PASS | 1.1313 | PASS |
-| 12 | handcuff | 0.0433 | PASS | 1.0425 | PASS |
-| 13 | theta | 0.0461 | PASS | 1.0970 | PASS |
-| 14 | handcuff | 0.0506 | PASS | 1.4646 | PASS |
-| 15 | theta | 0.0545 | PASS | 1.7589 | PASS |
-| 16 | handcuff | 0.0609 | PASS | 1.7774 | PASS |
-| **17** | **theta** | **0.0662** | **PASS** | **1.4262** | **FAIL** |
-| **18** | **handcuff** | **0.0750** | **PASS** | -- | **Topoly error** |
-| **19** | **theta** | **0.0823** | **PASS** | -- | **Topoly error** |
-| **20** | **handcuff** | **0.0928** | **PASS** | -- | **Topoly error** |
+| 0 | handcuff | 0.0010 | PASS | 6.4940 | PASS |
+| 1 | theta | 0.0255 | PASS | 0.9006 | PASS |
+| 2 | handcuff | 0.0271 | PASS | 0.9055 | PASS |
+| 3 | theta | 0.0268 | PASS | 0.9174 | PASS |
+| 4 | handcuff | 0.0283 | PASS | 0.9212 | PASS |
+| 5 | theta | 0.0279 | PASS | 0.9168 | PASS |
+| 6 | handcuff | 0.0305 | PASS | 0.9271 | PASS |
+| 7 | theta | 0.0336 | PASS | 0.9244 | PASS |
+| 8 | handcuff | 0.0313 | PASS | 0.9404 | PASS |
+| 9 | theta | 0.0307 | PASS | 0.9626 | PASS |
+| 10 | handcuff | 0.0322 | PASS | 1.0172 | PASS |
+| 11 | theta | 0.0321 | PASS | 1.0975 | PASS |
+| 12 | handcuff | 0.0344 | PASS | 1.0179 | PASS |
+| 13 | theta | 0.0347 | PASS | 1.0796 | PASS |
+| 14 | handcuff | 0.0363 | PASS | 1.4354 | PASS |
+| 15 | theta | 0.0364 | PASS | 1.7165 | PASS |
+| 16 | handcuff | 0.0385 | PASS | 1.7312 | PASS |
+| **17** | **theta** | **0.0389** | **PASS** | **1.3852** | **FAIL** |
+| **18** | **handcuff** | **0.0416** | **PASS** | -- | **Topoly error** |
+| **19** | **theta** | **0.0423** | **PASS** | -- | **Topoly error** |
+| **20** | **handcuff** | **0.0451** | **PASS** | -- | **Topoly error** |
 
 Thus
 
@@ -85,6 +87,8 @@ R_{\mathrm{KnottedGraph}}(\Theta(n))
 =R_{\mathrm{Dobrynin\text{--}Vesnin}}(\Theta(n))
 $$
 
-for every tested $0\le n\le20$ using the generic production evaluator. At $n=17$, Topoly takes about 1.426 s versus 0.066 s for public KnottedGraph, a roughly **21.5-fold** timing ratio in this run.
+for every tested $0\le n\le20$ using the generic production evaluator. At $n=17$, Topoly takes about 1.385 s versus 0.0389 s for public KnottedGraph, a roughly **35.6-fold** timing ratio in this run.
+
+A separate repeated odd-family timing gate, using three runs per implementation, gives median KnottedGraph timings of 0.0312 s at $n=11$, 0.0328 s at $n=13$, 0.0351 s at $n=15$, and 0.03795 s at $n=17$; KnottedGraph is faster than Topoly at every point where Topoly still returns a theorem-equivalent answer.
 
 Topoly agrees with the published theorem through $n=16$. At $n=17$ it returns a different Laurent polynomial that is not equivalent under the allowed convention transformations. At $n=18,19,20$, the tested Topoly 1.1.0 low-level evaluator terminates with `ValueError: Adding unsupported type.` This is evidence for a limitation of Topoly 1.1.0 on this certified $\Theta(n)$ family; it is not a claim that every Topoly computation above 16 crossings is incorrect.
