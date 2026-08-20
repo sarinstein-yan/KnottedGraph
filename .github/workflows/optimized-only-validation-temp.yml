@@ -114,6 +114,9 @@ jobs:
       - name: Notebook portability
         run: uv run --no-sync python dev/validate_notebook_portability.py
 
+      - name: Normalize Ruff-fixable style
+        run: uv run --no-sync ruff check src tests dev --fix --unsafe-fixes
+
       - name: Ruff
         run: uv run --no-sync ruff check src tests dev
 
