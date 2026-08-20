@@ -82,6 +82,7 @@ target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+User_guide/benchmarks/.benchmark_checkpoints/
 
 # IPython
 profile_default/

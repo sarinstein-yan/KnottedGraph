@@ -1,1 +1,0 @@
-The python environment for this project is managed by `uv`. Use `uv run` for python commands.

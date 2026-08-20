@@ -5,12 +5,10 @@ the compact deletion--contraction recurrence and state summation run in C++.
 If the native int64 coefficient fast path overflows, the computation is rerun
 with the existing arbitrary-precision Python Laurent kernel, preserving exactness.
 
-Prepared diagrams always use the same generic exact structural engine for
-sufficiently large crossing count, regardless of whether the optional native
-extension is importable. The extension accelerates only the low-level graph and
-small residual state kernels; it no longer controls algorithmic dispatch.
-No theorem-family recognizer or precomputed polynomial is part of production
-dispatch; published formulas are used only by external validation benchmarks.
+Prepared diagrams use the generic exact structural engine for sufficiently large
+crossing count.  No theorem-family recognizer or precomputed polynomial is part
+of production dispatch; published formulas are used only by external validation
+benchmarks.
 """
 
 from __future__ import annotations
@@ -25,7 +23,7 @@ except Exception as exc:  # pragma: no cover - platform/build fallback
     _yamada_native = None
     _NATIVE_IMPORT_ERROR = exc
 
-# Below this number of unresolved crossings the exhaustive prepared-state sum is
+# Below this number of unresolved crossings the native exhaustive state sum is
 # normally faster than Python-level structural reduction. This is a performance
 # policy only; both branches are algebraically exact and regression-compared.
 STRUCTURAL_DISPATCH_MIN_CROSSINGS = 8
@@ -60,13 +58,7 @@ class _MemoSizeProxy:
 
 
 class NativeCompactEvaluator:
-    """Structural dispatcher with optional native low-level acceleration.
-
-    The historical class name is retained for API/internal compatibility. When
-    the extension is unavailable, ``backend`` is ``"python"`` and every exact
-    operation transparently uses the arbitrary-precision Python kernels, while
-    high-crossing diagrams still take the optimized structural recursion.
-    """
+    """Native compact evaluator with exact arbitrary-precision Python fallback."""
 
     def __init__(self, fallback_factory):
         self._fallback_factory = fallback_factory
@@ -194,10 +186,7 @@ class NativeCompactEvaluator:
 
 
 def make_native_or_python_evaluator(fallback_factory):
-    """Return one exact dispatcher, with native acceleration when available.
-
-    Keeping the wrapper even on pure-Python installations is essential: the
-    wrapper owns the optimized high-crossing structural algorithm. Falling back
-    only changes the low-level leaf evaluator, never the mathematical strategy.
-    """
-    return NativeCompactEvaluator(fallback_factory)
+    """Return the native wrapper when built, otherwise the existing Python evaluator."""
+    if native_available():
+        return NativeCompactEvaluator(fallback_factory)
+    return fallback_factory()
