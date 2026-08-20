@@ -114,8 +114,17 @@ jobs:
       - name: Notebook portability
         run: uv run --no-sync python dev/validate_notebook_portability.py
 
-      - name: Normalize Ruff-fixable style
-        run: uv run --no-sync ruff check src tests dev --fix --unsafe-fixes
+      - name: Normalize migrated style
+        run: |
+          uv run --no-sync ruff check src tests dev --fix --unsafe-fixes || true
+          uv run --no-sync ruff format \
+            src/knotted_graph/applications/material_surface.py \
+            tests/invariants/yamada/test_compact_kernel_equivalence.py \
+            tests/invariants/yamada/test_compact_state_builder_equivalence.py \
+            tests/invariants/yamada/test_fast_kernel_equivalence.py \
+            tests/invariants/yamada/test_graph_yamada.py \
+            tests/invariants/yamada/test_optimization_fuzz_equivalence.py \
+            tests/invariants/yamada/test_state_streaming_regression.py
 
       - name: Ruff
         run: uv run --no-sync ruff check src tests dev
