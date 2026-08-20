@@ -130,6 +130,43 @@ def test_cropped_default_preserves_global_coordinates_and_order_exactly():
     _assert_raw_graph_equal(expected, actual)
 
 
+def test_package_and_skeleton_module_share_same_public_functions():
+    import knotted_graph.extraction as package_api
+    import knotted_graph.extraction.skeleton as module_api
+
+    assert package_api.skeleton_image_to_graph is module_api.skeleton_image_to_graph
+    assert (
+        package_api.topology_aware_skeleton_image_to_graph
+        is module_api.topology_aware_skeleton_image_to_graph
+    )
+
+
+def test_direct_skeleton_module_uses_second_generation_optimizer(monkeypatch):
+    import knotted_graph.extraction.skeleton as module_api
+
+    called = {}
+
+    def fake_extract(image, **kwargs):
+        called["shape"] = np.asarray(image).shape
+        called["kwargs"] = kwargs
+        return nx.MultiGraph()
+
+    monkeypatch.setattr(module_api, "_optimized_extract", fake_extract)
+    result = module_api.skeleton_image_to_graph(
+        np.zeros((9, 10, 11), dtype=bool),
+        max_junction_degree=3,
+        adaptive_max_hops=2,
+        anomaly_ratio=0.12,
+    )
+    assert isinstance(result, nx.MultiGraph)
+    assert called["shape"] == (9, 10, 11)
+    assert called["kwargs"] == {
+        "max_junction_degree": 3,
+        "adaptive_max_hops": 2,
+        "anomaly_ratio": 0.12,
+    }
+
+
 def test_topology_aware_pure_ring_is_closed_self_loop():
     image = _diamond_ring()
     foreground = np.argwhere(image)
@@ -165,14 +202,14 @@ def test_disconnected_ring_components_are_all_preserved():
     assert all(u == v for u, v in graph.edges())
 
 
-def test_auto_dispatch_uses_topology_aware_for_3d(monkeypatch):
-    import knotted_graph.extraction as extraction
+def test_auto_dispatch_never_uses_legacy_for_3d(monkeypatch):
+    import knotted_graph.extraction.skeleton as module_api
 
     def fail_if_called(*_args, **_kwargs):
         raise AssertionError("legacy backend should not be used for 3-D auto dispatch")
 
-    monkeypatch.setattr(extraction._legacy, "skeleton_image_to_graph", fail_if_called)
-    graph = skeleton_image_to_graph(_diamond_ring())
+    monkeypatch.setattr(module_api._legacy, "skeleton_image_to_graph", fail_if_called)
+    graph = module_api.skeleton_image_to_graph(_diamond_ring())
     assert graph.number_of_edges() == 1
 
 
