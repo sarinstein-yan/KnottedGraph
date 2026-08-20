@@ -175,6 +175,7 @@ def delete_obsolete() -> None:
         "src/knotted_graph/extraction/_legacy_skeleton.py",
         "src/knotted_graph/extraction/_sparse_compat.py",
         "tests/invariants/yamada/test_recursive.py",
+        "tests/invariants/yamada/test_state_streaming_regression.py",
     ):
         path = ROOT / relative
         if path.exists():
