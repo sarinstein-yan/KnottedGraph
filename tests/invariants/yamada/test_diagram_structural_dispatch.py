@@ -7,9 +7,13 @@ import sys
 import pytest
 
 from knotted_graph.invariants.yamada.compact import PythonCompactYamadaEvaluator
-from knotted_graph.invariants.yamada.diagram_structural import compute_structural_laurent
+from knotted_graph.invariants.yamada.diagram_structural import (
+    _reduce_r1_queue,
+    compute_structural_laurent,
+)
 from knotted_graph.invariants.yamada.native import NativeCompactEvaluator, native_available
 from knotted_graph.invariants.yamada.polynomial import Yamada, _ordered_crossing_ports
+from knotted_graph.invariants.yamada.skein_hybrid import diagram_key, find_reidemeister_i
 from knotted_graph.invariants.yamada.state_compact import PreparedCompactStateBuilder
 from knotted_graph.projection import PDCode
 
@@ -55,6 +59,36 @@ def _prepared(n: int, *, mirror: bool = False):
     reduced, _moves = prepared.reduce_reidemeister_ii()
     assert len(reduced.crossing_ids) == n
     return reduced
+
+
+def _sequential_r1_chain(prepared):
+    current = prepared
+    exponent = 0
+    moves = 0
+    while True:
+        found = find_reidemeister_i(current)
+        if found is None:
+            return current, exponent, moves
+        current, delta = found
+        exponent += delta
+        moves += 1
+
+
+@pytest.mark.parametrize(
+    ("n", "mirror"),
+    [(9, False), (11, False), (9, True), (11, True)],
+)
+def test_queue_r1_closure_is_identical_to_sequential_r1(n, mirror):
+    """Queue R1 is an implementation optimization, not a changed reduction rule."""
+    prepared = _prepared(n, mirror=mirror)
+    queue_state, queue_exponent, queue_moves = _reduce_r1_queue(prepared)
+    sequential_state, sequential_exponent, sequential_moves = _sequential_r1_chain(
+        prepared
+    )
+
+    assert queue_exponent == sequential_exponent
+    assert queue_moves == sequential_moves
+    assert diagram_key(queue_state) == diagram_key(sequential_state)
 
 
 @pytest.mark.parametrize("n", [3, 5, 7])
