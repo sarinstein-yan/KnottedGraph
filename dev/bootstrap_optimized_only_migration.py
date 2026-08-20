@@ -104,11 +104,6 @@ def patch_material_public() -> None:
 
 
 def patch_notebooks_and_docs() -> None:
-    subprocess.run(
-        [sys.executable, str(ROOT / "dev/migrate_optimized_paths.py")],
-        check=True,
-        cwd=ROOT,
-    )
     replace_text(
         "doc/developer/architecture.md",
         '`knotted_graph.extraction.skeleton_image_to_graph` is the canonical\nskeleton-to-graph entry point. For every 3-D image, `backend="auto"` uses the\nsecond-generation sparse extractor: empty image margins are cropped before\nforeground indexing, 26-neighbour adjacency is generated in exact historical\nlexicographic order, and returned coordinates remain in the original global\nvoxel frame. `knotted_graph.extraction.skeleton` exports the same function\nobjects, so the package and submodule import paths cannot diverge.\n\nThe historical `poly2graph.skeleton2graph` parser is retained only behind the\nexplicit `backend="poly2graph"` compatibility route used by regression and\nbenchmark code. It is not a normal 3-D production path.',
@@ -123,6 +118,11 @@ def patch_notebooks_and_docs() -> None:
         "dev/Architecture.md",
         '`src/knotted_graph/invariants/yamada/polynomial.py`, `src/knotted_graph/invariants/yamada/recursive.py`, `src/knotted_graph/invariants/yamada/compact.py`, `src/knotted_graph/invariants/yamada/native.py`, `src/knotted_graph/projection/pd_code.py::compute_yamada_polynomial`',
         '`src/knotted_graph/invariants/yamada/polynomial.py`, `src/knotted_graph/invariants/yamada/compact.py`, `src/knotted_graph/invariants/yamada/native.py`, `src/knotted_graph/projection/pd_code.py::compute_yamada_polynomial`',
+    )
+    subprocess.run(
+        [sys.executable, str(ROOT / "dev/migrate_optimized_paths.py")],
+        check=True,
+        cwd=ROOT,
     )
 
 
