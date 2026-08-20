@@ -13,7 +13,7 @@ from __future__ import annotations
 import networkx as nx
 import numpy as np
 
-from . import skeleton as _legacy_sparse
+from . import _legacy_skeleton as _legacy_sparse
 
 
 def _prepared_components(
@@ -25,9 +25,6 @@ def _prepared_components(
     for indices in _legacy_sparse._adjacency_components(adjacency):
         remap = {old: index for index, old in enumerate(indices)}
         local_coords = coords[np.asarray(indices, dtype=np.intp)]
-        # By construction every neighbour of a voxel in a connected component
-        # belongs to that same component, so no repeated membership test is
-        # needed during multi-scale retracing.
         local_adjacency = [
             [remap[v] for v in adjacency[old]]
             for old in indices
@@ -127,9 +124,6 @@ def _diagnostic_summary(
     anomaly_count = _anomaly_from_reduced(reduced, anomaly_ratio)
     clean = max_observed_degree <= max_degree and anomaly_count == 0
 
-    # An inter-node raw edge with fewer than five polyline points can disappear
-    # when both endpoint zones grow by one graph hop. Otherwise a clean graph is
-    # certified stable for the next scale and retracing can be skipped.
     survivors = set(pruned.nodes())
     has_mergeable_short_edge = any(
         u != v
