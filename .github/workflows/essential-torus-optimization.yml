@@ -10,6 +10,7 @@ on:
       - "dev/benchmark_batch_r1_candidate.py"
       - "dev/benchmark_r1_queue_candidate.py"
       - "dev/benchmark_bounded_inversion_candidate.py"
+      - "dev/benchmark_local_rii_candidate.py"
       - "tests/invariants/yamada/test_diagram_structural_dispatch.py"
       - ".github/workflows/essential-torus-optimization.yml"
   workflow_dispatch:
@@ -51,12 +52,12 @@ jobs:
       - name: Published and independent Yamada sanity checks
         run: uv run --no-sync python dev/run_yamada_sanity_checks.py
 
-      - name: Probe bounded inversion search through 161 crossings
+      - name: Probe local RII search through 321 crossings
         run: >
-          uv run --no-sync python dev/benchmark_bounded_inversion_candidate.py
+          uv run --no-sync python dev/benchmark_local_rii_candidate.py
           --n-values 19,31,51,81
           --mirror-n 19
-          --high-n 121,161
+          --high-n 121,161,241,321
 
       - name: Generic KG versus Topoly on certified odd Theta family
         run: >
