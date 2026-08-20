@@ -28,6 +28,57 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Patch scaling notebook to production optimizer
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb')
+          nb = json.loads(path.read_text())
+          cells = nb['cells']
+
+          def by_id(cell_id):
+              for cell in cells:
+                  if cell.get('id') == cell_id:
+                      return cell
+              raise RuntimeError(f'missing cell {cell_id}')
+
+          setup = by_id('setup')
+          setup_text = ''.join(setup.get('source', []))
+          marker = '# PRODUCTION_YAMADA_ENGINE_GUARD'
+          if marker not in setup_text:
+              setup_text += '''\n\n# PRODUCTION_YAMADA_ENGINE_GUARD\nfrom knotted_graph.invariants.yamada import diagram_structural as _production_structural\n\nkg_source = Path(knotted_graph.__file__).resolve()\nstructural_source = Path(_production_structural.__file__).resolve()\nif ROOT not in kg_source.parents or ROOT not in structural_source.parents:\n    raise RuntimeError(\n        \"This notebook is importing a stale KnottedGraph installation instead of this checkout. \"\n        f\"KnottedGraph={kg_source}; structural engine={structural_source}. \"\n        \"Reinstall this checkout and restart the kernel.\"\n    )\nassert hasattr(_production_structural, \"_reduce_r1_queue\"), \"queue-R1 production optimization missing\"\nassert hasattr(_production_structural, \"_first_local_inversion\"), \"first-local-inversion production optimization missing\"\nprint(\"Production structural engine:\", structural_source)\nprint(\"Optimization engine: queue-R1 + first-success inversion + local RII + exact isomorphism memo\")\n'''
+              setup['source'] = setup_text.splitlines(keepends=True)
+              setup['outputs'] = []
+              setup['execution_count'] = None
+
+          table_source = '''from IPython.display import Markdown, display\n\nlines = [\n    \"| crossings | KnottedGraph | Topoly | Topoly / KG |\",\n    \"|---:|---:|---:|---:|\",\n]\npaired_rows = []\nfor row in essential_rows:\n    n = int(row[\"crossings\"])\n    kg = row.get(\"knottedgraph_s\")\n    tp = row.get(\"topoly_s\")\n    kg_text = f\"{float(kg):.4f} s\" if kg is not None else row.get(\"knottedgraph_status\", \"—\")\n    if row.get(\"topoly_status\") == \"ok\" and tp is not None:\n        tp_text = f\"{float(tp):.4f} s\"\n        ratio = float(tp) / float(kg)\n        ratio_text = f\"**{ratio:.1f}×**\"\n        paired_rows.append(row)\n    else:\n        tp_text = row.get(\"topoly_status\", \"—\")\n        ratio_text = \"—\"\n    lines.append(f\"| {n} | {kg_text} | {tp_text} | {ratio_text} |\")\n\ndisplay(Markdown(\"\\n\".join(lines)))\n\nif paired_rows:\n    assert all(float(r[\"knottedgraph_s\"]) < float(r[\"topoly_s\"]) for r in paired_rows), (\n        \"Optimized production KnottedGraph was not faster than Topoly on every completed \"\n        \"certified odd-Theta comparison. Check the imported package path above.\"\n    )\n'''
+          table_cell = {
+              'cell_type': 'code',
+              'execution_count': None,
+              'metadata': {},
+              'outputs': [],
+              'source': table_source.splitlines(keepends=True),
+              'id': 'essential-torus-optimized-table',
+          }
+          existing = next((i for i, c in enumerate(cells) if c.get('id') == table_cell['id']), None)
+          if existing is None:
+              run_index = next(i for i, c in enumerate(cells) if c.get('id') == 'essential-torus-run')
+              cells.insert(run_index + 1, table_cell)
+          else:
+              cells[existing] = table_cell
+
+          writeup = by_id('dv-validation-writeup')
+          writeup['source'] = '''# Dobrynin--Vesnin Theta(n) validation\n\nThis benchmark validates the generic production Yamada evaluator against the analytic result of Dobrynin and Vesnin, Theorem 2. The theorem is **only an external correctness oracle** and does not participate in the timed KnottedGraph computation.\n\nThe production evaluator does not recognize this family and does not use a theorem fast path. It uses generic exact queue-based R1 closure, first-success skein inversion, local RII cancellation, exact prepared-diagram isomorphism memoization, and the native exhaustive kernel only for small irreducible residual states.\n\nFor every tested $n=0,1,\\ldots,20$, KnottedGraph must agree term-for-term with Theorem 2. Topoly is treated as an external comparator. Topoly agrees through $n=16$ under the allowed Laurent convention transformations, returns a non-equivalent polynomial at $n=17$, and errors on the tested $n=18,19,20$ cases.\n\nExact timings are recomputed by the cells below because they depend on hardware and environment.\n'''.splitlines(keepends=True)
+
+          config_text = by_id('dv-config-text')
+          config_text['source'] = '''### Adjustable range\n\nGitHub validation is intentionally capped at $n\\le20$. You can raise `THETA_N_MAX` locally for longer stress tests. The production evaluator remains the same generic algorithm; no theorem recognizer is enabled by increasing this range.\n'''.splitlines(keepends=True)
+
+          path.write_text(json.dumps(nb, indent=1, ensure_ascii=False) + '\n')
+          print('patched', path)
+          PY
+
       - name: Normalize notebooks
         run: python dev/normalize_notebook_environments.py
 
@@ -44,7 +95,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add User_guide
-          git commit -m "Normalize notebook package environments"
+          git commit -m "Update scaling notebook for optimized production Yamada"
           BRANCH="${{ github.head_ref || github.ref_name }}"
           git fetch origin "$BRANCH"
           git rebase "origin/$BRANCH"
