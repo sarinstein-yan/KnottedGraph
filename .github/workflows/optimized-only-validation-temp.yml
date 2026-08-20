@@ -124,7 +124,7 @@ jobs:
             tests/invariants/yamada/test_fast_kernel_equivalence.py \
             tests/invariants/yamada/test_graph_yamada.py \
             tests/invariants/yamada/test_optimization_fuzz_equivalence.py \
-            tests/invariants/yamada/test_state_streaming_regression.py
+            tests/invariants/yamada/test_trivalent_projection_catalog.py
 
       - name: Ruff
         run: uv run --no-sync ruff check src tests dev
