@@ -72,6 +72,17 @@ jobs:
               raise RuntimeError("could not extend migration self-audit allowlist")
           migration.write_text(text.replace(needle, replacement), encoding="utf-8")
 
+          consistency = root / "dev/check_repository_consistency.py"
+          ctext = consistency.read_text(encoding="utf-8")
+          old = '    return [ROOT / line for line in out.splitlines() if line]\n'
+          new = (
+              '    paths = [ROOT / line for line in out.splitlines() if line]\n'
+              '    return [path for path in paths if path.exists()]\n'
+          )
+          if old not in ctext:
+              raise RuntimeError("could not make repository audit deletion-aware")
+          consistency.write_text(ctext.replace(old, new), encoding="utf-8")
+
           bootstrap.patch_nodal()
           bootstrap.patch_material_base()
           bootstrap.patch_material_public()
