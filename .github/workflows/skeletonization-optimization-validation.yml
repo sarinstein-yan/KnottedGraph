@@ -49,18 +49,40 @@ jobs:
           assert native_available(), native_import_error()
           PY
 
-      - name: Run topology-aware extraction tests
+      - name: Run optimized skeleton workflow tests
         id: unit
         if: steps.native.outcome == 'success'
         continue-on-error: true
         shell: bash
         run: |
           set -o pipefail
-          uv run --no-sync pytest -q tests/core/test_topology_aware_skeleton.py 2>&1 | tee /tmp/unit.log
+          uv run --no-sync pytest -q \
+            tests/core/test_topology_aware_skeleton.py \
+            tests/applications/test_material_surface_optimization.py \
+            tests/applications/test_nodal_regressions.py \
+            2>&1 | tee /tmp/unit.log
+
+      - name: Audit optimized integration
+        id: integration
+        if: steps.unit.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          {
+            uv run --no-sync ruff check \
+              src/knotted_graph/extraction \
+              src/knotted_graph/applications/material_surface.py \
+              src/knotted_graph/applications/_material_surface_base.py \
+              tests/core/test_topology_aware_skeleton.py \
+              tests/applications/test_material_surface_optimization.py
+            PYTHONPATH="${GITHUB_WORKSPACE}/src" PYTHONNOUSERSITE=1 \
+              uv run --no-sync python dev/check_repository_consistency.py
+          } 2>&1 | tee /tmp/integration.log
 
       - name: Validate notebook portability
         id: portability
-        if: steps.unit.outcome == 'success'
+        if: steps.integration.outcome == 'success'
         continue-on-error: true
         shell: bash
         run: |
@@ -120,11 +142,12 @@ jobs:
             echo "commit=${GITHUB_SHA}"
             echo "native=${{ steps.native.outcome }}"
             echo "unit=${{ steps.unit.outcome }}"
+            echo "integration=${{ steps.integration.outcome }}"
             echo "portability=${{ steps.portability.outcome }}"
             echo "04_ground_truth=${{ steps.ground_truth.outcome }}"
             echo "01_sanity=${{ steps.sanity.outcome }}"
             echo "02_regression=${{ steps.regression.outcome }}"
-            for item in native unit portability ground_truth sanity regression; do
+            for item in native unit integration portability ground_truth sanity regression; do
               echo
               echo "===== ${item} ====="
               if test -f "/tmp/${item}.log"; then cat "/tmp/${item}.log"; else echo "not run"; fi
@@ -144,6 +167,7 @@ jobs:
         run: |
           test "${{ steps.native.outcome }}" = success
           test "${{ steps.unit.outcome }}" = success
+          test "${{ steps.integration.outcome }}" = success
           test "${{ steps.portability.outcome }}" = success
           test "${{ steps.ground_truth.outcome }}" = success
           test "${{ steps.sanity.outcome }}" = success
