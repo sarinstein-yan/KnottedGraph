@@ -1,16 +1,11 @@
-"""High-performance topology-aware 3-D skeleton extraction.
+"""Persistence-based topology repair for sparse 3-D skeleton graphs.
 
-This module contains two improvements over the first sparse prototype:
-
-1. foreground discovery is restricted to the occupied axis-aligned bounding box,
-   while returned coordinates remain in the original global voxel frame;
-2. valence-constrained junction repair is accepted only after topology persists
-   across adjacent graph-distance scales unless one-hop expansion is certified
-   unable to merge any surviving node zones.
-
-The second rule fixes clean-looking split-junction failures that cannot be
-identified from degree bounds alone (for example, Pappus and truncated
--tetrahedral test skeletons).
+The first sparse optimizer could return a clean-looking degree-valid graph even
+when a voxelized junction was still split into several graph vertices. The
+selector here therefore requires topology persistence across adjacent
+junction-zone scales whenever one-hop expansion could still merge surviving
+node zones. If no persistent valence-valid correction is demonstrated, it fails
+closed to the zero-radius graph.
 """
 
 from __future__ import annotations
@@ -19,88 +14,22 @@ import networkx as nx
 import numpy as np
 
 from . import skeleton as _legacy_sparse
-from ._sparse_compat import trace_zero_radius_compatible
-
-_NEIGHBOR_OFFSETS = tuple(
-    (dx, dy, dz)
-    for dx in (-1, 0, 1)
-    for dy in (-1, 0, 1)
-    for dz in (-1, 0, 1)
-    if (dx, dy, dz) != (0, 0, 0)
-)
-
-
-def sparse_voxel_adjacency_cropped(
-    image: np.ndarray,
-) -> tuple[np.ndarray, list[list[int]]]:
-    """Build 26-neighbour adjacency after cropping empty image margins.
-
-    Cropping changes only the index-search domain. ``coords`` are shifted back
-    into the original image frame, so extracted embedded graphs are byte-for-byte
-    compatible with the uncropped sparse parser.
-    """
-    occupied = [
-        np.flatnonzero(image.any(axis=(1, 2))),
-        np.flatnonzero(image.any(axis=(0, 2))),
-        np.flatnonzero(image.any(axis=(0, 1))),
-    ]
-    if any(len(indices) == 0 for indices in occupied):
-        return np.empty((0, 3), dtype=np.intp), []
-
-    starts = np.asarray([int(indices[0]) for indices in occupied], dtype=np.intp)
-    stops = np.asarray([int(indices[-1]) + 1 for indices in occupied], dtype=np.intp)
-    slices = tuple(slice(int(a), int(b)) for a, b in zip(starts, stops))
-    crop = image[slices]
-
-    flat = np.flatnonzero(crop)
-    shape = crop.shape
-    local_coords = np.column_stack(np.unravel_index(flat, shape)).astype(
-        np.intp,
-        copy=False,
-    )
-    coords = local_coords + starts
-    strides = np.asarray((shape[1] * shape[2], shape[2], 1), dtype=np.int64)
-    adjacency: list[list[int]] = [[] for _ in range(flat.size)]
-
-    # Positive offsets only: every undirected pair is emitted exactly once.
-    # Offsets are already lexicographic, so appending the forward and reverse
-    # entries preserves the historical 3x3x3 neighbour-order semantics without
-    # a per-voxel Python sort.
-    for dx, dy, dz in _NEIGHBOR_OFFSETS:
-        if (dx, dy, dz) <= (0, 0, 0):
-            continue
-
-        query = flat + dx * strides[0] + dy * strides[1] + dz
-        positions = np.searchsorted(flat, query)
-        valid = positions < flat.size
-        left = np.flatnonzero(valid)
-        right = positions[valid]
-        exact = flat[right] == query[valid]
-        left = left[exact]
-        right = right[exact]
-        if left.size == 0:
-            continue
-
-        wanted = np.asarray((dx, dy, dz), dtype=np.intp)
-        actual = local_coords[right] - local_coords[left]
-        keep = np.all(actual == wanted, axis=1)
-        for u, v in zip(left[keep].tolist(), right[keep].tolist()):
-            adjacency[u].append(v)
-            adjacency[v].append(u)
-
-    return coords, adjacency
 
 
 def _prepared_components(
     coords: np.ndarray,
     adjacency: list[list[int]],
 ) -> list[tuple[np.ndarray, list[list[int]]]]:
+    """Prepare connected components once for repeated multi-scale traces."""
     prepared: list[tuple[np.ndarray, list[list[int]]]] = []
     for indices in _legacy_sparse._adjacency_components(adjacency):
         remap = {old: index for index, old in enumerate(indices)}
         local_coords = coords[np.asarray(indices, dtype=np.intp)]
+        # By construction every neighbour of a voxel in a connected component
+        # belongs to that same component, so no repeated membership test is
+        # needed during multi-scale retracing.
         local_adjacency = [
-            [remap[v] for v in adjacency[old] if v in remap]
+            [remap[v] for v in adjacency[old]]
             for old in indices
         ]
         prepared.append((local_coords, local_adjacency))
@@ -198,11 +127,9 @@ def _diagnostic_summary(
     anomaly_count = _anomaly_from_reduced(reduced, anomaly_ratio)
     clean = max_observed_degree <= max_degree and anomaly_count == 0
 
-    # If every surviving inter-node raw edge contains at least three internal
-    # edge voxels (>=5 points including node endpoints), expanding each node zone
-    # by one hop cannot make two distinct surviving node zones touch. The clean
-    # topology is therefore certified stable for the next scale and a second
-    # trace is unnecessary.
+    # An inter-node raw edge with fewer than five polyline points can disappear
+    # when both endpoint zones grow by one graph hop. Otherwise a clean graph is
+    # certified stable for the next scale and retracing can be skipped.
     survivors = set(pruned.nodes())
     has_mergeable_short_edge = any(
         u != v
@@ -224,7 +151,7 @@ def constrained_persistent_extract(
     max_hops: int = 4,
     anomaly_ratio: float = 0.15,
 ) -> nx.MultiGraph:
-    """Fail closed unless a valence-valid topology is stable across scales."""
+    """Return a persistent valence-valid correction or fail closed to base."""
     prepared = _prepared_components(coords, adjacency)
 
     def build(hops: int):
@@ -252,35 +179,4 @@ def constrained_persistent_extract(
             return previous[0]
         previous = current
 
-    # No persistent valence-valid correction was demonstrated. Preserve the
-    # zero-radius topology rather than forcing a topology-changing guess.
     return base[0]
-
-
-def extract(
-    image: np.ndarray,
-    *,
-    max_junction_degree: int | None = None,
-    adaptive_max_hops: int = 4,
-    anomaly_ratio: float = 0.15,
-) -> nx.MultiGraph:
-    """Production optimized extraction entry point."""
-    image = np.asarray(image, dtype=bool)
-    if image.ndim != 3:
-        raise ValueError("skeleton_image must be a three-dimensional array")
-    if adaptive_max_hops < 0:
-        raise ValueError("adaptive_max_hops must be non-negative")
-    if max_junction_degree is not None and max_junction_degree < 1:
-        raise ValueError("max_junction_degree must be positive")
-
-    coords, adjacency = sparse_voxel_adjacency_cropped(image)
-    if max_junction_degree is None:
-        return trace_zero_radius_compatible(coords, adjacency)
-
-    return constrained_persistent_extract(
-        coords,
-        adjacency,
-        max_degree=max_junction_degree,
-        max_hops=adaptive_max_hops,
-        anomaly_ratio=anomaly_ratio,
-    )
