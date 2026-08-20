@@ -1,0 +1,102 @@
+name: Optimized-only migration validation (temporary)
+
+on:
+  push:
+    branches:
+      - agent/optimized-only-validation-20260821
+
+permissions:
+  contents: write
+
+concurrency:
+  group: optimized-only-validation-temp
+  cancel-in-progress: true
+
+jobs:
+  migrate-validate-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/optimized-only-validation-20260821
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Apply deterministic optimized-only migration
+        run: python dev/bootstrap_optimized_only_migration.py
+
+      - name: Normalize notebook package environments
+        run: python dev/normalize_notebook_environments.py
+
+      - name: Install complete validation environment
+        run: uv sync --extra all --group dev --group docs --group benchmark
+
+      - name: Build native Yamada backend
+        run: uv run python dev/build_yamada_native.py
+
+      - name: Verify native backend
+        run: |
+          uv run python - <<'PY'
+          from knotted_graph.invariants.yamada.native import native_available, native_import_error
+          assert native_available(), native_import_error()
+          print('PASS: native Yamada backend available')
+          PY
+
+      - name: Check optimized-only migration is idempotent
+        run: uv run python dev/migrate_optimized_paths.py --check
+
+      - name: Repository consistency
+        run: uv run python dev/check_repository_consistency.py
+
+      - name: Notebook portability
+        run: uv run python dev/check_notebook_portability.py
+
+      - name: Ruff
+        run: uv run ruff check src tests dev
+
+      - name: Full pytest suite
+        run: uv run pytest -q
+
+      - name: Execute Yamada sanity notebook
+        env:
+          MPLBACKEND: Agg
+          PYVISTA_OFF_SCREEN: 'true'
+        run: uv run jupyter nbconvert --to notebook --execute User_guide/benchmarks/01_sanity_checks.ipynb --output /tmp/01_sanity_checks.executed.ipynb --ExecutePreprocessor.timeout=1800
+
+      - name: Execute application output regression notebook
+        env:
+          MPLBACKEND: Agg
+          PYVISTA_OFF_SCREEN: 'true'
+        run: uv run jupyter nbconvert --to notebook --execute User_guide/benchmarks/02_application_output_regression.ipynb --output /tmp/02_application_output_regression.executed.ipynb --ExecutePreprocessor.timeout=2400
+
+      - name: Execute 45-case ground-truth notebook
+        env:
+          MPLBACKEND: Agg
+          PYVISTA_OFF_SCREEN: 'true'
+        run: uv run jupyter nbconvert --to notebook --execute User_guide/benchmarks/04_synthetic_ground_truth_validation.ipynb --output /tmp/04_synthetic_ground_truth_validation.executed.ipynb --ExecutePreprocessor.timeout=3600
+
+      - name: Remove temporary migration scaffolding
+        run: |
+          rm -rf dev/.migration_payload
+          rm -f dev/bootstrap_optimized_only_migration.py
+          rm -f .github/workflows/optimized-only-validation-temp.yml
+
+      - name: Commit validated migration
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'No migration changes to commit.'
+          else
+            git commit -m 'Use canonical optimized skeleton and Yamada paths'
+            git push origin HEAD:agent/optimized-only-validation-20260821
+          fi
