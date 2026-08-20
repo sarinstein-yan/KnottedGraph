@@ -59,8 +59,11 @@ def test_yamada_polynomial_import_does_not_load_application_stack():
         import json
         import sys
 
-        from knotted_graph.invariants.yamada.polynomial import Yamada, compute_negami
+        from knotted_graph.invariants.yamada import compute_graph_yamada_polynomial
+        from knotted_graph.invariants.yamada.polynomial import Yamada
 
+        assert callable(compute_graph_yamada_polynomial)
+        assert Yamada is not None
         names = [
             "poly2graph",
             "pyvista",
