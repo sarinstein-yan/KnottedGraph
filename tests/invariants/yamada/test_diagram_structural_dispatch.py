@@ -11,6 +11,7 @@ from knotted_graph.invariants.yamada.diagram_structural import (
     _reduce_r1_queue,
     compute_structural_laurent,
 )
+import knotted_graph.invariants.yamada.native as native_module
 from knotted_graph.invariants.yamada.native import NativeCompactEvaluator, native_available
 from knotted_graph.invariants.yamada.polynomial import Yamada, _ordered_crossing_ports
 from knotted_graph.invariants.yamada.skein_hybrid import diagram_key, find_reidemeister_i
@@ -143,3 +144,23 @@ def test_public_prepared_dispatch_never_uses_theta_shortcut():
     evaluator.compute_prepared_laurent(prepared)
     assert evaluator.theta_twist_calls == 0
     assert evaluator.structural_calls == 1
+
+
+def test_pure_python_install_still_uses_optimized_structural_dispatch(monkeypatch):
+    """Lack of the C++ extension must not revert high-c to exhaustive 3**c states."""
+    monkeypatch.setattr(native_module, "_yamada_native", None)
+    prepared = _prepared(9)
+    evaluator = native_module.make_native_or_python_evaluator(
+        PythonCompactYamadaEvaluator
+    )
+
+    assert isinstance(evaluator, NativeCompactEvaluator)
+    assert evaluator.backend == "python"
+    actual = evaluator.compute_prepared_laurent(prepared)
+
+    module = _load_torus_module()
+    expected = tuple(sorted(module.independent_theta_terms(9).items()))
+    assert actual == expected
+    assert evaluator.structural_calls == 1
+    assert evaluator.last_structural_stats["r1_moves"] > 0
+    assert evaluator.last_structural_stats["max_bulk_crossings"] <= 4
