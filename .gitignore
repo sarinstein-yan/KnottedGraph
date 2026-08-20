@@ -202,3 +202,17 @@ examples/**/*.obj
 examples/**/*.off
 examples/**/*.gro
 examples/**/*.dump
+
+# Current Task 2 figure-builder runtime outputs
+/examples/input_gallery/task2_figures/_build/
+/examples/input_gallery/task2_figures/_cache/
+/examples/input_gallery/task2_figures/_delivery/
+/examples/input_gallery/delivery_task2_v9/
+
+# Cluster job logs are local execution evidence, not repository sources
+/task2_*.out
+/task2_*.err
+/s4_*.out
+/s4_*.err
+/kg_*.o[0-9]*
+/kg_*.e[0-9]*

@@ -7,6 +7,11 @@ For a report-ready overview of the current Task 2 status, see
 `TASK2_SUMMARY.md`. For the publication-style input-gallery caption, see
 `input_gallery/GALLERY_CAPTION.md`.
 
+The current Main, S1, and S2 publication compositors have a small, stable entry
+point in [`input_gallery/task2_figures/`](input_gallery/task2_figures/README.md).
+That package is separate from historical gallery experiments and validates all
+accepted panel inputs before rendering.
+
 The stable adapters have been migrated into `knotted_graph.inputs`; the broader
 examples show how domain data can be adapted into the internal shapes the
 downstream library already understands:
