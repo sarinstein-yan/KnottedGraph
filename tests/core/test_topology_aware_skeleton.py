@@ -111,6 +111,7 @@ def test_topology_aware_edge_endpoints_match_node_positions():
 
 
 def test_default_sparse_output_matches_poly2graph_exactly():
+    pytest.importorskip("poly2graph")
     image = _trivalent_t_skeleton()
     expected = skeleton_image_to_graph(image, backend="poly2graph")
     actual = skeleton_image_to_graph(image)
@@ -118,6 +119,7 @@ def test_default_sparse_output_matches_poly2graph_exactly():
 
 
 def test_cropped_default_preserves_global_coordinates_and_order_exactly():
+    pytest.importorskip("poly2graph")
     image = np.pad(
         _trivalent_t_skeleton(),
         ((11, 23), (7, 19), (5, 17)),
@@ -164,17 +166,18 @@ def test_disconnected_ring_components_are_all_preserved():
 
 
 def test_auto_dispatch_uses_topology_aware_for_3d(monkeypatch):
-    import poly2graph
+    import knotted_graph.extraction as extraction
 
-    def fail_if_called(_image):
-        raise AssertionError("poly2graph should not be used for 3-D auto dispatch")
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("legacy backend should not be used for 3-D auto dispatch")
 
-    monkeypatch.setattr(poly2graph, "skeleton2graph", fail_if_called)
+    monkeypatch.setattr(extraction._legacy, "skeleton_image_to_graph", fail_if_called)
     graph = skeleton_image_to_graph(_diamond_ring())
     assert graph.number_of_edges() == 1
 
 
 def test_explicit_poly2graph_backend_remains_available():
+    pytest.importorskip("poly2graph")
     image = _diamond_ring()
     graph = skeleton_image_to_graph(image, backend="poly2graph")
     assert isinstance(graph, nx.MultiGraph)
