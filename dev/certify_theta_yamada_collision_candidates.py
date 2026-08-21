@@ -15,9 +15,8 @@ import discover_yamada_theta_collisions as core
 
 A = sp.Symbol("A")
 
-# Minimal size-two collision buckets from the first exact eight-crossing sweep.
-# These are intentionally hard-coded as reproducible discovery coordinates:
-# (plantri shadow index, over/under bit assignment, safe crossing-neighbourhood fraction).
+# Minimal size-two collision buckets selected from the first exact eight-crossing
+# restricted sweep.  Coordinates are (plantri shadow, bits, safe fraction).
 CANDIDATE_PAIRS = [
     ((7, 57, 0.12), (13, 67, 0.08)),
     ((7, 198, 0.12), (13, 188, 0.08)),
@@ -33,12 +32,10 @@ CANDIDATE_PAIRS = [
 
 
 def constituent_cycle(edge_a: np.ndarray, edge_b: np.ndarray) -> np.ndarray:
-    """Close the cycle e_a union reverse(e_b) without duplicating endpoints."""
     return np.vstack([edge_a, edge_b[-2:0:-1]])
 
 
 def stable_topoly_value(value) -> str:
-    """Serialize Topoly output deterministically for equality comparison."""
     if isinstance(value, dict):
         return json.dumps(value, sort_keys=True, default=str)
     return str(value)
@@ -48,31 +45,33 @@ def constituent_signature(edge_points: list[np.ndarray]) -> tuple[str, ...]:
     signatures: list[str] = []
     for i, j in ((0, 1), (0, 2), (1, 2)):
         cycle = constituent_cycle(edge_points[i], edge_points[j])
-        # CLOSED is deterministic: no probabilistic closure is used. HOMFLY is
-        # independent of KnottedGraph/Yamada, and unequal HOMFLY values alone
-        # prove the constituent knots are not ambient isotopic.
+        # CLOSED is deterministic: no artificial/probabilistic closure is used.
+        # A sufficiently high max_cross is essential: Topoly's unresolved "TMC"
+        # label is NOT a knot invariant and must never certify non-isotopy.
         h = homfly(
             cycle.tolist(),
             closure=Closure.CLOSED,
             chiral=True,
             run_parallel=False,
+            max_cross=30,
         )
-        signatures.append(stable_topoly_value(h))
-    # Edge labels of a theta curve are not part of the isotopy class.
+        value = stable_topoly_value(h)
+        if "TMC" in value:
+            raise RuntimeError(
+                f"Topoly failed to resolve constituent ({i},{j}) even at max_cross=30"
+            )
+        signatures.append(value)
+    # Edge labels are not part of the ambient-isotopy class.
     return tuple(sorted(signatures))
 
 
 def reconstruct(
-    shadows: list[core.Shadow],
-    descriptor: tuple[int, int, float],
+    shadows: list[core.Shadow], descriptor: tuple[int, int, float]
 ) -> dict:
     shadow_index, bits, fraction = descriptor
-    shadow_by_index = {shadow.index: shadow for shadow in shadows}
-    shadow = shadow_by_index[shadow_index]
+    shadow = {item.index: item for item in shadows}[shadow_index]
     graph, edge_points = core.spatial_theta(
-        shadow,
-        bits,
-        approach_fraction=fraction,
+        shadow, bits, approach_fraction=fraction
     )
     result = compute_yamada_polynomial(
         graph,
@@ -109,8 +108,9 @@ def run(plantri: str, output: Path) -> dict:
         right = reconstruct(shadows, right_descriptor)
         same_yamada = sp.simplify(sp.expand(left["yamada"] - right["yamada"])) == 0
         if not same_yamada:
-            raise AssertionError(f"pair {pair_index}: discovery Yamada collision did not reproduce")
-
+            raise AssertionError(
+                f"pair {pair_index}: discovery Yamada collision did not reproduce"
+            )
         different_constituents = (
             left["constituent_homfly_multiset"]
             != right["constituent_homfly_multiset"]
@@ -125,7 +125,10 @@ def run(plantri: str, output: Path) -> dict:
         }
         if different_constituents:
             certified.append(record)
-            print("CERTIFIED_NONISOTOPIC_COLLISION=" + json.dumps(record, sort_keys=True))
+            print(
+                "CERTIFIED_NONISOTOPIC_COLLISION="
+                + json.dumps(record, sort_keys=True)
+            )
         else:
             unresolved.append(record)
             print("UNRESOLVED_COLLISION=" + json.dumps(record, sort_keys=True))
@@ -136,6 +139,10 @@ def run(plantri: str, output: Path) -> dict:
         "unresolved_pair_count": len(unresolved),
         "certified_pairs": certified,
         "unresolved_pairs": unresolved,
+        "certificate_rule": (
+            "different fully resolved unordered constituent-HOMFLY multisets; "
+            "unresolved Topoly labels such as TMC are forbidden"
+        ),
     }
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, indent=2, sort_keys=True))
