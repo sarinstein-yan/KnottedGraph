@@ -25,6 +25,10 @@ from __future__ import annotations
 from collections import defaultdict
 
 
+class FrontierLimitExceeded(RuntimeError):
+    """Raised when an adaptive frontier run exceeds a configured safe limit."""
+
+
 def _canonical(labels):
     remap = {}
     out = []
@@ -89,7 +93,6 @@ def _greedy_factor_order(adjacency, factor_ports):
     processed = set()
     order = []
 
-    # Begin at a low external-degree factor; isolated factors are harmless first.
     first = min(
         unprocessed,
         key=lambda node: (sum(adjacency[node].values()), len(factor_ports[node]), node),
@@ -102,7 +105,6 @@ def _greedy_factor_order(adjacency, factor_ports):
         def score(node):
             back = sum(mult for other, mult in adjacency[node].items() if other in processed)
             future = sum(mult for other, mult in adjacency[node].items() if other in unprocessed)
-            # Prefer extending the processed region, then minimize new cut arcs.
             disconnected = 1 if back == 0 and processed else 0
             return (disconnected, future - back, future, -back, len(factor_ports[node]), node)
 
@@ -113,6 +115,45 @@ def _greedy_factor_order(adjacency, factor_ports):
     return order
 
 
+def plan_diagram_frontier(prepared, *, factor_order=None):
+    """Return a cheap deterministic frontier plan without polynomial work.
+
+    ``peak_ports`` is the largest number of live port endpoints immediately
+    after introducing a factor and before closing its backward arcs. It is a
+    conservative structural proxy for the partition-state cost and is used only
+    for performance dispatch, never for correctness.
+    """
+    factor_ports, port_factor, adjacency, arcs = _factor_graph(prepared)
+    order = _greedy_factor_order(adjacency, factor_ports) if factor_order is None else list(factor_order)
+    if sorted(order) != list(range(len(factor_ports))):
+        raise ValueError("factor_order must contain every fixed vertex/crossing exactly once")
+
+    active = []
+    processed = set()
+    peak_ports = 0
+    max_boundary_ports = 0
+    for factor in order:
+        active.extend(sorted(factor_ports[factor]))
+        peak_ports = max(peak_ports, len(active))
+        processed.add(factor)
+        active = [
+            port
+            for port in active
+            if port_factor[prepared.arc_partner[port]] not in processed
+        ]
+        max_boundary_ports = max(max_boundary_ports, len(active))
+
+    if active:
+        raise RuntimeError("frontier planner did not close")
+    return {
+        "factor_order": tuple(order),
+        "peak_ports": peak_ports,
+        "max_boundary_ports": max_boundary_ports,
+        "factor_count": len(order),
+        "arc_count": len(arcs),
+    }
+
+
 def _crossing_groups(prepared, crossing_index, spin):
     ports = prepared.ordered_ports[crossing_index]
     if spin == 2:
@@ -120,11 +161,12 @@ def _crossing_groups(prepared, crossing_index, spin):
     partner = prepared.plus_partner if spin == 0 else prepared.minus_partner
     groups = []
     seen = set()
+    port_set = set(ports)
     for port in ports:
         if port in seen:
             continue
         other = partner[port]
-        if other not in ports:
+        if other not in port_set:
             raise RuntimeError("crossing resolution partner escaped crossing")
         groups.append((port, other))
         seen.add(port)
@@ -136,14 +178,11 @@ def _crossing_groups(prepared, crossing_index, spin):
 
 def _apply_groups(labels, positions, groups):
     current = labels
-    # New ports have no incident processed arcs yet, so local vertex
-    # identifications cannot close a cycle at introduction time.
     for group in groups:
         anchor = positions[group[0]]
         for port in group[1:]:
             current, closes = _union(current, anchor, positions[port])
             if closes:
-                # This should only happen if the same port was repeated.
                 raise RuntimeError("local vertex partition unexpectedly closed a cycle")
     return current
 
@@ -172,92 +211,109 @@ def _q_to_laurent(weight_by_a_beta):
     return tuple(sorted((power, coeff) for power, coeff in total.items() if coeff))
 
 
-def compute_diagram_frontier_laurent(prepared, *, factor_order=None, stats=None):
-    """Return the exact Laurent Yamada polynomial by connectivity-frontier DP."""
+def compute_diagram_frontier_laurent(
+    prepared,
+    *,
+    factor_order=None,
+    max_states=None,
+    max_peak_ports=None,
+    stats=None,
+):
+    """Return exact Laurent Yamada polynomial by connectivity-frontier DP.
+
+    Optional limits are performance guards. Exceeding one raises
+    :class:`FrontierLimitExceeded`, allowing a caller to fall back to another
+    exact backend without changing the mathematical result.
+    """
     if stats is None:
         stats = {}
     factor_ports, port_factor, adjacency, arcs = _factor_graph(prepared)
     vertex_count = len(prepared.vertex_ids)
     crossing_count = len(prepared.crossing_ids)
-    order = _greedy_factor_order(adjacency, factor_ports) if factor_order is None else list(factor_order)
-    if sorted(order) != list(range(len(factor_ports))):
-        raise ValueError("factor_order must contain every fixed vertex/crossing exactly once")
+    plan = plan_diagram_frontier(prepared, factor_order=factor_order)
+    order = list(plan["factor_order"])
+    if max_peak_ports is not None and plan["peak_ports"] > int(max_peak_ports):
+        raise FrontierLimitExceeded(
+            f"planned peak frontier {plan['peak_ports']} exceeds {max_peak_ports}"
+        )
     step_of = {factor: step for step, factor in enumerate(order)}
 
     backward_arcs = [[] for _ in order]
-    future_arc_count = [0] * len(prepared.arc_partner)
     for p, q, left, right in arcs:
-        sl = step_of[left]
-        sr = step_of[right]
-        step = max(sl, sr)
-        backward_arcs[step].append((p, q))
-        if sl < sr:
-            future_arc_count[p] += 1
-        elif sr < sl:
-            future_arc_count[q] += 1
+        backward_arcs[max(step_of[left], step_of[right])].append((p, q))
 
     active = []
-    # key=(canonical boundary partition, A exponent, beta), value=integer coeff
     states = {((), 0, 0): 1}
     max_frontier = 0
-    max_states = 1
+    max_peak_seen = 0
+    max_states_seen = 1
     transitions = 0
+    processed = set()
+
+    def enforce_state_limit(stage):
+        nonlocal max_states_seen
+        max_states_seen = max(max_states_seen, len(states))
+        if max_states is not None and len(states) > int(max_states):
+            stats.update(
+                plan,
+                crossing_count=crossing_count,
+                max_frontier=max_frontier,
+                max_peak_seen=max_peak_seen,
+                max_states=max_states_seen,
+                transitions=transitions,
+                aborted_stage=stage,
+            )
+            raise FrontierLimitExceeded(
+                f"frontier states {len(states)} exceed {max_states} at {stage}"
+            )
 
     for step, factor in enumerate(order):
         ports = sorted(factor_ports[factor])
-        old_len = len(active)
         active.extend(ports)
+        max_peak_seen = max(max_peak_seen, len(active))
         positions = {port: index for index, port in enumerate(active)}
 
         introduced = defaultdict(int)
         is_crossing = factor >= vertex_count
         if is_crossing:
             crossing = factor - vertex_count
-            options = (
-                (0, 1, 1),   # spin, A exponent, local (-1)^V sign
-                (1, -1, 1),
-                (2, 0, -1),
-            )
+            options = ((0, 1, 1), (1, -1, 1), (2, 0, -1))
         else:
-            options = ((-1, 0, -1),)  # fixed vertex contributes one vertex sign
+            options = ((-1, 0, -1),)
 
         for (labels, a_power, beta), coefficient in states.items():
-            base_labels = labels + tuple(
-                range(max(labels, default=-1) + 1, max(labels, default=-1) + 1 + len(ports))
-            )
-            base_labels = _canonical(base_labels)
+            start = max(labels, default=-1) + 1
+            base_labels = _canonical(labels + tuple(range(start, start + len(ports))))
             for spin, a_delta, local_sign in options:
-                if is_crossing:
-                    groups = _crossing_groups(prepared, crossing, spin)
-                else:
-                    groups = (tuple(ports),) if ports else ()
+                groups = (
+                    _crossing_groups(prepared, crossing, spin)
+                    if is_crossing
+                    else ((tuple(ports),) if ports else ())
+                )
                 new_labels = _apply_groups(base_labels, positions, groups)
                 introduced[(new_labels, a_power + a_delta, beta)] += coefficient * local_sign
                 transitions += 1
         states = {key: value for key, value in introduced.items() if value}
+        enforce_state_limit(f"factor:{step}:introduced")
 
-        # Every physical arc is processed exactly when its later endpoint factor
-        # is introduced (or immediately for a same-factor loop).
-        for left_port, right_port in backward_arcs[step]:
+        for arc_index, (left_port, right_port) in enumerate(backward_arcs[step]):
             left = positions[left_port]
             right = positions[right_port]
             updated = defaultdict(int)
             for (labels, a_power, beta), coefficient in states.items():
-                # edge excluded
                 updated[(labels, a_power, beta)] += coefficient
-                # edge included: edge weight -1; cycle rank increases iff endpoints
-                # were already connected in the current spanning subgraph quotient.
                 merged, closes = _union(labels, left, right)
                 updated[(merged, a_power, beta + int(closes))] -= coefficient
                 transitions += 2
             states = {key: value for key, value in updated.items() if value}
+            enforce_state_limit(f"factor:{step}:arc:{arc_index}")
 
-        processed = set(order[: step + 1])
-        forget_positions = []
-        for position, port in enumerate(active):
-            partner_factor = port_factor[prepared.arc_partner[port]]
-            if partner_factor in processed:
-                forget_positions.append(position)
+        processed.add(factor)
+        forget_positions = [
+            position
+            for position, port in enumerate(active)
+            if port_factor[prepared.arc_partner[port]] in processed
+        ]
         if forget_positions:
             remove = set(forget_positions)
             forgotten = defaultdict(int)
@@ -266,9 +322,9 @@ def compute_diagram_frontier_laurent(prepared, *, factor_order=None, stats=None)
                 forgotten[(_canonical(kept), a_power, beta)] += coefficient
             states = {key: value for key, value in forgotten.items() if value}
             active = [port for index, port in enumerate(active) if index not in remove]
+            enforce_state_limit(f"factor:{step}:forgotten")
 
         max_frontier = max(max_frontier, len(active))
-        max_states = max(max_states, len(states))
 
     if active:
         raise RuntimeError("diagram frontier did not close")
@@ -279,12 +335,12 @@ def compute_diagram_frontier_laurent(prepared, *, factor_order=None, stats=None)
         weights[(a_power, beta)] += coefficient
 
     stats.update(
-        factor_count=len(order),
+        plan,
         crossing_count=crossing_count,
         max_frontier=max_frontier,
-        max_states=max_states,
+        max_peak_seen=max_peak_seen,
+        max_states=max_states_seen,
         transitions=transitions,
         terminal_terms=len(weights),
-        factor_order=tuple(order),
     )
     return _q_to_laurent(weights)
