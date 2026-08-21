@@ -17,7 +17,6 @@ MORIUCHI_REPORTED_EIGHT_CROSSING_CANDIDATES = 39
 def abstract_isomorphism_classes(
     candidates: list[core.Shadow],
 ) -> tuple[list[list[int]], dict[int, int]]:
-    """Partition plantri outputs by underlying abstract graph isomorphism."""
     representatives: list[core.Shadow] = []
     classes: list[list[int]] = []
     class_by_shadow: dict[int, int] = {}
@@ -98,8 +97,20 @@ def run(
 
     records: list[dict] = []
     geometry_fractions: dict[int, float] = {}
+    geometry_unresolved: list[dict] = []
+    resolved_count = 0
     for position, shadow in enumerate(accepted, start=1):
-        fraction = core.choose_safe_approach_fraction(shadow, crossings)
+        try:
+            fraction = core.choose_safe_approach_fraction(shadow, crossings)
+        except (AssertionError, ValueError) as exc:
+            geometry_unresolved.append({"shadow": shadow.index, "reason": str(exc)})
+            print(
+                f"theta shadow {shadow.index}: geometry UNRESOLVED; {exc}",
+                flush=True,
+            )
+            continue
+
+        resolved_count += 1
         geometry_fractions[shadow.index] = fraction
         print(
             f"theta shadow {shadow.index}: geometry PASS at fraction={fraction}",
@@ -115,7 +126,8 @@ def run(
             record["abstract_shadow_class"] = abstract_class_by_shadow[shadow.index]
             records.append(record)
         print(
-            f"theta shadow {position}/{len(accepted)} complete; records={len(records)}",
+            f"theta candidate {position}/{len(accepted)}; resolved={resolved_count}; "
+            f"records={len(records)}",
             flush=True,
         )
 
@@ -142,7 +154,10 @@ def run(
             MORIUCHI_REPORTED_EIGHT_CROSSING_CANDIDATES if crossings == 8 else None
         ),
         "theta_admissible_shadow_count_before_limit": len(accepted_all),
-        "theta_admissible_shadow_count_searched": len(accepted),
+        "theta_admissible_shadow_count_considered": len(accepted),
+        "geometry_resolved_theta_shadow_count": resolved_count,
+        "geometry_unresolved_theta_shadow_count": len(geometry_unresolved),
+        "geometry_unresolved_theta_shadows": geometry_unresolved,
         "rejected_non_theta_shadow_count": len(rejected),
         "rejected_non_theta_shadows": rejected,
         "assignments_per_shadow": assignment_count,
@@ -166,6 +181,7 @@ def run(
             "collision_buckets",
             "rejected_non_theta_shadows",
             "duplicate_abstract_shadow_classes",
+            "geometry_unresolved_theta_shadows",
         }
     }
     print("SUMMARY=" + json.dumps(compact, sort_keys=True), flush=True)
@@ -184,7 +200,7 @@ def run(
                             "bits": row["bits"],
                             "bitstring": row["bitstring"],
                         }
-                        for row in first[:12]
+                        for row in first[:16]
                     ],
                 },
                 sort_keys=True,
