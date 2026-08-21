@@ -1,28 +1,29 @@
 """Exact width-adaptive frontier evaluator for a prepared Yamada diagram.
 
-This evaluates the Yamada state sum and the crossing-free graph polynomial in
-one connectivity dynamic program. It never enumerates all 3**c resolved states.
-The algorithm is generic: its complexity is governed by the frontier width of
-the diagram factor graph (fixed vertices + crossings joined by physical arcs),
-not by a recognized graph family.
+This evaluates the Yamada skein state sum and crossing-free graph polynomial in
+one connectivity dynamic program.  The DP key is only the canonical partition
+of the live frontier.  All Laurent grading is accumulated as the value attached
+to that partition, so histories that differ only in A-power or cycle rank merge
+immediately.
 
 For a resolved graph G,
     H(G; A) = (-1)^|V| sum_{F subseteq E} (-1)^|F| q^beta(F),
     q = A + 2 + A^-1.
-We keep degree-two smoothing vertices rather than suppressing them; H is
-homeomorphism invariant, so this leaves the exact polynomial unchanged. Thus a
-crossing contributes one of three local vertex partitions:
-  + smoothing: A times two two-port vertices,
-  - smoothing: A^-1 times two two-port vertices,
-  vertex state: one four-port vertex, hence an extra -1 from (-1)^|V|.
-Each fixed graph vertex similarly contributes -1. Physical arcs are then the
-edges of G; excluded/included edge choices have weights +1/-1, and an included
-edge raises beta exactly when it closes a connectivity cycle.
+Degree-two smoothing vertices are retained; H is invariant under subdivision.
+A crossing therefore contributes one of three local partitions with weights
+A, A^-1, -1.  A fixed graph vertex contributes -1.  For a physical arc, the
+excluded edge has weight +1.  An included edge has weight -1, and if it closes
+a connectivity cycle it additionally contributes q.  Consequently q can be
+multiplied into the Laurent value immediately and beta never needs to be stored
+in the hash key.
 """
 
 from __future__ import annotations
 
 from collections import defaultdict
+
+from .fast import add as laurent_add
+from .fast import multiply_sigma, scale as laurent_scale, shift as laurent_shift
 
 
 class FrontierLimitExceeded(RuntimeError):
@@ -116,15 +117,13 @@ def _greedy_factor_order(adjacency, factor_ports):
 
 
 def plan_diagram_frontier(prepared, *, factor_order=None):
-    """Return a cheap deterministic frontier plan without polynomial work.
-
-    ``peak_ports`` is the largest number of live port endpoints immediately
-    after introducing a factor and before closing its backward arcs. It is a
-    conservative structural proxy for the partition-state cost and is used only
-    for performance dispatch, never for correctness.
-    """
+    """Return a cheap deterministic frontier plan without polynomial work."""
     factor_ports, port_factor, adjacency, arcs = _factor_graph(prepared)
-    order = _greedy_factor_order(adjacency, factor_ports) if factor_order is None else list(factor_order)
+    order = (
+        _greedy_factor_order(adjacency, factor_ports)
+        if factor_order is None
+        else list(factor_order)
+    )
     if sorted(order) != list(range(len(factor_ports))):
         raise ValueError("factor_order must contain every fixed vertex/crossing exactly once")
 
@@ -187,28 +186,15 @@ def _apply_groups(labels, positions, groups):
     return current
 
 
-def _q_to_laurent(weight_by_a_beta):
-    total = defaultdict(int)
-    q_powers = {0: {0: 1}}
-
-    def q_power(beta):
-        while beta not in q_powers:
-            k = max(q_powers)
-            prev = q_powers[k]
-            nxt = defaultdict(int)
-            for power, coeff in prev.items():
-                nxt[power - 1] += coeff
-                nxt[power] += 2 * coeff
-                nxt[power + 1] += coeff
-            q_powers[k + 1] = dict(nxt)
-        return q_powers[beta]
-
-    for (a_power, beta), coefficient in weight_by_a_beta.items():
-        if not coefficient:
-            continue
-        for q_power_exp, q_coeff in q_power(beta).items():
-            total[a_power + q_power_exp] += coefficient * q_coeff
-    return tuple(sorted((power, coeff) for power, coeff in total.items() if coeff))
+def _accumulate_poly(table, key, value):
+    if not value:
+        return
+    current = table.get(key)
+    merged = value if current is None else laurent_add(current, value)
+    if merged:
+        table[key] = merged
+    elif current is not None:
+        del table[key]
 
 
 def compute_diagram_frontier_laurent(
@@ -221,9 +207,9 @@ def compute_diagram_frontier_laurent(
 ):
     """Return exact Laurent Yamada polynomial by connectivity-frontier DP.
 
-    Optional limits are performance guards. Exceeding one raises
-    :class:`FrontierLimitExceeded`, allowing a caller to fall back to another
-    exact backend without changing the mathematical result.
+    ``states`` maps only canonical frontier partitions to exact Laurent values.
+    Optional limits are performance guards; exceeding one lets the caller fall
+    back to another exact backend without altering the mathematical result.
     """
     if stats is None:
         stats = {}
@@ -243,16 +229,22 @@ def compute_diagram_frontier_laurent(
         backward_arcs[max(step_of[left], step_of[right])].append((p, q))
 
     active = []
-    states = {((), 0, 0): 1}
+    states = {(): ((0, 1),)}
     max_frontier = 0
     max_peak_seen = 0
     max_states_seen = 1
+    max_laurent_terms_seen = 1
     transitions = 0
     processed = set()
 
     def enforce_state_limit(stage):
-        nonlocal max_states_seen
+        nonlocal max_states_seen, max_laurent_terms_seen
         max_states_seen = max(max_states_seen, len(states))
+        if states:
+            max_laurent_terms_seen = max(
+                max_laurent_terms_seen,
+                max(len(poly) for poly in states.values()),
+            )
         if max_states is not None and len(states) > int(max_states):
             stats.update(
                 plan,
@@ -260,11 +252,12 @@ def compute_diagram_frontier_laurent(
                 max_frontier=max_frontier,
                 max_peak_seen=max_peak_seen,
                 max_states=max_states_seen,
+                max_laurent_terms=max_laurent_terms_seen,
                 transitions=transitions,
                 aborted_stage=stage,
             )
             raise FrontierLimitExceeded(
-                f"frontier states {len(states)} exceed {max_states} at {stage}"
+                f"frontier partitions {len(states)} exceed {max_states} at {stage}"
             )
 
     for step, factor in enumerate(order):
@@ -273,7 +266,7 @@ def compute_diagram_frontier_laurent(
         max_peak_seen = max(max_peak_seen, len(active))
         positions = {port: index for index, port in enumerate(active)}
 
-        introduced = defaultdict(int)
+        introduced = {}
         is_crossing = factor >= vertex_count
         if is_crossing:
             crossing = factor - vertex_count
@@ -281,7 +274,7 @@ def compute_diagram_frontier_laurent(
         else:
             options = ((-1, 0, -1),)
 
-        for (labels, a_power, beta), coefficient in states.items():
+        for labels, poly in states.items():
             start = max(labels, default=-1) + 1
             base_labels = _canonical(labels + tuple(range(start, start + len(ports))))
             for spin, a_delta, local_sign in options:
@@ -291,21 +284,29 @@ def compute_diagram_frontier_laurent(
                     else ((tuple(ports),) if ports else ())
                 )
                 new_labels = _apply_groups(base_labels, positions, groups)
-                introduced[(new_labels, a_power + a_delta, beta)] += coefficient * local_sign
+                value = laurent_shift(poly, a_delta)
+                if local_sign != 1:
+                    value = laurent_scale(value, local_sign)
+                _accumulate_poly(introduced, new_labels, value)
                 transitions += 1
-        states = {key: value for key, value in introduced.items() if value}
+        states = introduced
         enforce_state_limit(f"factor:{step}:introduced")
 
         for arc_index, (left_port, right_port) in enumerate(backward_arcs[step]):
             left = positions[left_port]
             right = positions[right_port]
-            updated = defaultdict(int)
-            for (labels, a_power, beta), coefficient in states.items():
-                updated[(labels, a_power, beta)] += coefficient
+            updated = {}
+            for labels, poly in states.items():
+                _accumulate_poly(updated, labels, poly)
                 merged, closes = _union(labels, left, right)
-                updated[(merged, a_power, beta + int(closes))] -= coefficient
+                included = (
+                    multiply_sigma(poly, sign=-1)
+                    if closes
+                    else laurent_scale(poly, -1)
+                )
+                _accumulate_poly(updated, merged, included)
                 transitions += 2
-            states = {key: value for key, value in updated.items() if value}
+            states = updated
             enforce_state_limit(f"factor:{step}:arc:{arc_index}")
 
         processed.add(factor)
@@ -316,31 +317,34 @@ def compute_diagram_frontier_laurent(
         ]
         if forget_positions:
             remove = set(forget_positions)
-            forgotten = defaultdict(int)
-            for (labels, a_power, beta), coefficient in states.items():
-                kept = tuple(label for index, label in enumerate(labels) if index not in remove)
-                forgotten[(_canonical(kept), a_power, beta)] += coefficient
-            states = {key: value for key, value in forgotten.items() if value}
-            active = [port for index, port in enumerate(active) if index not in remove]
+            forgotten = {}
+            for labels, poly in states.items():
+                kept = tuple(
+                    label for index, label in enumerate(labels) if index not in remove
+                )
+                _accumulate_poly(forgotten, _canonical(kept), poly)
+            states = forgotten
+            active = [
+                port for index, port in enumerate(active) if index not in remove
+            ]
             enforce_state_limit(f"factor:{step}:forgotten")
 
         max_frontier = max(max_frontier, len(active))
 
     if active:
         raise RuntimeError("diagram frontier did not close")
-    weights = defaultdict(int)
-    for (labels, a_power, beta), coefficient in states.items():
-        if labels:
-            raise RuntimeError("closed frontier retained partition labels")
-        weights[(a_power, beta)] += coefficient
+    if any(labels for labels in states):
+        raise RuntimeError("closed frontier retained partition labels")
 
+    value = states.get((), ())
     stats.update(
         plan,
         crossing_count=crossing_count,
         max_frontier=max_frontier,
         max_peak_seen=max_peak_seen,
         max_states=max_states_seen,
+        max_laurent_terms=max_laurent_terms_seen,
         transitions=transitions,
-        terminal_terms=len(weights),
+        terminal_terms=len(value),
     )
-    return _q_to_laurent(weights)
+    return value
