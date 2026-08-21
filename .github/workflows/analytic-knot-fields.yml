@@ -47,3 +47,29 @@ jobs:
           uv run --no-sync pytest -q
           tests/inputs/test_analytic_knot_fields.py
           tests/applications/test_knot_field_deformations.py
+
+  full-python-suite:
+    name: Full Python suite without inherited repository audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install all Python extras
+        run: uv sync --group dev --all-extras
+      - name: Require compiled Yamada backend
+        run: |
+          uv run --no-sync python - <<'PY'
+          from knotted_graph.invariants.yamada.native import native_available
+          assert native_available()
+          PY
+      - name: Run complete Python test suite with coverage
+        run: >-
+          uv run --no-sync pytest -q
+          --cov=knotted_graph
+          --cov-report=term-missing
+          --cov-fail-under=61
