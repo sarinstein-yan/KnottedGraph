@@ -5,6 +5,7 @@ on:
     paths:
       - "dev/discover_yamada_theta_collisions.py"
       - "dev/certify_theta_yamada_collision_candidates.py"
+      - "dev/certify_theta_complement_group.py"
       - ".github/workflows/yamada-theta-collision-certification.yml"
   workflow_dispatch:
 
@@ -35,14 +36,19 @@ jobs:
           mkdir -p /tmp/plantri-src
           tar -xzf /tmp/plantri58.tar.gz -C /tmp/plantri-src --strip-components=1
           cc -O3 -o /tmp/plantri /tmp/plantri-src/plantri.c
-      - name: Independently certify minimal Yamada collision pairs
+      - name: Independently certify Yamada collision pairs by constituent knots
         run: |
           uv run --no-sync python dev/certify_theta_yamada_collision_candidates.py \
             --plantri /tmp/plantri \
             --output research_results/theta8_collision_certification.json
+      - name: Certify same-constituent candidates by complement-group fingerprints
+        run: |
+          uv run --no-sync python dev/certify_theta_complement_group.py \
+            --plantri /tmp/plantri \
+            --output research_results/theta8_complement_group_certification.json
       - name: Upload independent certificates
         uses: actions/upload-artifact@v4
         with:
           name: theta8-yamada-collision-certification
-          path: research_results/theta8_collision_certification.json
+          path: research_results/theta8_*certification.json
           if-no-files-found: error
