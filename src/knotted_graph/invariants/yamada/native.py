@@ -6,9 +6,10 @@ If the native int64 coefficient fast path overflows, the computation is rerun
 with the arbitrary-precision Python Laurent kernel, preserving exactness.
 
 Prepared diagrams use the generic exact structural engine for sufficiently large
-crossing count. No theorem-family recognizer or precomputed polynomial is part
-of production dispatch; published formulas are used only by external validation
-benchmarks.
+crossing count. When that engine would otherwise fall back to a large exhaustive
+3**c state sum, a conservative width-adaptive diagram-frontier backend may be
+used instead. No theorem-family recognizer or precomputed polynomial is part of
+production dispatch; published formulas are used only by external validation.
 """
 
 from __future__ import annotations
@@ -27,6 +28,15 @@ except Exception as exc:  # pragma: no cover - platform/build fallback
 # normally faster than Python-level structural reduction. This is a performance
 # policy only; both branches are algebraically exact and regression-compared.
 STRUCTURAL_DISPATCH_MIN_CROSSINGS = 8
+
+# The direct diagram-frontier engine is deliberately only a replacement for a
+# *large structural bulk fallback*. Existing R1/RII/inversion recursion remains
+# first. These guards are conservative: the hard LLLV c=10/11 cases have planned
+# peak 8, whereas the heterogeneous c=10 case that caused state growth has peak
+# 12 and is rejected before frontier polynomial work begins.
+FRONTIER_FALLBACK_MIN_CROSSINGS = 10
+FRONTIER_MAX_PEAK_PORTS = 10
+FRONTIER_MAX_STATES = 100_000
 
 
 def native_available() -> bool:
@@ -57,6 +67,56 @@ class _MemoSizeProxy:
         return self._evaluator.memo_size
 
 
+class _StructuralBulkProxy:
+    """Intercept only expensive structural bulk fallbacks with frontier DP."""
+
+    def __init__(self, evaluator: "NativeCompactEvaluator", stats: dict):
+        self._evaluator = evaluator
+        self._stats = stats
+
+    def compute_prepared_bulk_laurent(self, prepared):
+        crossing_count = len(prepared.crossing_ids)
+        if crossing_count >= FRONTIER_FALLBACK_MIN_CROSSINGS:
+            from .diagram_frontier import (
+                FrontierLimitExceeded,
+                compute_diagram_frontier_laurent,
+                plan_diagram_frontier,
+            )
+
+            plan = plan_diagram_frontier(prepared)
+            self._stats["frontier_plans"] = self._stats.get("frontier_plans", 0) + 1
+            self._stats["max_frontier_planned_peak"] = max(
+                self._stats.get("max_frontier_planned_peak", 0),
+                int(plan["peak_ports"]),
+            )
+            if plan["peak_ports"] <= FRONTIER_MAX_PEAK_PORTS:
+                self._stats["frontier_attempts"] = self._stats.get("frontier_attempts", 0) + 1
+                frontier_stats: dict = {}
+                try:
+                    value = compute_diagram_frontier_laurent(
+                        prepared,
+                        factor_order=plan["factor_order"],
+                        max_peak_ports=FRONTIER_MAX_PEAK_PORTS,
+                        max_states=FRONTIER_MAX_STATES,
+                        stats=frontier_stats,
+                    )
+                except FrontierLimitExceeded:
+                    self._stats["frontier_aborts"] = self._stats.get("frontier_aborts", 0) + 1
+                else:
+                    self._evaluator.frontier_calls += 1
+                    self._stats["frontier_successes"] = self._stats.get("frontier_successes", 0) + 1
+                    self._stats["max_frontier_states"] = max(
+                        self._stats.get("max_frontier_states", 0),
+                        int(frontier_stats.get("max_states", 0)),
+                    )
+                    self._stats["frontier_transitions"] = self._stats.get(
+                        "frontier_transitions", 0
+                    ) + int(frontier_stats.get("transitions", 0))
+                    return value
+
+        return self._evaluator.compute_prepared_bulk_laurent(prepared)
+
+
 class NativeCompactEvaluator:
     """Native compact evaluator with exact arbitrary-precision Python fallback."""
 
@@ -67,6 +127,7 @@ class NativeCompactEvaluator:
         self.native_calls = 0
         self.fallback_calls = 0
         self.structural_calls = 0
+        self.frontier_calls = 0
         self.last_structural_stats = None
         self.memo = _MemoSizeProxy(self)
 
@@ -125,8 +186,8 @@ class NativeCompactEvaluator:
     def compute_prepared_bulk_laurent(self, prepared):
         """Exact exhaustive prepared-state sum with no structural redispatch.
 
-        This method is both the guarded production fallback and an independent
-        regression oracle for the structural high-crossing path.
+        This remains an independent regression oracle. Adaptive frontier dispatch
+        is intentionally implemented by the structural proxy, not here.
         """
         if self._native is not None and hasattr(self._native, "compute_prepared"):
             try:
@@ -151,9 +212,7 @@ class NativeCompactEvaluator:
 
         evaluator = self._python()
         total = ()
-        for config in itertools.product(
-            (0, 1, 2), repeat=len(prepared.crossing_ids)
-        ):
+        for config in itertools.product((0, 1, 2), repeat=len(prepared.crossing_ids)):
             total = add(
                 total,
                 shift(
@@ -164,16 +223,17 @@ class NativeCompactEvaluator:
         return total
 
     def compute_prepared_laurent(self, prepared):
-        """Evaluate a prepared diagram with exact size-aware generic dispatch."""
+        """Evaluate a prepared diagram with exact size/width-aware dispatch."""
         crossing_count = len(prepared.crossing_ids)
         if crossing_count < STRUCTURAL_DISPATCH_MIN_CROSSINGS:
             return self.compute_prepared_bulk_laurent(prepared)
 
         from .diagram_locality import compute_locality_laurent
 
-        stats = {}
+        stats: dict = {}
+        proxy = _StructuralBulkProxy(self, stats)
         self.structural_calls += 1
-        value = compute_locality_laurent(prepared, self, stats=stats)
+        value = compute_locality_laurent(prepared, proxy, stats=stats)
         self.last_structural_stats = stats
         return value
 
