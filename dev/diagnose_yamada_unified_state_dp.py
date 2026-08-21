@@ -11,6 +11,11 @@ import sympy as sp
 from knotted_graph.invariants.yamada.compact import PythonCompactYamadaEvaluator
 from knotted_graph.invariants.yamada.diagram_frontier import compute_diagram_frontier_laurent
 from knotted_graph.invariants.yamada.diagram_structural import _reduce_r1_queue, compute_structural_laurent
+from knotted_graph.invariants.yamada.diagram_unified import (
+    compute_unified_laurent,
+    contract_frontier_laurent,
+    native_frontier_available,
+)
 from knotted_graph.invariants.yamada.fast import shift
 from knotted_graph.invariants.yamada.native import NativeCompactEvaluator
 from knotted_graph.invariants.yamada.polynomial import Yamada, _ordered_crossing_ports
@@ -46,13 +51,12 @@ def _prepared(family: str, n: int):
     processor = PDCode(graph)
     processor.compute(rotation_angles=(0.0, 0.0, 0.0))
     yamada = Yamada.from_PDCode(processor)
-    prepared = PreparedCompactStateBuilder.prepare(
+    return PreparedCompactStateBuilder.prepare(
         yamada.vertices,
         yamada.crossings,
         yamada.arcs,
         _ordered_crossing_ports,
     )
-    return prepared
 
 
 def _root_fixpoint(prepared):
@@ -101,13 +105,25 @@ def main(family: str, n: int, repeats: int):
         frontier_stats = {}
         return compute_diagram_frontier_laurent(prepared, stats=frontier_stats)
 
+    native_frontier_stats = {}
+    def native_frontier():
+        nonlocal native_frontier_stats
+        native_frontier_stats = {}
+        return contract_frontier_laurent(prepared, stats=native_frontier_stats)
+
     reduced, exponent, rii_moves, r1_moves = _root_fixpoint(prepared)
     reduced_frontier_stats = {}
     def reduced_frontier():
         nonlocal reduced_frontier_stats
         reduced_frontier_stats = {}
-        value = compute_diagram_frontier_laurent(reduced, stats=reduced_frontier_stats)
+        value = contract_frontier_laurent(reduced, stats=reduced_frontier_stats)
         return shift(value, exponent)
+
+    unified_stats = {}
+    def unified():
+        nonlocal unified_stats
+        unified_stats = {}
+        return compute_unified_laurent(prepared, stats=unified_stats)
 
     production_stats = {}
     def production():
@@ -119,10 +135,14 @@ def main(family: str, n: int, repeats: int):
 
     rows = {}
     reference = None
-    # Bulk is intentionally skipped beyond 11 crossings; it is only an oracle
-    # for smaller diagnostics and is not part of the proposed algorithm.
-    methods = [("structural", structural), ("frontier", frontier),
-               ("reduced_frontier", reduced_frontier), ("production", production)]
+    methods = [
+        ("structural", structural),
+        ("frontier_python", frontier),
+        ("frontier_native", native_frontier),
+        ("reduced_frontier_native", reduced_frontier),
+        ("unified", unified),
+        ("production", production),
+    ]
     if len(prepared.crossing_ids) <= 11:
         methods.insert(0, ("bulk", bulk))
 
@@ -137,6 +157,7 @@ def main(family: str, n: int, repeats: int):
         "family": family,
         "n": n,
         "crossings": len(prepared.crossing_ids),
+        "native_frontier_available": native_frontier_available(),
         "root_reduced_crossings": len(reduced.crossing_ids),
         "root_rii_moves": rii_moves,
         "root_r1_moves": r1_moves,
@@ -144,7 +165,9 @@ def main(family: str, n: int, repeats: int):
         "times": rows,
         "structural_stats": structural_stats,
         "frontier_stats": frontier_stats,
+        "native_frontier_stats": native_frontier_stats,
         "reduced_frontier_stats": reduced_frontier_stats,
+        "unified_stats": unified_stats,
         "production_stats": production_stats,
     }
     print(json.dumps(result, sort_keys=True), flush=True)
