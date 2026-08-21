@@ -8,6 +8,7 @@ on:
       - "dev/certify_theta_complement_group.py"
       - "dev/certify_theta_branched_lifts.py"
       - "dev/certify_theta_branched_lifts_v2.py"
+      - "dev/search_prime_certified_yamada_pairs.py"
       - "dev/export_theta_collision_certificates.py"
       - "dev/analyze_theta_collision_structure.py"
       - ".github/workflows/yamada-theta-collision-certification.yml"
@@ -67,6 +68,13 @@ jobs:
             --plantri /tmp/plantri \
             --output research_results/theta8_branched_lift_v2_certification.json \
             --xyz-dir research_results/theta8_branched_lifts
+      - name: Search prime certificates across nonisotopic collision pairs
+        run: |
+          uv run --no-sync python dev/search_prime_certified_yamada_pairs.py \
+            --plantri /tmp/plantri \
+            --output research_results/theta8_prime_pair_search_certification.json \
+            --xyz-dir research_results/theta8_branched_lifts \
+            --rotations 3000
       - name: Export exact diagram and reconstruction certificates
         run: |
           uv run --no-sync python dev/export_theta_collision_certificates.py \
