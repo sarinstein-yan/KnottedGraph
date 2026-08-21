@@ -40,7 +40,6 @@ def _forget(labels, positions):
 
 
 def _q_poly_to_laurent(q_coefficients, vertex_count):
-    """Expand (-1)^V sum_b c_b (A^-1+2+A)^b exactly."""
     total = ()
     sign = -1 if vertex_count % 2 else 1
     for beta, coefficient in sorted(q_coefficients.items()):
@@ -62,17 +61,9 @@ def _q_poly_to_laurent(q_coefficients, vertex_count):
 
 
 def frontier_flow_laurent(graph: nx.MultiGraph, vertex_order=None):
-    """Exact H(G;A) via a path-frontier flow-polynomial state sum.
-
-    Uses H(G;A)=(-1)^|V| sum_{S subseteq E} (-1)^|S| q^beta(S),
-    q=A+2+A^-1. The state retains only connectivity of active frontier
-    vertices; selecting an edge within one current component increments beta.
-    """
+    """Exact H(G;A) using a path-frontier flow-polynomial state sum."""
     graph = nx.MultiGraph(graph)
-    if vertex_order is None:
-        vertex_order = list(graph.nodes())
-    else:
-        vertex_order = list(vertex_order)
+    vertex_order = list(graph.nodes()) if vertex_order is None else list(vertex_order)
     if set(vertex_order) != set(graph.nodes()) or len(vertex_order) != graph.number_of_nodes():
         raise ValueError("vertex_order must contain every graph vertex exactly once")
 
@@ -135,9 +126,7 @@ def frontier_flow_laurent(graph: nx.MultiGraph, vertex_order=None):
                 forgotten[(_forget(labels, forget_positions), beta)] += coefficient
             states = {key: value for key, value in forgotten.items() if value}
             remove = set(forget_positions)
-            active = [
-                node for position, node in enumerate(active) if position not in remove
-            ]
+            active = [node for position, node in enumerate(active) if position not in remove]
 
         max_frontier = max(max_frontier, len(active))
         max_states = max(max_states, len(states))
@@ -147,16 +136,8 @@ def frontier_flow_laurent(graph: nx.MultiGraph, vertex_order=None):
         if labels:
             raise RuntimeError("frontier did not close")
         q_coefficients[beta] += coefficient
-    q_coefficients = {
-        beta: coefficient
-        for beta, coefficient in q_coefficients.items()
-        if coefficient
-    }
-    return (
-        _q_poly_to_laurent(q_coefficients, graph.number_of_nodes()),
-        max_frontier,
-        max_states,
-    )
+    q_coefficients = {beta: coefficient for beta, coefficient in q_coefficients.items() if coefficient}
+    return _q_poly_to_laurent(q_coefficients, graph.number_of_nodes()), max_frontier, max_states
 
 
 def ladder(rows: int, columns: int):
@@ -166,7 +147,7 @@ def ladder(rows: int, columns: int):
     return graph, order
 
 
-def _median(fn, repeats=3):
+def _median(fn, repeats=2):
     values = []
     answer = None
     for _ in range(repeats):
@@ -179,11 +160,8 @@ def _median(fn, repeats=3):
 def benchmark(rows, columns):
     graph, order = ladder(rows, columns)
     compact = CompactGraph.from_networkx(graph)
-
     native_time, native_times, native_value = _median(
-        lambda: NativeCompactEvaluator(PythonCompactYamadaEvaluator).compute_laurent(
-            compact
-        )
+        lambda: NativeCompactEvaluator(PythonCompactYamadaEvaluator).compute_laurent(compact)
     )
     frontier_time, frontier_times, frontier_result = _median(
         lambda: frontier_flow_laurent(graph, order)
@@ -195,25 +173,16 @@ def benchmark(rows, columns):
             f"frontier={frontier_value}, native={native_value}"
         )
     print(
-        f"grid={rows}x{columns} V={graph.number_of_nodes()} "
-        f"E={graph.number_of_edges()} frontier={width} max_states={states} "
-        f"native_s={native_time:.9f} frontier_s={frontier_time:.9f} "
-        f"native_over_frontier={native_time/frontier_time:.6f}"
+        f"grid={rows}x{columns} V={graph.number_of_nodes()} E={graph.number_of_edges()} "
+        f"frontier={width} max_states={states} native_s={native_time:.9f} "
+        f"frontier_s={frontier_time:.9f} native_over_frontier={native_time/frontier_time:.6f}"
     )
     print(f"  native_times={native_times}")
     print(f"  frontier_times={frontier_times}")
 
 
 def main():
-    for rows, columns in (
-        (2, 10),
-        (2, 30),
-        (2, 100),
-        (2, 300),
-        (3, 10),
-        (3, 20),
-        (3, 40),
-    ):
+    for rows, columns in ((2, 10), (2, 30), (2, 100), (3, 10), (3, 20)):
         benchmark(rows, columns)
 
 
