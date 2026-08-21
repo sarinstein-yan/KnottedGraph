@@ -23,7 +23,7 @@ def median_run(fn, repeats=3):
     return statistics.median(values), values, answer
 
 
-def benchmark(crossings, offset):
+def prepared_case(crossings, offset):
     seed = 220000 + 1000 * crossings + offset
     prepared = random_crossing_diagram(seed, crossings)
     cheap = plan_diagram_frontier(prepared)
@@ -34,7 +34,11 @@ def benchmark(crossings, offset):
         f"CHEAP_BOUNDARY={cheap['max_boundary_ports']} "
         f"IMPROVED_BOUNDARY={improved['max_boundary_ports']}"
     )
+    return prepared, cheap, improved
 
+
+def benchmark_newly_eligible_against_exhaustive():
+    prepared, _cheap, improved = prepared_case(10, 32)
     native_time, native_times, native_value = median_run(
         lambda: NativeCompactEvaluator(PythonCompactYamadaEvaluator).compute_prepared_bulk_laurent(prepared),
         repeats=2,
@@ -50,19 +54,48 @@ def benchmark(crossings, offset):
     )
     assert frontier_value == native_value
     print(
-        f"NATIVE_EXHAUSTIVE={native_time:.9f}s FRONTIER={frontier_time:.9f}s "
-        f"SPEEDUP={native_time/frontier_time:.6f}x EXACT=PASS "
-        f"MAX_STATES={stats['max_states']} TRANSITIONS={stats['transitions']}"
+        f"NEWLY_ELIGIBLE NATIVE_EXHAUSTIVE={native_time:.9f}s "
+        f"FRONTIER={frontier_time:.9f}s SPEEDUP={native_time/frontier_time:.6f}x "
+        f"EXACT=PASS MAX_STATES={stats['max_states']} TRANSITIONS={stats['transitions']}"
     )
     print(f"  native_times={native_times}")
     print(f"  frontier_times={frontier_times}")
 
 
+def benchmark_order_quality():
+    prepared, cheap, improved = prepared_case(16, 41)
+    cheap_stats = {}
+    improved_stats = {}
+    cheap_time, cheap_times, cheap_value = median_run(
+        lambda: compute_diagram_frontier_laurent(
+            prepared,
+            factor_order=cheap["factor_order"],
+            stats=cheap_stats,
+        ),
+        repeats=2,
+    )
+    improved_time, improved_times, improved_value = median_run(
+        lambda: compute_diagram_frontier_laurent(
+            prepared,
+            factor_order=improved["factor_order"],
+            stats=improved_stats,
+        ),
+        repeats=3,
+    )
+    assert cheap_value == improved_value
+    print(
+        f"ORDER_ONLY CHEAP={cheap_time:.9f}s IMPROVED={improved_time:.9f}s "
+        f"SPEEDUP={cheap_time/improved_time:.6f}x EXACT=PASS "
+        f"STATES={cheap_stats['max_states']}->{improved_stats['max_states']} "
+        f"TRANSITIONS={cheap_stats['transitions']}->{improved_stats['transitions']}"
+    )
+    print(f"  cheap_times={cheap_times}")
+    print(f"  improved_times={improved_times}")
+
+
 def main():
-    # These are deterministic generic diagrams found by the ordering probe where
-    # the cheap plan is rejected (>10) but multi-start reaches the production target.
-    for case in ((10, 32), (12, 68), (16, 41)):
-        benchmark(*case)
+    benchmark_newly_eligible_against_exhaustive()
+    benchmark_order_quality()
 
 
 if __name__ == "__main__":
