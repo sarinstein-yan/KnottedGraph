@@ -12,7 +12,7 @@ the same algorithm:
 
 The terminal contraction is compiled when available and falls back to the same
 exact Python connectivity DP on platforms without a compiler or on int64
-coefficient overflow.  No crossing-count, width, benchmark-family or measured
+coefficient overflow. No crossing-count, width, benchmark-family or measured
 runtime threshold participates in the mathematical path.
 """
 
@@ -28,13 +28,16 @@ from .fast import add, shift
 from .skein_hybrid import _best_resolution, _skein_delta, diagram_key, resolve_crossing
 
 try:
-    from . import _yamada_frontier
+    from . import _yamada_frontier_dense as _native_frontier
 except Exception:  # pragma: no cover - compiler/platform fallback
-    _yamada_frontier = None
+    try:
+        from . import _yamada_frontier as _native_frontier
+    except Exception:  # pragma: no cover - compiler/platform fallback
+        _native_frontier = None
 
 
 def native_frontier_available() -> bool:
-    return _yamada_frontier is not None
+    return _native_frontier is not None
 
 
 def _as_laurent(value) -> tuple[tuple[int, int], ...]:
@@ -51,9 +54,9 @@ def contract_frontier_laurent(prepared, *, stats=None):
         int(stats.get("max_contract_peak_ports", 0)), int(plan["peak_ports"])
     )
 
-    if _yamada_frontier is not None:
+    if _native_frontier is not None:
         try:
-            value = _yamada_frontier.compute_prepared_frontier(
+            value = _native_frontier.compute_prepared_frontier(
                 len(prepared.vertex_ids),
                 len(prepared.crossing_ids),
                 list(prepared.arc_partner),
@@ -106,9 +109,6 @@ def compute_unified_laurent(prepared, *, memo=None, stats=None):
     ):
         stats.setdefault(key, 0)
 
-    # Ordinary RII reduction is confluent for the value and strictly removes
-    # two crossings. Applying it at every recursive state makes the algorithm
-    # independent of how the state was reached.
     def rec(state):
         stats["calls"] += 1
         stats["max_crossings_seen"] = max(
@@ -143,10 +143,7 @@ def compute_unified_laurent(prepared, *, memo=None, stats=None):
             positive_value = rec(resolve_crossing(state, crossing_index, 0))
             negative_value = rec(resolve_crossing(state, crossing_index, 1))
             inverted_value = rec(inverted_reduced)
-            value = add(
-                inverted_value,
-                _skein_delta(positive_value, negative_value),
-            )
+            value = add(inverted_value, _skein_delta(positive_value, negative_value))
         else:
             resolution = _best_resolution(state)
             if resolution is not None:
