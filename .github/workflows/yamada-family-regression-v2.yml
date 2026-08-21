@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/yamada-family-regression-fix-20260822
+  pull_request:
+    branches:
+      - YAMADA_Optimization_LATEST
   workflow_dispatch:
 
 jobs:
