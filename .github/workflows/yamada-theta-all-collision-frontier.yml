@@ -1,0 +1,44 @@
+name: Yamada theta all-collision frontier
+
+on:
+  pull_request:
+    paths:
+      - "dev/search_all_collision_constituent_frontier.py"
+      - ".github/workflows/yamada-theta-all-collision-frontier.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  all-collision-frontier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install research environment
+        run: uv sync --group dev --group benchmark
+      - name: Build plantri 5.8
+        run: |
+          curl -fsSLo /tmp/plantri58.tar.gz https://users.cecs.anu.edu.au/~bdm/plantri/plantri58.tar.gz
+          mkdir -p /tmp/plantri-src
+          tar -xzf /tmp/plantri58.tar.gz -C /tmp/plantri-src --strip-components=1
+          cc -O3 -o /tmp/plantri /tmp/plantri-src/plantri.c
+      - name: Scan all collision buckets by fully resolved constituents
+        run: |
+          uv run --no-sync python dev/search_all_collision_constituent_frontier.py \
+            --plantri /tmp/plantri \
+            --output research_results/theta8_all_collision_constituent_frontier.json \
+            --frontier-output research_results/theta8_all_collision_corpus.json
+      - name: Upload frontier certificate
+        uses: actions/upload-artifact@v4
+        with:
+          name: theta8-all-collision-frontier
+          path: |
+            research_results/theta8_all_collision_constituent_frontier.json
+            research_results/theta8_all_collision_corpus.json
+          if-no-files-found: error
