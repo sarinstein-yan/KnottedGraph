@@ -42,9 +42,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install package
+      - name: Install package with native extensions
         run: python -m pip install -e .
-      - name: Build native Yamada extensions
-        run: python setup.py build_ext --inplace
       - name: Diagnose unified state DP
         run: python dev/diagnose_yamada_unified_state_dp.py '${{ matrix.family }}' '${{ matrix.n }}' --repeats 2
