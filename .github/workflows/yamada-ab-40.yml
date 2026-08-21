@@ -1,0 +1,41 @@
+name: Yamada 40-crossing A/B
+
+on:
+  pull_request:
+    branches:
+      - YAMADA_Optimization_LATEST
+    paths:
+      - "dev/benchmark_yamada_ab_40.py"
+      - ".github/workflows/yamada-ab-40.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  ab40:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Prepare baseline worktree
+        run: |
+          git worktree add --detach ../ab40-base 5cd2776c3840ac7b7ac7eb5979b0e4e6b8d3dd11
+          cp dev/benchmark_yamada_ab_40.py ../ab40-base/dev/benchmark_yamada_ab_40.py
+          cd ../ab40-base
+          uv sync --group dev --group benchmark
+          uv run --no-sync python dev/benchmark_yamada_ab_40.py run baseline /tmp/ab40-base.json
+      - name: Prepare latest worktree
+        run: |
+          git worktree add --detach ../ab40-latest 63190fef71ba205da9b9c977c20c9b5909ec0154
+          cp dev/benchmark_yamada_ab_40.py ../ab40-latest/dev/benchmark_yamada_ab_40.py
+          cd ../ab40-latest
+          uv sync --group dev --group benchmark
+          uv run --no-sync python dev/benchmark_yamada_ab_40.py run latest /tmp/ab40-latest.json
+      - name: Compare exact result and timing
+        run: uv run --no-sync python dev/benchmark_yamada_ab_40.py compare /tmp/ab40-base.json /tmp/ab40-latest.json
