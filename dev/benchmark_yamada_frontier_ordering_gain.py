@@ -37,11 +37,11 @@ def prepared_case(crossings, offset):
     return prepared, cheap, improved
 
 
-def benchmark_newly_eligible_against_exhaustive():
-    prepared, _cheap, improved = prepared_case(10, 32)
+def benchmark_newly_eligible_against_exhaustive(crossings, offset, native_repeats=2):
+    prepared, _cheap, improved = prepared_case(crossings, offset)
     native_time, native_times, native_value = median_run(
         lambda: NativeCompactEvaluator(PythonCompactYamadaEvaluator).compute_prepared_bulk_laurent(prepared),
-        repeats=2,
+        repeats=native_repeats,
     )
     stats = {}
     frontier_time, frontier_times, frontier_value = median_run(
@@ -54,7 +54,7 @@ def benchmark_newly_eligible_against_exhaustive():
     )
     assert frontier_value == native_value
     print(
-        f"NEWLY_ELIGIBLE NATIVE_EXHAUSTIVE={native_time:.9f}s "
+        f"NEWLY_ELIGIBLE crossings={crossings} NATIVE_EXHAUSTIVE={native_time:.9f}s "
         f"FRONTIER={frontier_time:.9f}s SPEEDUP={native_time/frontier_time:.6f}x "
         f"EXACT=PASS MAX_STATES={stats['max_states']} TRANSITIONS={stats['transitions']}"
     )
@@ -94,7 +94,8 @@ def benchmark_order_quality():
 
 
 def main():
-    benchmark_newly_eligible_against_exhaustive()
+    benchmark_newly_eligible_against_exhaustive(10, 32, native_repeats=2)
+    benchmark_newly_eligible_against_exhaustive(12, 68, native_repeats=1)
     benchmark_order_quality()
 
 
