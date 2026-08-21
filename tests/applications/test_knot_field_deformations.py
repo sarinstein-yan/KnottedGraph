@@ -1,5 +1,4 @@
 import networkx as nx
-import numpy as np
 import sympy as sp
 
 from knotted_graph.applications.knot_deformation import KnotDeformationScan
