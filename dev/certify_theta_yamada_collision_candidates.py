@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import sympy as sp
-from topoly import conway, homfly
+from topoly import homfly
 from topoly.params import Closure
 
 from knotted_graph.projection import compute_yamada_polynomial
@@ -48,23 +48,16 @@ def constituent_signature(edge_points: list[np.ndarray]) -> tuple[str, ...]:
     signatures: list[str] = []
     for i, j in ((0, 1), (0, 2), (1, 2)):
         cycle = constituent_cycle(edge_points[i], edge_points[j])
-        coords = cycle.tolist()
-        # CLOSED is deterministic: no probabilistic closure is used.
+        # CLOSED is deterministic: no probabilistic closure is used. HOMFLY is
+        # independent of KnottedGraph/Yamada, and unequal HOMFLY values alone
+        # prove the constituent knots are not ambient isotopic.
         h = homfly(
-            coords,
+            cycle.tolist(),
             closure=Closure.CLOSED,
             chiral=True,
             run_parallel=False,
         )
-        c = conway(
-            coords,
-            closure=Closure.CLOSED,
-            chiral=True,
-            run_parallel=False,
-        )
-        signatures.append(
-            "H=" + stable_topoly_value(h) + "|C=" + stable_topoly_value(c)
-        )
+        signatures.append(stable_topoly_value(h))
     # Edge labels of a theta curve are not part of the isotopy class.
     return tuple(sorted(signatures))
 
@@ -103,7 +96,7 @@ def reconstruct(
         "bitstring": format(bits, "08b"),
         "approach_fraction": fraction,
         "yamada": sp.expand(result.polynomial),
-        "constituent_signature": constituent_signature(edge_points),
+        "constituent_homfly_multiset": constituent_signature(edge_points),
     }
 
 
@@ -120,19 +113,16 @@ def run(plantri: str, output: Path) -> dict:
             raise AssertionError(f"pair {pair_index}: discovery Yamada collision did not reproduce")
 
         different_constituents = (
-            left["constituent_signature"] != right["constituent_signature"]
+            left["constituent_homfly_multiset"]
+            != right["constituent_homfly_multiset"]
         )
         record = {
             "pair_index": pair_index,
-            "left": {
-                **{k: v for k, v in left.items() if k != "yamada"},
-            },
-            "right": {
-                **{k: v for k, v in right.items() if k != "yamada"},
-            },
+            "left": {k: v for k, v in left.items() if k != "yamada"},
+            "right": {k: v for k, v in right.items() if k != "yamada"},
             "normalized_yamada": str(left["yamada"]),
             "same_normalized_yamada": same_yamada,
-            "different_constituent_signature": different_constituents,
+            "different_constituent_homfly_multiset": different_constituents,
         }
         if different_constituents:
             certified.append(record)
