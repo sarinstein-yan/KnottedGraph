@@ -136,11 +136,18 @@ def _smooth_crossing(prepared, crossing_index, pairs):
     new_vertex_ids = list(prepared.vertex_ids)
 
     # Match PreparedCompactStateBuilder.build() exactly for every detached circle:
-    # one fresh graph vertex carrying a single self-loop (two paired ports).
-    next_id = max((*prepared.vertex_ids, *prepared.crossing_ids), default=-1) + 1
-    for loop_index in range(closed_loop_count):
+    # one fresh graph vertex carrying a single self-loop (two paired ports).  IDs
+    # are metadata here, but keep them unique without assuming user labels are
+    # numeric or mutually orderable.
+    used_ids = set(prepared.vertex_ids) | set(prepared.crossing_ids)
+    next_id = -1
+    for _ in range(closed_loop_count):
+        while next_id in used_ids:
+            next_id -= 1
         vertex_index = len(new_vertex_ids)
-        new_vertex_ids.append(next_id + loop_index)
+        new_vertex_ids.append(next_id)
+        used_ids.add(next_id)
+        next_id -= 1
         left = len(new_arc_partner)
         right = left + 1
         new_arc_partner.extend((right, left))
@@ -183,7 +190,10 @@ def resolve_crossing(prepared, crossing_index: int, spin: int):
     crossing_remap = {old: new for new, old in enumerate(surviving_crossings)}
 
     new_vertex_index = len(prepared.vertex_ids)
-    synthetic_id = max((*prepared.vertex_ids, *prepared.crossing_ids), default=-1) + 1
+    used_ids = set(prepared.vertex_ids) | set(prepared.crossing_ids)
+    synthetic_id = -1
+    while synthetic_id in used_ids:
+        synthetic_id -= 1
     fixed_terminal = list(prepared.fixed_terminal_index)
     crossing_for_port = list(prepared.crossing_for_port)
     for port in crossing_ports:
