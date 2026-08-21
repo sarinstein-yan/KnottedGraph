@@ -1,0 +1,105 @@
+from __future__ import annotations
+
+import itertools
+import random
+
+import pytest
+
+from knotted_graph.invariants.yamada.compact import PythonCompactYamadaEvaluator
+from knotted_graph.invariants.yamada.diagram_frontier import (
+    FrontierLimitExceeded,
+    compute_diagram_frontier_laurent,
+    plan_diagram_frontier,
+)
+from knotted_graph.invariants.yamada.fast import add, shift
+from knotted_graph.invariants.yamada.skein_hybrid import _resolution_tables
+from knotted_graph.invariants.yamada.state_compact import PreparedCompactStateBuilder
+
+
+def _random_prepared(seed: int, crossing_count: int):
+    rng = random.Random(seed)
+    vertex_count = rng.randint(0, 4)
+    fixed_port_count = 2 * rng.randint(0, 4)
+    if vertex_count == 0:
+        fixed_port_count = 0
+
+    crossing_ports = 4 * crossing_count
+    port_count = crossing_ports + fixed_port_count
+    ordered = tuple(
+        tuple(range(4 * crossing, 4 * crossing + 4))
+        for crossing in range(crossing_count)
+    )
+
+    fixed_terminal_index = [-1] * port_count
+    crossing_for_port = [-1] * port_count
+    for crossing, ports in enumerate(ordered):
+        for port in ports:
+            crossing_for_port[port] = crossing
+    for port in range(crossing_ports, port_count):
+        fixed_terminal_index[port] = rng.randrange(vertex_count)
+
+    ports = list(range(port_count))
+    rng.shuffle(ports)
+    arc_partner = [-1] * port_count
+    for left, right in zip(ports[::2], ports[1::2], strict=True):
+        arc_partner[left] = right
+        arc_partner[right] = left
+
+    plus, minus = _resolution_tables(ordered, port_count)
+    return PreparedCompactStateBuilder(
+        vertex_ids=tuple(f"v{index}" for index in range(vertex_count)),
+        crossing_ids=tuple(f"c{index}" for index in range(crossing_count)),
+        ordered_ports=ordered,
+        arc_partner=tuple(arc_partner),
+        fixed_terminal_index=tuple(fixed_terminal_index),
+        crossing_for_port=tuple(crossing_for_port),
+        plus_partner=plus,
+        minus_partner=minus,
+    )
+
+
+def _exhaustive(prepared):
+    evaluator = PythonCompactYamadaEvaluator()
+    total = ()
+    for config in itertools.product((0, 1, 2), repeat=len(prepared.crossing_ids)):
+        total = add(
+            total,
+            shift(
+                evaluator.compute_laurent(prepared.build(config)),
+                config.count(0) - config.count(1),
+            ),
+        )
+    return total
+
+
+@pytest.mark.parametrize("crossing_count", [0, 1, 2, 3, 4])
+def test_frontier_matches_independent_exhaustive_random_prepared_diagrams(crossing_count):
+    for offset in range(24):
+        prepared = _random_prepared(91000 + 101 * crossing_count + offset, crossing_count)
+        expected = _exhaustive(prepared)
+        actual = compute_diagram_frontier_laurent(prepared)
+        assert actual == expected
+
+
+def test_frontier_value_is_independent_of_factor_elimination_order():
+    for crossing_count in (1, 2, 3, 4):
+        for offset in range(8):
+            prepared = _random_prepared(93000 + 97 * crossing_count + offset, crossing_count)
+            plan = plan_diagram_frontier(prepared)
+            expected = compute_diagram_frontier_laurent(prepared)
+            reversed_order = tuple(reversed(plan["factor_order"]))
+            actual = compute_diagram_frontier_laurent(prepared, factor_order=reversed_order)
+            assert actual == expected
+
+
+def test_frontier_limits_are_performance_guards_only():
+    prepared = _random_prepared(95001, 4)
+    plan = plan_diagram_frontier(prepared)
+    if plan["peak_ports"]:
+        with pytest.raises(FrontierLimitExceeded):
+            compute_diagram_frontier_laurent(
+                prepared,
+                max_peak_ports=plan["peak_ports"] - 1,
+            )
+    with pytest.raises(FrontierLimitExceeded):
+        compute_diagram_frontier_laurent(prepared, max_states=1)
