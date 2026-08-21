@@ -1,31 +1,19 @@
-"""Single exact rewrite-and-contract evaluator for prepared Yamada diagrams.
+"""Single exact factorized-connectivity evaluator for prepared Yamada diagrams.
 
-This module deliberately has no empirical solver dispatch. Every state follows
-the same algorithm:
+Every prepared diagram follows the same mathematical path: factor high-arity
+fixed-vertex equalities into low-arity equality constraints joined by identity
+wires, then contract the resulting polynomial-valued connectivity frontier.
+There is no empirical solver dispatch, crossing-count threshold, benchmark-family
+special case, or structural skein-recursion branch in this evaluator.
 
-1. apply exact RII and R1 reductions;
-2. hash-cons the reduced prepared diagram modulo relabeling;
-3. if an exact local skein rewrite creates a topological cancellation, recurse
-   on that identity and reduce its children;
-4. otherwise contract the residual diagram by the polynomial-valued
-   connectivity frontier.
-
-The terminal contraction is compiled when available and falls back to the same
-exact Python connectivity DP on platforms without a compiler or on int64
-coefficient overflow. No crossing-count, width, benchmark-family or measured
-runtime threshold participates in the mathematical path.
+The retained raw frontier routines below remain available as an independent exact
+reference and portability fallback for diagnostics/tests.
 """
 
 from __future__ import annotations
 
 from .diagram_frontier import compute_diagram_frontier_laurent, plan_diagram_frontier
-from .diagram_structural import (
-    _IsomorphicMemo,
-    _first_local_inversion,
-    _reduce_r1_queue,
-)
-from .fast import add, shift
-from .skein_hybrid import _best_resolution, _skein_delta, diagram_key, resolve_crossing
+from .factorized_frontier import compute_factorized_frontier_laurent
 
 try:
     from . import _yamada_frontier_dense as _native_frontier
@@ -45,7 +33,7 @@ def _as_laurent(value) -> tuple[tuple[int, int], ...]:
 
 
 def contract_frontier_laurent(prepared, *, stats=None):
-    """Contract one residual prepared diagram by polynomial connectivity states."""
+    """Contract one prepared diagram with the retained raw connectivity DP."""
     if stats is None:
         stats = {}
     plan = plan_diagram_frontier(prepared)
@@ -89,80 +77,14 @@ def contract_frontier_laurent(prepared, *, stats=None):
 
 
 def compute_unified_laurent(prepared, *, memo=None, stats=None):
-    """Evaluate exactly with one reduction + connectivity-contraction algorithm."""
-    if memo is None:
-        memo = _IsomorphicMemo()
-    if stats is None:
-        stats = {}
-    for key in (
-        "calls",
-        "memo_hits",
-        "rii_moves",
-        "r1_moves",
-        "r1_rebuilds",
-        "inversion_steps",
-        "inversion_crossing_scans",
-        "local_rii_pair_checks",
-        "resolution_steps",
-        "contractions",
-        "max_crossings_seen",
-    ):
-        stats.setdefault(key, 0)
-
-    def rec(state):
-        stats["calls"] += 1
+    """Evaluate exactly using the single generic factorized frontier algorithm."""
+    # ``memo`` is retained for API compatibility with the research diagnostics;
+    # this non-recursive evaluator needs no diagram-level memo table.
+    del memo
+    if stats is not None:
+        stats["calls"] = stats.get("calls", 0) + 1
+        stats["contractions"] = stats.get("contractions", 0) + 1
         stats["max_crossings_seen"] = max(
-            int(stats["max_crossings_seen"]), len(state.crossing_ids)
+            int(stats.get("max_crossings_seen", 0)), len(prepared.crossing_ids)
         )
-
-        state, rii_moves = state.reduce_reidemeister_ii()
-        stats["rii_moves"] += rii_moves
-        state, exponent, r1_moves = _reduce_r1_queue(state)
-        stats["r1_moves"] += r1_moves
-        if r1_moves:
-            stats["r1_rebuilds"] += 1
-
-        if isinstance(memo, _IsomorphicMemo):
-            hit, cached, key, index = memo.get(state)
-            if hit:
-                stats["memo_hits"] += 1
-                return shift(cached, exponent)
-        else:
-            key = diagram_key(state)
-            index = None
-            if key in memo:
-                stats["memo_hits"] += 1
-                return shift(memo[key], exponent)
-
-        inversion, scans, checks = _first_local_inversion(state)
-        stats["inversion_crossing_scans"] += scans
-        stats["local_rii_pair_checks"] += checks
-        if inversion is not None:
-            _, crossing_index, inverted_reduced = inversion
-            stats["inversion_steps"] += 1
-            positive_value = rec(resolve_crossing(state, crossing_index, 0))
-            negative_value = rec(resolve_crossing(state, crossing_index, 1))
-            inverted_value = rec(inverted_reduced)
-            value = add(inverted_value, _skein_delta(positive_value, negative_value))
-        else:
-            resolution = _best_resolution(state)
-            if resolution is not None:
-                _, _, children = resolution
-                stats["resolution_steps"] += 1
-                positive_value = rec(children[0])
-                negative_value = rec(children[1])
-                vertex_value = rec(children[2])
-                value = add(
-                    add(shift(positive_value, 1), shift(negative_value, -1)),
-                    vertex_value,
-                )
-            else:
-                value = contract_frontier_laurent(state, stats=stats)
-
-        if isinstance(memo, _IsomorphicMemo):
-            memo.put(key, index, state, value)
-        else:
-            memo[key] = value
-        return shift(value, exponent)
-
-    return rec(prepared)
+    return compute_factorized_frontier_laurent(prepared)
