@@ -1,0 +1,41 @@
+name: Yamada theta broad finite quotients
+
+on:
+  pull_request:
+    paths:
+      - "dev/certify_theta_broad_finite_quotients.py"
+      - ".github/workflows/yamada-theta-broad-finite-quotients.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  broad-finite-quotients:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install research environment
+        run: uv sync --group dev --group benchmark
+      - name: Build plantri 5.8
+        run: |
+          curl -fsSLo /tmp/plantri58.tar.gz https://users.cecs.anu.edu.au/~bdm/plantri/plantri58.tar.gz
+          mkdir -p /tmp/plantri-src
+          tar -xzf /tmp/plantri58.tar.gz -C /tmp/plantri-src --strip-components=1
+          cc -O3 -o /tmp/plantri /tmp/plantri-src/plantri.c
+      - name: Scan dihedral, quaternion and alternating targets
+        run: |
+          uv run --no-sync python dev/certify_theta_broad_finite_quotients.py \
+            --plantri /tmp/plantri \
+            --output research_results/theta8_broad_finite_quotients.json
+      - name: Upload certificate
+        uses: actions/upload-artifact@v4
+        with:
+          name: theta8-broad-finite-quotients
+          path: research_results/theta8_broad_finite_quotients.json
+          if-no-files-found: error
