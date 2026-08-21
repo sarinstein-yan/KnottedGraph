@@ -7,7 +7,7 @@ import networkx as nx
 import numpy as np
 
 from knotted_graph.invariants.yamada.compact import PythonCompactYamadaEvaluator
-from knotted_graph.invariants.yamada.diagram_memo_dp import compute_memo_resolution_laurent
+from knotted_graph.invariants.yamada.diagram_frontier import compute_diagram_frontier_laurent
 from knotted_graph.invariants.yamada.native import NativeCompactEvaluator, native_available
 from knotted_graph.invariants.yamada.polynomial import Yamada, _ordered_crossing_ports
 from knotted_graph.invariants.yamada.state_compact import PreparedCompactStateBuilder
@@ -27,8 +27,7 @@ def _resample(points, samples=121):
     cumulative = np.concatenate([[0.0], np.cumsum(lengths)])
     target = np.linspace(0.0, cumulative[-1], int(samples))
     out = np.empty((len(target), 3), dtype=float)
-    for dim in range(3):
-        out[:, dim] = np.interp(target, cumulative, points[:, dim])
+    for dim in range(3): out[:, dim] = np.interp(target, cumulative, points[:, dim])
     return out
 
 
@@ -70,8 +69,7 @@ def reference_lllv_cycle_graph(n):
 def prepared_cycle(n):
     processor = PDCode(reference_lllv_cycle_graph(n))
     processor.compute(rotation_angles=(0.0, 0.0, 0.0))
-    if len(processor.crossings) != n:
-        raise AssertionError((n, len(processor.crossings)))
+    if len(processor.crossings) != n: raise AssertionError((n, len(processor.crossings)))
     yamada = Yamada.from_PDCode(processor)
     prepared = PreparedCompactStateBuilder.prepare(
         yamada.vertices, yamada.crossings, yamada.arcs, _ordered_crossing_ports
@@ -80,11 +78,22 @@ def prepared_cycle(n):
     return prepared
 
 
-def median_run(fn, repeats=2):
+def median_value(fn, repeats):
     times=[]; value=None; stats=None
     for _ in range(repeats):
         start=time.perf_counter(); value, stats = fn(); times.append(time.perf_counter()-start)
     return statistics.median(times), times, value, stats
+
+
+def small_exact_gate():
+    for n in (3, 4, 5, 6):
+        prepared=prepared_cycle(n)
+        evaluator=NativeCompactEvaluator(PythonCompactYamadaEvaluator)
+        expected=evaluator.compute_prepared_bulk_laurent(prepared)
+        stats={}; actual=compute_diagram_frontier_laurent(prepared, stats=stats)
+        if actual != expected:
+            raise AssertionError(f"small exact gate n={n} failed: {stats}\nexpected={expected}\nactual={actual}")
+        print(f"small_exact n={n} frontier={stats['max_frontier']} states={stats['max_states']} PASS")
 
 
 def benchmark(n):
@@ -93,25 +102,26 @@ def benchmark(n):
         evaluator=NativeCompactEvaluator(PythonCompactYamadaEvaluator)
         value=evaluator.compute_prepared_laurent(prepared)
         return value, evaluator.last_structural_stats
-    def candidate():
-        evaluator=NativeCompactEvaluator(PythonCompactYamadaEvaluator)
-        stats={}
-        value=compute_memo_resolution_laurent(prepared, evaluator, bulk_leaf_crossings=2, stats=stats)
+    def frontier():
+        stats={}; value=compute_diagram_frontier_laurent(prepared, stats=stats)
         return value, stats
-    prod_t, prod_ts, prod_v, prod_stats = median_run(production)
-    cand_t, cand_ts, cand_v, cand_stats = median_run(candidate)
-    if prod_v != cand_v:
-        raise AssertionError(f"cycle:{n}: exact mismatch")
-    print(f"cycle={n} production_s={prod_t:.9f} candidate_s={cand_t:.9f} speedup={prod_t/cand_t:.6f}x")
+    prod_t, prod_ts, prod_v, prod_stats = median_value(production, 2)
+    front_t, front_ts, front_v, front_stats = median_value(frontier, 5)
+    if prod_v != front_v:
+        raise AssertionError(
+            f"cycle:{n}: direct diagram-frontier mismatch\nproduction={prod_v}\nfrontier={front_v}\nstats={front_stats}"
+        )
+    print(f"cycle={n} production_s={prod_t:.9f} frontier_s={front_t:.9f} speedup={prod_t/front_t:.6f}x")
     print(f"  production_times={prod_ts}")
-    print(f"  candidate_times={cand_ts}")
+    print(f"  frontier_times={front_ts}")
     print(f"  production_stats={prod_stats}")
-    print(f"  candidate_stats={cand_stats}")
+    print(f"  frontier_stats={front_stats}")
     print("  exact=PASS")
 
 
 def main():
     if not native_available(): raise RuntimeError("native backend unavailable")
+    small_exact_gate()
     for n in (10, 11): benchmark(n)
 
 
