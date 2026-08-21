@@ -104,9 +104,6 @@ def resolve_repo_link(source: Path, target: str) -> Path | None:
     if candidate.exists():
         return candidate
 
-    # Sphinx copies doc/assets to the HTML root through html_extra_path. Raw
-    # HTML images therefore legitimately use site_figures/... or ../site_figures/...
-    # even though those paths do not exist next to the Markdown source.
     if source.is_relative_to(ROOT / "doc"):
         stripped = target
         while stripped.startswith("../"):
@@ -158,14 +155,23 @@ def check_inline_paths(source: Path, text: str, failures: list[str]) -> None:
             continue
         if any(token in path_text for token in ("*", "$", "{", "}", " -> ", "<", ">")):
             continue
-        # Code-navigation prose may append a Python symbol anchor using
-        # file.py::Class.method. Validate the file portion only.
         path_only = path_text.split("::", 1)[0].rstrip(".,:;")
         candidate = ROOT / path_only
         if not candidate.exists():
             failures.append(
                 f"stale repository path in {source.relative_to(ROOT)}: `{path_text}`"
             )
+
+
+def check_source_hygiene(source: Path, text: str, failures: list[str]) -> None:
+    for stale in sorted(STALE_TEXT):
+        if stale in text:
+            failures.append(f"superseded path/name in {source.relative_to(ROOT)}: {stale}")
+    local_match = ABSOLUTE_LOCAL_RE.search(text)
+    if local_match:
+        failures.append(
+            f"machine-specific absolute path in {source.relative_to(ROOT)}: {local_match.group(0)}"
+        )
 
 
 def check_knotted_graph_imports(
@@ -224,22 +230,15 @@ def main() -> None:
         texts[path] = text
         relative = path.relative_to(ROOT)
 
-        # The audit necessarily contains the stale tokens it is designed to
-        # reject, so do not audit its own rule declarations as repository prose.
-        if relative != SELF:
-            for stale in sorted(STALE_TEXT):
-                if stale in text:
-                    failures.append(f"superseded path/name in {relative}: {stale}")
+        # Notebook JSON contains saved execution outputs, which may legitimately
+        # record the machine that last produced a figure. Portability concerns
+        # executable/markdown source, so notebook hygiene is checked below after
+        # parsing cells rather than against serialized outputs.
+        if relative != SELF and path.suffix != ".ipynb":
+            check_source_hygiene(path, text, failures)
 
-            local_match = ABSOLUTE_LOCAL_RE.search(text)
-            if local_match:
-                failures.append(
-                    f"machine-specific absolute path in {relative}: {local_match.group(0)}"
-                )
-
-        if path.suffix in {".md", ".ipynb"}:
-            check_links(path, text, failures)
         if path.suffix == ".md":
+            check_links(path, text, failures)
             check_toctrees(path, text, failures)
             check_inline_paths(path, text, failures)
 
@@ -253,11 +252,11 @@ def main() -> None:
             )
             continue
         check_knotted_graph_imports(notebook, code_cells, failures)
+        for source in [*markdown_cells, *code_cells]:
+            check_source_hygiene(notebook, source, failures)
         for markdown in markdown_cells:
             check_links(notebook, markdown, failures)
 
-    # Every tracked User_guide notebook must be executed by the notebook CI matrix,
-    # and the matrix must not reference a deleted notebook.
     workflow = texts[ROOT / ".github" / "workflows" / "notebooks.yml"]
     matrix = set(NOTEBOOK_MATRIX_RE.findall(workflow))
     actual = {
@@ -270,7 +269,6 @@ def main() -> None:
     for stale in sorted(matrix - actual):
         failures.append(f"CI matrix references missing notebook: {stale}")
 
-    # Documented optional dependency names must exist in pyproject.toml.
     pyproject = tomllib.loads(texts[ROOT / "pyproject.toml"])
     extras = set(pyproject["project"].get("optional-dependencies", {}))
     user_text = "\n".join(
@@ -283,7 +281,6 @@ def main() -> None:
     for extra in sorted(set(EXTRA_RE.findall(user_text)) - extras):
         failures.append(f"documentation references undefined optional extra: {extra}")
 
-    # Keep the three public version declarations synchronized.
     version = pyproject["project"]["version"]
     package_init = texts[ROOT / "src" / "knotted_graph" / "__init__.py"]
     package_match = re.search(r'^__version__\s*=\s*[\"\']([^\"\']+)', package_init, re.M)
@@ -299,11 +296,7 @@ def main() -> None:
         for index, failure in enumerate(sorted(set(failures)), start=1):
             print(f"{index:02d}. {failure}")
         raise SystemExit(1)
-
-    print(
-        "PASS: repository-wide consistency audit succeeded for "
-        f"{len(paths)} tracked files and {len(notebooks)} notebooks."
-    )
+    print("Repository consistency audit passed.")
 
 
 if __name__ == "__main__":
