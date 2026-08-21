@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "dev/certify_theta_symmetric_quandle.py"
+      - "dev/validate_theta_symmetric_quandle_invariance.py"
       - ".github/workflows/yamada-theta-symmetric-quandle.yml"
   workflow_dispatch:
 
@@ -33,9 +34,16 @@ jobs:
           uv run --no-sync python dev/certify_theta_symmetric_quandle.py \
             --plantri /tmp/plantri \
             --output research_results/theta8_symmetric_quandle.json
+      - name: Stress-test projection invariance and standard theta
+        run: |
+          uv run --no-sync python dev/validate_theta_symmetric_quandle_invariance.py \
+            --plantri /tmp/plantri \
+            --output research_results/theta8_symmetric_quandle_validation.json
       - name: Upload certificate
         uses: actions/upload-artifact@v4
         with:
           name: theta8-symmetric-quandle
-          path: research_results/theta8_symmetric_quandle.json
+          path: |
+            research_results/theta8_symmetric_quandle.json
+            research_results/theta8_symmetric_quandle_validation.json
           if-no-files-found: error
