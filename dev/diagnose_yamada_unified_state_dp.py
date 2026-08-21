@@ -9,7 +9,10 @@ from pathlib import Path
 import sympy as sp
 
 from knotted_graph.invariants.yamada.compact import PythonCompactYamadaEvaluator
-from knotted_graph.invariants.yamada.diagram_frontier import compute_diagram_frontier_laurent
+from knotted_graph.invariants.yamada.diagram_frontier import (
+    compute_diagram_frontier_laurent,
+    plan_diagram_frontier,
+)
 from knotted_graph.invariants.yamada.diagram_structural import _reduce_r1_queue, compute_structural_laurent
 from knotted_graph.invariants.yamada.diagram_unified import (
     compute_unified_laurent,
@@ -21,6 +24,11 @@ from knotted_graph.invariants.yamada.native import NativeCompactEvaluator
 from knotted_graph.invariants.yamada.polynomial import Yamada, _ordered_crossing_ports
 from knotted_graph.invariants.yamada.state_compact import PreparedCompactStateBuilder
 from knotted_graph.projection import PDCode
+
+try:
+    from knotted_graph.invariants.yamada import _yamada_terminal_frontier
+except Exception:
+    _yamada_terminal_frontier = None
 
 A = sp.Symbol("A")
 ROOT = Path(__file__).resolve().parents[1]
@@ -111,6 +119,26 @@ def main(family: str, n: int, repeats: int):
         native_frontier_stats = {}
         return contract_frontier_laurent(prepared, stats=native_frontier_stats)
 
+    terminal_frontier_stats = {}
+    def terminal_frontier():
+        nonlocal terminal_frontier_stats
+        if _yamada_terminal_frontier is None:
+            raise RuntimeError("terminal frontier extension was not built")
+        terminal_frontier_stats = {}
+        plan = plan_diagram_frontier(prepared)
+        value = _yamada_terminal_frontier.compute_prepared_frontier(
+            len(prepared.vertex_ids),
+            len(prepared.crossing_ids),
+            list(prepared.arc_partner),
+            list(prepared.fixed_terminal_index),
+            list(prepared.crossing_for_port),
+            list(prepared.plus_partner),
+            list(prepared.minus_partner),
+            list(plan["factor_order"]),
+            terminal_frontier_stats,
+        )
+        return tuple((int(power), int(coefficient)) for power, coefficient in value)
+
     reduced, exponent, rii_moves, r1_moves = _root_fixpoint(prepared)
     reduced_frontier_stats = {}
     def reduced_frontier():
@@ -139,6 +167,7 @@ def main(family: str, n: int, repeats: int):
         ("structural", structural),
         ("frontier_python", frontier),
         ("frontier_native", native_frontier),
+        ("terminal_frontier", terminal_frontier),
         ("reduced_frontier_native", reduced_frontier),
         ("unified", unified),
         ("production", production),
@@ -158,6 +187,7 @@ def main(family: str, n: int, repeats: int):
         "n": n,
         "crossings": len(prepared.crossing_ids),
         "native_frontier_available": native_frontier_available(),
+        "terminal_frontier_available": _yamada_terminal_frontier is not None,
         "root_reduced_crossings": len(reduced.crossing_ids),
         "root_rii_moves": rii_moves,
         "root_r1_moves": r1_moves,
@@ -166,6 +196,7 @@ def main(family: str, n: int, repeats: int):
         "structural_stats": structural_stats,
         "frontier_stats": frontier_stats,
         "native_frontier_stats": native_frontier_stats,
+        "terminal_frontier_stats": terminal_frontier_stats,
         "reduced_frontier_stats": reduced_frontier_stats,
         "unified_stats": unified_stats,
         "production_stats": production_stats,
