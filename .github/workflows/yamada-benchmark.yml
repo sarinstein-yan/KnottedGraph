@@ -17,9 +17,11 @@ on:
       - "dev/generate_topoly_random_cubic_corpus.py"
       - "dev/benchmark_data/topoly_random_cubic_v1.jsonl"
       - "tests/benchmarks/test_topoly_paper_setup.py"
+      - "User_guide/benchmarks/01_sanity_checks.ipynb"
       - "User_guide/benchmarks/02_application_output_regression.ipynb"
-      - "User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb"
+      - "User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling_final_push.ipynb"
       - "User_guide/benchmarks/04_synthetic_ground_truth_validation.ipynb"
+      - "User_guide/benchmarks/06_paper_scaling_publication_figure_final_push.ipynb"
       - ".github/workflows/yamada-benchmark.yml"
 
 permissions:
@@ -52,6 +54,40 @@ jobs:
         run: uv run --no-sync pytest -q tests/invariants/yamada
       - name: Run published and independent exact sanity checks
         run: uv run --no-sync python dev/run_yamada_sanity_checks.py
+
+  validation-notebooks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        notebook:
+          - User_guide/benchmarks/01_sanity_checks.ipynb
+          - User_guide/benchmarks/02_application_output_regression.ipynb
+          - User_guide/benchmarks/04_synthetic_ground_truth_validation.ipynb
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install complete notebook environment
+        run: uv sync --extra all --group dev --group benchmark
+      - name: Require production native backend
+        run: |
+          uv run --no-sync python - <<'PY'
+          from knotted_graph.invariants.yamada.native import native_available
+          assert native_available(), "native backend was not built"
+          PY
+      - name: Execute validation notebook
+        env:
+          PYTHONNOUSERSITE: "1"
+          MPLBACKEND: Agg
+          PYVISTA_OFF_SCREEN: "true"
+          PLOTLY_RENDERER: json
+        run: uv run --no-sync python dev/execute_notebook.py "${{ matrix.notebook }}" --timeout 7200
 
   skeletonization-validation:
     runs-on: ubuntu-latest

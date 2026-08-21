@@ -1,9 +1,9 @@
 """Exact Yamada evaluation for projected spatial graphs.
 
-All production state construction uses the compact immutable state tables and all
-state values use the fastest available exact compact evaluator.  The optional
-native extension is selected automatically, with arbitrary-precision Python as
-the exact fallback.
+Production diagram evaluation uses one generic factorized-connectivity dynamic
+program after exact Reidemeister-II preprocessing.  High-arity fixed vertices
+are represented by low-arity equality factors joined by logical identity wires;
+there is no benchmark-family dispatch or empirical crossing threshold.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from joblib import Parallel, delayed
 
 from knotted_graph.projection.geom import Arc, Crossing, Vertex
 
+from .diagram_unified import compute_unified_laurent
 from .fast import (
     ONE,
     FastNegamiSpecializedEvaluator,
@@ -75,10 +76,9 @@ def compute_yamada_from_states(
 ) -> sp.Expr:
     """Compute Yamada from already-resolved exact compact/graph states.
 
-    The evaluator is always the current compact exact implementation.  When the
-    native extension is available, a whole state batch is accumulated in C++;
-    otherwise the same compact recurrence is evaluated with arbitrary-precision
-    Python integers.
+    This compatibility entry point accepts externally resolved states.  It uses
+    the current compact exact state evaluator because the diagram-level
+    factorized contraction requires unresolved crossing incidence information.
     """
     if len(state_graphs) != len(exponents):
         raise ValueError("state_graphs and exponents must have the same length.")
@@ -187,7 +187,7 @@ class Yamada:
         )
 
     def _prepare_compact_state_builder(self):
-        """Prepare and exactly RII-reduce compact state tables once."""
+        """Prepare compact state tables and apply exact RII preprocessing once."""
         prepared = PreparedCompactStateBuilder.prepare(
             self.vertices,
             self.crossings,
@@ -206,14 +206,13 @@ class Yamada:
     def iter_compact_states(self):
         """Iterate exact compact states for advanced diagnostics.
 
-        This is the inspectable state interface. It deliberately exposes the
-        same compact states used by production evaluation rather than rebuilding
-        a slower NetworkX representation.
+        This inspectable compatibility interface deliberately exposes the same
+        compact states represented by the prepared diagram.
         """
         yield from self._iter_compact_states()
 
     def _diagram_blocks(self) -> list["Yamada"]:
-        """Partition a diagram into exact crossing-interaction blocks."""
+        """Partition a diagram into exact disconnected multiplicative blocks."""
         parent: dict[tuple[str, int], tuple[str, int]] = {}
 
         def add(node: tuple[str, int]) -> None:
@@ -280,23 +279,10 @@ class Yamada:
             blocks.append(Yamada(block_vertices, block_crossings, block_arcs))
         return blocks
 
-    def _compute_laurent_block(self, evaluator):
+    def _compute_laurent_block(self):
+        """Evaluate one connected diagram block with the universal exact DP."""
         prepared = self._prepare_compact_state_builder()
-        if hasattr(evaluator, "compute_prepared_laurent"):
-            return evaluator.compute_prepared_laurent(prepared)
-
-        crossing_count = len(prepared.crossing_ids)
-        states = (
-            (prepared.build(config), config.count(0) - config.count(1))
-            for config in itertools.product((0, 1, 2), repeat=crossing_count)
-        )
-        if hasattr(evaluator, "compute_many_laurent"):
-            return evaluator.compute_many_laurent(states)
-        evaluated_states = (
-            _evaluate_fast_state(evaluator, graph, exponent)
-            for graph, exponent in states
-        )
-        return _sum_laurent_states_raw(evaluated_states)
+        return compute_unified_laurent(prepared)
 
     def compute(
         self,
@@ -305,11 +291,17 @@ class Yamada:
         n_jobs: int = -1,
         method: str = "negami",
     ) -> sp.Expr:
-        """Compute Yamada through the current compact/native exact pipeline."""
-        evaluator = _make_fast_evaluator(method)
+        """Compute Yamada with the universal exact factorized-connectivity DP.
+
+        ``method`` and ``n_jobs`` are retained for backwards API compatibility;
+        diagram-level production evaluation now has one exact algorithm.
+        ``method`` is still validated so invalid historical values fail clearly.
+        """
+        _make_fast_evaluator(method)  # preserve public argument validation
+        del n_jobs
         total = ONE
         for block in self._diagram_blocks():
-            total = laurent_multiply(total, block._compute_laurent_block(evaluator))
+            total = laurent_multiply(total, block._compute_laurent_block())
         if normalize:
             total = normalize_laurent_yamada(total)
         return laurent_to_sympy(total, variable)

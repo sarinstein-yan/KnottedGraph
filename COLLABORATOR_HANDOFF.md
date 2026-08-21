@@ -13,7 +13,10 @@ This repository contains the current KnottedGraph library, the reorganized user-
 - Correctness/performance notebooks:
   - `User_guide/benchmarks/01_sanity_checks.ipynb`
   - `User_guide/benchmarks/02_application_output_regression.ipynb`
-  - `User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb`
+  - `User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling_final_push.ipynb`
+  - `User_guide/benchmarks/04_synthetic_ground_truth_validation.ipynb`
+  - `User_guide/benchmarks/05_same_abstract_graph_distinct_embeddings.ipynb`
+  - `User_guide/benchmarks/06_paper_scaling_publication_figure_final_push.ipynb`
 - Website source: `doc/`
 
 ## Generated Website Output
