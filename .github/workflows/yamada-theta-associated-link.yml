@@ -9,6 +9,7 @@ on:
       - "dev/certify_theta_associated_link_homfly_v4.py"
       - "dev/certify_theta_associated_link_homfly_v5.py"
       - "dev/certify_theta_associated_link_homfly_v6.py"
+      - "dev/certify_theta_associated_link_homfly_v7.py"
       - ".github/workflows/yamada-theta-associated-link.yml"
   workflow_dispatch:
 
@@ -35,7 +36,7 @@ jobs:
           cc -O3 -o /tmp/plantri /tmp/plantri-src/plantri.c
       - name: Construct canonical associated links and compare HOMFLY
         run: |
-          uv run --no-sync python dev/certify_theta_associated_link_homfly_v6.py \
+          uv run --no-sync python dev/certify_theta_associated_link_homfly_v7.py \
             --plantri /tmp/plantri \
             --output research_results/theta8_associated_link_homfly.json \
             --xyz-dir research_results/theta8_associated_links
