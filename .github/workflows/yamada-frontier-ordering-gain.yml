@@ -1,0 +1,30 @@
+name: Yamada frontier ordering gain
+
+on:
+  pull_request:
+    branches:
+      - YAMADA_Optimization_LATEST
+    paths:
+      - "src/knotted_graph/invariants/yamada/frontier_ordering.py"
+      - "src/knotted_graph/invariants/yamada/native.py"
+      - "dev/benchmark_yamada_frontier_ordering_gain.py"
+      - "dev/benchmark_yamada_frontier_ordering_probe.py"
+      - ".github/workflows/yamada-frontier-ordering-gain.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  ordering-gain:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: uv sync --group dev --group benchmark
+      - name: Benchmark newly eligible and lower-width cases
+        run: uv run --no-sync python dev/benchmark_yamada_frontier_ordering_gain.py
