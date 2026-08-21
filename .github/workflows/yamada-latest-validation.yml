@@ -56,6 +56,7 @@ jobs:
           tests/invariants/yamada/test_diagram_structural_dispatch.py
           tests/invariants/yamada/test_native_prepared_state_sum.py
           tests/invariants/yamada/test_optimization_fuzz_equivalence.py
+          tests/invariants/yamada/test_diagram_frontier.py
 
       - name: Published and independent sanity checks
         run: uv run --no-sync python dev/run_yamada_sanity_checks.py
