@@ -174,12 +174,20 @@ def check_source_hygiene(source: Path, text: str, failures: list[str]) -> None:
         )
 
 
+def _plain_python_source(source: str) -> str:
+    """Remove notebook-only magic/shell lines before AST import auditing."""
+    return "\n".join(
+        "" if line.lstrip().startswith(("%", "!")) else line
+        for line in source.splitlines()
+    )
+
+
 def check_knotted_graph_imports(
     notebook: Path, code_cells: list[str], failures: list[str]
 ) -> None:
     for cell_index, source in enumerate(code_cells):
         try:
-            tree = ast.parse(source)
+            tree = ast.parse(_plain_python_source(source))
         except SyntaxError as exc:
             failures.append(
                 f"invalid Python in {notebook.relative_to(ROOT)} cell {cell_index}: {exc}"
