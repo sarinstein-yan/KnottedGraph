@@ -4,9 +4,13 @@ A fixed graph vertex is an equality constraint on all incident ports with one
 weight -1. High arity is therefore representational, not mathematical. We
 factor each such equality into a deterministic chain of arity <=3 equality
 factors joined by identity wires. Exactly one factor carries the original -1
-weight; auxiliary equality factors carry +1. Identity wires only identify
-connectivity variables and are *not* graph edges, so they never create the
-Yamada edge weight or cycle factor.
+weight; auxiliary equality factors carry +1.
+
+Identity wires are logical vertex identifications, not physical graph edges, so
+they carry no edge sign. If an identity quotient closes an already selected
+physical path, however, the graph cycle rank increases and the state receives
+the usual +q = A^-1 + 2 + A cycle factor. An included physical edge carries
+-1 and therefore contributes -q when it closes a cycle.
 
 This is an exact reparameterization of the same state sum and contains no
 runtime-, family-, crossing-count-, or benchmark-dependent dispatch.
@@ -153,7 +157,7 @@ def compute_factorized_frontier_laurent(prepared):
     """Evaluate one prepared Yamada diagram with the single factorized DP."""
     if _yamada_factorized_frontier is None:
         # Exact portability fallback. This changes implementation, not the
-        # mathematical algorithm/result, on platforms without a native compiler.
+        # mathematical invariant, on platforms without the native extension.
         return compute_diagram_frontier_laurent(prepared)
 
     data = build_factorized_frontier(prepared)
