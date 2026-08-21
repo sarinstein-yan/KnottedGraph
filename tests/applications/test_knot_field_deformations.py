@@ -9,8 +9,13 @@ from knotted_graph.inputs import KnotFunction, KnotFunctionPath
 
 def test_nodal_bloch_path_matches_old_notebook_linear_blend():
     x = sp.Symbol("x")
-    start = lambda gamma: (x + gamma, 2 * x, 3 * x - gamma)
-    end = lambda gamma: (2 * x - gamma, 4 * x, x + gamma)
+
+    def start(gamma):
+        return (x + gamma, 2 * x, 3 * x - gamma)
+
+    def end(gamma):
+        return (2 * x - gamma, 4 * x, x + gamma)
+
     path = NodalBlochPath(start, end)
     gamma, lam = 0.25, 0.4
     left, right = path.endpoints(gamma)
@@ -19,10 +24,13 @@ def test_nodal_bloch_path_matches_old_notebook_linear_blend():
 
 
 def test_componentwise_bloch_weights_are_supported():
-    path = NodalBlochPath(
-        lambda g: (g, g + 1, g + 2),
-        lambda g: (10 + g, 20 + g, 30 + g),
-    )
+    def start(gamma):
+        return (gamma, gamma + 1, gamma + 2)
+
+    def end(gamma):
+        return (10 + gamma, 20 + gamma, 30 + gamma)
+
+    path = NodalBlochPath(start, end)
     assert path.at_components(0.5, (0, 0.5, 1)) == (
         sp.Float(0.5), sp.Float(11.0), sp.Float(30.5)
     )
