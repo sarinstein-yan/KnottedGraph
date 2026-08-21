@@ -15,8 +15,6 @@ import discover_yamada_theta_collisions as core
 
 A = sp.Symbol("A")
 
-# Minimal size-two collision buckets selected from the first exact eight-crossing
-# restricted sweep.  Coordinates are (plantri shadow, bits, safe fraction).
 CANDIDATE_PAIRS = [
     ((7, 57, 0.12), (13, 67, 0.08)),
     ((7, 198, 0.12), (13, 188, 0.08)),
@@ -45,9 +43,6 @@ def constituent_signature(edge_points: list[np.ndarray]) -> tuple[str, ...]:
     signatures: list[str] = []
     for i, j in ((0, 1), (0, 2), (1, 2)):
         cycle = constituent_cycle(edge_points[i], edge_points[j])
-        # CLOSED is deterministic: no artificial/probabilistic closure is used.
-        # A sufficiently high max_cross is essential: Topoly's unresolved "TMC"
-        # label is NOT a knot invariant and must never certify non-isotopy.
         h = homfly(
             cycle.tolist(),
             closure=Closure.CLOSED,
@@ -55,14 +50,12 @@ def constituent_signature(edge_points: list[np.ndarray]) -> tuple[str, ...]:
             run_parallel=False,
             max_cross=30,
         )
-        value = stable_topoly_value(h)
-        if "TMC" in value:
-            raise RuntimeError(
-                f"Topoly failed to resolve constituent ({i},{j}) even at max_cross=30"
-            )
-        signatures.append(value)
-    # Edge labels are not part of the ambient-isotopy class.
+        signatures.append(stable_topoly_value(h))
     return tuple(sorted(signatures))
+
+
+def signature_resolved(signature: tuple[str, ...]) -> bool:
+    return all("TMC" not in value for value in signature)
 
 
 def reconstruct(
@@ -88,13 +81,15 @@ def reconstruct(
             f"candidate shadow={shadow_index} bits={bits} reconstructed with "
             f"{crossing_count}, not 8, crossings"
         )
+    signature = constituent_signature(edge_points)
     return {
         "shadow": shadow_index,
         "bits": bits,
         "bitstring": format(bits, "08b"),
         "approach_fraction": fraction,
         "yamada": sp.expand(result.polynomial),
-        "constituent_homfly_multiset": constituent_signature(edge_points),
+        "constituent_homfly_multiset": signature,
+        "constituent_homfly_resolved": signature_resolved(signature),
     }
 
 
@@ -111,8 +106,13 @@ def run(plantri: str, output: Path) -> dict:
             raise AssertionError(
                 f"pair {pair_index}: discovery Yamada collision did not reproduce"
             )
-        different_constituents = (
-            left["constituent_homfly_multiset"]
+        fully_resolved = bool(
+            left["constituent_homfly_resolved"]
+            and right["constituent_homfly_resolved"]
+        )
+        different_constituents = bool(
+            fully_resolved
+            and left["constituent_homfly_multiset"]
             != right["constituent_homfly_multiset"]
         )
         record = {
@@ -121,6 +121,7 @@ def run(plantri: str, output: Path) -> dict:
             "right": {k: v for k, v in right.items() if k != "yamada"},
             "normalized_yamada": str(left["yamada"]),
             "same_normalized_yamada": same_yamada,
+            "constituent_certification_fully_resolved": fully_resolved,
             "different_constituent_homfly_multiset": different_constituents,
         }
         if different_constituents:
@@ -140,8 +141,9 @@ def run(plantri: str, output: Path) -> dict:
         "certified_pairs": certified,
         "unresolved_pairs": unresolved,
         "certificate_rule": (
-            "different fully resolved unordered constituent-HOMFLY multisets; "
-            "unresolved Topoly labels such as TMC are forbidden"
+            "Only different, fully resolved unordered constituent-HOMFLY multisets "
+            "certify non-isotopy. Topoly labels such as TMC are recorded as "
+            "inconclusive and never treated as invariant values."
         ),
     }
     output.parent.mkdir(parents=True, exist_ok=True)
