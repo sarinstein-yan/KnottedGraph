@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "dev/discover_yamada_theta_collisions.py"
+      - "dev/run_theta_collision_frontier_search.py"
       - ".github/workflows/yamada-theta-discovery.yml"
   workflow_dispatch:
 
@@ -34,18 +35,17 @@ jobs:
           mkdir -p /tmp/plantri-src
           tar -xzf /tmp/plantri58.tar.gz -C /tmp/plantri-src --strip-components=1
           cc -O3 -o /tmp/plantri /tmp/plantri-src/plantri.c
-          /tmp/plantri -help >/tmp/plantri-help.txt 2>&1 || true
-      - name: Smoke-test diagram reconstruction at the known frontier
+      - name: Smoke-test admissible theta reconstruction at seven crossings
         run: |
-          uv run --no-sync python dev/discover_yamada_theta_collisions.py \
+          uv run --no-sync python dev/run_theta_collision_frontier_search.py \
             --plantri /tmp/plantri \
             --crossings 7 \
             --limit-shadows 2 \
             --limit-assignments 8 \
             --output research_results/theta7_smoke.json
-      - name: Exhaustively search all eight-crossing 3-connected theta shadows
+      - name: Exhaustively search all admissible eight-crossing theta shadows
         run: |
-          uv run --no-sync python dev/discover_yamada_theta_collisions.py \
+          uv run --no-sync python dev/run_theta_collision_frontier_search.py \
             --plantri /tmp/plantri \
             --crossings 8 \
             --output research_results/theta8_yamada_search.json
