@@ -1,9 +1,6 @@
 name: YAMADA latest validation
 
 on:
-  push:
-    branches:
-      - agent/yamada-final-validation-20260821
   pull_request:
     branches:
       - YAMADA_Optimization_LATEST
@@ -12,6 +9,7 @@ on:
       - "tests/invariants/yamada/**"
       - "dev/run_yamada_sanity_checks.py"
       - "dev/application_yamada_regression.py"
+      - "dev/benchmark_yamada_frontier_flow.py"
       - "User_guide/benchmarks/01_sanity_checks.ipynb"
       - "User_guide/benchmarks/02_application_output_regression.ipynb"
       - "User_guide/benchmarks/04_synthetic_ground_truth_validation.ipynb"
@@ -59,6 +57,9 @@ jobs:
 
       - name: Published and independent sanity checks
         run: uv run --no-sync python dev/run_yamada_sanity_checks.py
+
+      - name: Benchmark exact frontier-flow prototype
+        run: uv run --no-sync python dev/benchmark_yamada_frontier_flow.py
 
       - name: Execute required benchmark notebooks
         env:
