@@ -1,15 +1,17 @@
 """Performance-only ordering refinement for exact Yamada frontier evaluation.
 
-The ordinary frontier planner is intentionally cheap.  If its proposed order is
+The ordinary frontier planner is intentionally cheap. If its proposed order is
 already within the configured production width target, this module returns it
-unchanged.  Only a diagram that would otherwise be rejected pays for a
-multi-start greedy search.  The chosen order affects runtime only, never the
-polynomial.
+unchanged. Only a sufficiently large diagram that would otherwise be rejected
+pays for a multi-start greedy search. The chosen order affects runtime only,
+never the polynomial.
 """
 
 from __future__ import annotations
 
 from .diagram_frontier import _factor_graph, plan_diagram_frontier
+
+MULTISTART_MIN_CROSSINGS = 12
 
 
 def _greedy_from_first(adjacency, factor_ports, first: int):
@@ -53,13 +55,18 @@ def _greedy_from_first(adjacency, factor_ports, first: int):
 def plan_frontier_to_target(prepared, target_peak_ports: int):
     """Improve a rejected greedy order using deterministic multi-start search.
 
-    Fast path: return the ordinary plan immediately when it already meets the
-    target.  Slow path: reuse the same greedy score from every possible starting
-    factor and retain the lexicographically best structural plan.
+    The ordinary plan is returned immediately when it meets the width target or
+    the diagram has fewer than ``MULTISTART_MIN_CROSSINGS`` crossings. This
+    crossover guard is performance-only: same-runner measurements found rescued
+    10-crossing diagrams merely break even with native exhaustive evaluation,
+    whereas a rescued 12-crossing generic diagram was about 12x faster.
     """
     target_peak_ports = int(target_peak_ports)
     initial = plan_diagram_frontier(prepared)
-    if initial["peak_ports"] <= target_peak_ports:
+    if (
+        initial["peak_ports"] <= target_peak_ports
+        or len(prepared.crossing_ids) < MULTISTART_MIN_CROSSINGS
+    ):
         return initial
 
     factor_ports, _port_factor, adjacency, _arcs = _factor_graph(prepared)
@@ -89,13 +96,6 @@ def plan_frontier_to_target(prepared, target_peak_ports: int):
             best = plan
             best_key = key
 
-    if best is initial:
-        return {
-            **initial,
-            "ordering_multistart": True,
-            "ordering_candidates": candidates,
-            "initial_peak_ports": int(initial["peak_ports"]),
-        }
     return {
         **best,
         "ordering_multistart": True,
