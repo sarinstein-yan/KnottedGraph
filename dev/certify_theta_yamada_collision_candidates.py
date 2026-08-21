@@ -80,7 +80,6 @@ def reconstruct(
         rotation_angles=(0.0, 0.0, 0.0),
         normalize=True,
         n_jobs=1,
-        method="negami",
         crossing_warning_threshold=None,
         return_result=True,
     )
