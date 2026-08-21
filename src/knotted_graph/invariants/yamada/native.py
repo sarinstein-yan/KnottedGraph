@@ -169,11 +169,11 @@ class NativeCompactEvaluator:
         if crossing_count < STRUCTURAL_DISPATCH_MIN_CROSSINGS:
             return self.compute_prepared_bulk_laurent(prepared)
 
-        from .diagram_structural import compute_structural_laurent
+        from .diagram_locality import compute_locality_laurent
 
         stats = {}
         self.structural_calls += 1
-        value = compute_structural_laurent(prepared, self, stats=stats)
+        value = compute_locality_laurent(prepared, self, stats=stats)
         self.last_structural_stats = stats
         return value
 
