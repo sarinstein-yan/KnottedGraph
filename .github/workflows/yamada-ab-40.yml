@@ -1,4 +1,4 @@
-name: Yamada 40-crossing A/B
+name: Yamada LLLV cycle 10-11 A/B
 
 on:
   pull_request:
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 jobs:
-  ab40:
+  ab-cycle-10-11:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
@@ -23,19 +23,21 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Prepare baseline worktree
+      - name: Baseline cycle 10 and 11
         run: |
-          git worktree add --detach ../ab40-base 5cd2776c3840ac7b7ac7eb5979b0e4e6b8d3dd11
-          cp dev/benchmark_yamada_ab_40.py ../ab40-base/dev/benchmark_yamada_ab_40.py
-          cd ../ab40-base
+          git worktree add --detach ../ab-base 5cd2776c3840ac7b7ac7eb5979b0e4e6b8d3dd11
+          cp dev/benchmark_yamada_ab_40.py ../ab-base/dev/benchmark_yamada_ab_40.py
+          cd ../ab-base
           uv sync --group dev --group benchmark
-          uv run --no-sync python dev/benchmark_yamada_ab_40.py run baseline /tmp/ab40-base.json
-      - name: Prepare latest worktree
+          uv run --no-sync python dev/benchmark_yamada_ab_40.py run baseline /tmp/ab-base.json
+      - name: Latest cycle 10 and 11
         run: |
-          git worktree add --detach ../ab40-latest 63190fef71ba205da9b9c977c20c9b5909ec0154
-          cp dev/benchmark_yamada_ab_40.py ../ab40-latest/dev/benchmark_yamada_ab_40.py
-          cd ../ab40-latest
+          git worktree add --detach ../ab-latest 63190fef71ba205da9b9c977c20c9b5909ec0154
+          cp dev/benchmark_yamada_ab_40.py ../ab-latest/dev/benchmark_yamada_ab_40.py
+          cd ../ab-latest
           uv sync --group dev --group benchmark
-          uv run --no-sync python dev/benchmark_yamada_ab_40.py run latest /tmp/ab40-latest.json
-      - name: Compare exact result and timing
-        run: uv run --no-sync python dev/benchmark_yamada_ab_40.py compare /tmp/ab40-base.json /tmp/ab40-latest.json
+          uv run --no-sync python dev/benchmark_yamada_ab_40.py run latest /tmp/ab-latest.json
+      - name: Compare exact outputs and timings
+        run: |
+          cd ../ab-latest
+          uv run --no-sync python dev/benchmark_yamada_ab_40.py compare /tmp/ab-base.json /tmp/ab-latest.json
