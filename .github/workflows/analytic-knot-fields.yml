@@ -1,0 +1,49 @@
+name: Analytic knot fields
+
+on:
+  pull_request:
+    paths:
+      - "src/knotted_graph/inputs/braid_field.py"
+      - "src/knotted_graph/inputs/knot_catalogue.py"
+      - "src/knotted_graph/inputs/knot_field.py"
+      - "src/knotted_graph/inputs/knot_levelset.py"
+      - "src/knotted_graph/inputs/knot_path.py"
+      - "src/knotted_graph/applications/knot_deformation.py"
+      - "src/knotted_graph/applications/nodal/deformation.py"
+      - "tests/inputs/test_analytic_knot_fields.py"
+      - "tests/applications/test_knot_field_deformations.py"
+      - ".github/workflows/analytic-knot-fields.yml"
+  push:
+    branches:
+      - feature/arbitrary-knot-fields
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install feature test environment
+        run: uv sync --group dev --extra knot-fields --extra nodal
+      - name: Lint feature code and tests
+        run: >-
+          uv run --no-sync ruff check
+          src/knotted_graph/inputs/braid_field.py
+          src/knotted_graph/inputs/knot_catalogue.py
+          src/knotted_graph/inputs/knot_field.py
+          src/knotted_graph/inputs/knot_levelset.py
+          src/knotted_graph/inputs/knot_path.py
+          src/knotted_graph/applications/knot_deformation.py
+          src/knotted_graph/applications/nodal/deformation.py
+          tests/inputs/test_analytic_knot_fields.py
+          tests/applications/test_knot_field_deformations.py
+      - name: Run analytic knot field regressions
+        run: >-
+          uv run --no-sync pytest -q
+          tests/inputs/test_analytic_knot_fields.py
+          tests/applications/test_knot_field_deformations.py
