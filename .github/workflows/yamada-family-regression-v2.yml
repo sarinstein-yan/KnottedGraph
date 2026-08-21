@@ -11,8 +11,13 @@ on:
 
 jobs:
   family-ab:
+    strategy:
+      fail-fast: false
+      matrix:
+        family: [THETA_N_VALUES, LLLV_CYCLE_N_VALUES, LLLV_THETA_S_VALUES]
+        n: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,15 +30,15 @@ jobs:
         run: |
           git worktree add --detach ../yamada-family-base 28eddbfdc4cb21dd63e0faaaeb953a999bb2d8db
           cp dev/benchmark_yamada_family_regression_v2.py ../yamada-family-base/dev/benchmark_yamada_family_regression_v2.py
-      - name: Baseline pre-v2 family matrix
+      - name: Baseline pre-v2 case
         working-directory: ../yamada-family-base
         run: |
           uv sync --group dev --group benchmark
-          uv run --no-sync python dev/benchmark_yamada_family_regression_v2.py measure pre_v2 /tmp/yamada-family-base.json
-      - name: Current v2 family matrix
+          uv run --no-sync python dev/benchmark_yamada_family_regression_v2.py measure-case pre_v2 "${{ matrix.family }}" "${{ matrix.n }}" /tmp/yamada-family-base.json
+      - name: Current v2 case
         run: |
           uv sync --group dev --group benchmark
-          uv run --no-sync python dev/benchmark_yamada_family_regression_v2.py measure v2 /tmp/yamada-family-v2.json
-      - name: Compare exact outputs and runtimes
+          uv run --no-sync python dev/benchmark_yamada_family_regression_v2.py measure-case v2 "${{ matrix.family }}" "${{ matrix.n }}" /tmp/yamada-family-v2.json
+      - name: Compare exact output and runtime
         run: |
-          uv run --no-sync python dev/benchmark_yamada_family_regression_v2.py compare /tmp/yamada-family-base.json /tmp/yamada-family-v2.json
+          uv run --no-sync python dev/benchmark_yamada_family_regression_v2.py compare-case /tmp/yamada-family-base.json /tmp/yamada-family-v2.json
