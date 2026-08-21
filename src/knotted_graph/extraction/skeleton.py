@@ -5,7 +5,6 @@ from __future__ import annotations
 import networkx as nx
 import numpy as np
 from numpy.typing import ArrayLike
-from skimage import morphology
 
 from ._optimized import extract as _optimized_extract
 
@@ -22,6 +21,9 @@ def skeletonize_volume(mask: ArrayLike, *, padding: int = 1) -> np.ndarray:
     Cropping empty margins changes only the amount of work performed by Lee
     thinning. A small zero-valued padding is retained around the occupied box so
     boundary conditions match full-volume thinning for interior objects.
+
+    ``scikit-image`` is imported only when volume skeletonization is requested;
+    skeleton-to-graph extraction itself remains available with base dependencies.
     """
     image = np.asarray(mask, dtype=bool)
     if image.ndim != 3:
@@ -32,6 +34,13 @@ def skeletonize_volume(mask: ArrayLike, *, padding: int = 1) -> np.ndarray:
     occupied = np.argwhere(image)
     if occupied.size == 0:
         raise ValueError("The interior mask does not contain any True voxels.")
+
+    try:
+        from skimage import morphology
+    except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency boundary
+        raise ModuleNotFoundError(
+            "skeletonize_volume requires scikit-image; install the nodal extra."
+        ) from exc
 
     starts = np.maximum(occupied.min(axis=0) - padding, 0)
     stops = np.minimum(occupied.max(axis=0) + padding + 1, image.shape)
