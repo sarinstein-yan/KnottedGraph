@@ -197,6 +197,15 @@ def _accumulate_poly(table, key, value):
         del table[key]
 
 
+def _negative_q(poly):
+    """Multiply exactly by -(A^-1 + 2 + A).
+
+    ``multiply_sigma(poly, -1)`` gives -(A^-1 + 1 + A) times ``poly``;
+    subtracting one additional copy supplies the second middle coefficient.
+    """
+    return laurent_add(multiply_sigma(poly, sign=-1), laurent_scale(poly, -1))
+
+
 def compute_diagram_frontier_laurent(
     prepared,
     *,
@@ -299,11 +308,7 @@ def compute_diagram_frontier_laurent(
             for labels, poly in states.items():
                 _accumulate_poly(updated, labels, poly)
                 merged, closes = _union(labels, left, right)
-                included = (
-                    multiply_sigma(poly, sign=-1)
-                    if closes
-                    else laurent_scale(poly, -1)
-                )
+                included = _negative_q(poly) if closes else laurent_scale(poly, -1)
                 _accumulate_poly(updated, merged, included)
                 transitions += 2
             states = updated
