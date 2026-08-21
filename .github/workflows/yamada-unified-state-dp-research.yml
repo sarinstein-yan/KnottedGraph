@@ -8,6 +8,13 @@ on:
       - 'src/knotted_graph/invariants/yamada/**'
       - 'dev/diagnose_yamada_unified_state_dp.py'
       - '.github/workflows/yamada-unified-state-dp-research.yml'
+  pull_request:
+    branches:
+      - agent/yamada-family-regression-fix-20260822
+    paths:
+      - 'src/knotted_graph/invariants/yamada/**'
+      - 'dev/diagnose_yamada_unified_state_dp.py'
+      - '.github/workflows/yamada-unified-state-dp-research.yml'
   workflow_dispatch:
 
 jobs:
