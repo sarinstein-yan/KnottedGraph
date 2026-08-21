@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import defaultdict
 from pathlib import Path
 
-from knotted_graph.invariants.yamada.frontier_ordering import greedy_factor_order
+from knotted_graph.invariants.yamada.diagram_frontier import _greedy_factor_order
 from knotted_graph.invariants.yamada.polynomial import Yamada, _ordered_crossing_ports
 from knotted_graph.invariants.yamada.state_compact import PreparedCompactStateBuilder
 from knotted_graph.projection import PDCode
@@ -45,8 +46,7 @@ def prepared(family, n):
 def raw_tables(state):
     nv = len(state.vertex_ids)
     nc = len(state.crossing_ids)
-    nf = nv + nc
-    factor_ports = [[] for _ in range(nf)]
+    factor_ports = [[] for _ in range(nv + nc)]
     port_factor = [-1] * len(state.arc_partner)
     for p in range(len(state.arc_partner)):
         f = state.fixed_terminal_index[p]
@@ -58,12 +58,10 @@ def raw_tables(state):
 
 
 def factorized_tables(state):
-    """Split each fixed equality tensor into a chain of arity <=3 tensors."""
+    """Split every fixed equality tensor into an arity<=3 equality chain."""
     nv = len(state.vertex_ids)
     nc = len(state.crossing_ids)
     original_ports = len(state.arc_partner)
-
-    # Group original physical ports by fixed vertex and crossing.
     vertex_ports = [[] for _ in range(nv)]
     crossing_ports = [[] for _ in range(nc)]
     for p in range(original_ports):
@@ -73,8 +71,6 @@ def factorized_tables(state):
         else:
             crossing_ports[state.crossing_for_port[p]].append(p)
 
-    # Sort each equality chain by the neighboring original factor. This is a
-    # topology-only canonical choice; no benchmark/runtime information enters.
     def neighbor_key(p):
         q = state.arc_partner[p]
         v = state.fixed_terminal_index[q]
@@ -86,11 +82,8 @@ def factorized_tables(state):
     port_factor = [-1] * original_ports
     arc_partner = list(state.arc_partner)
 
-    # Each chain segment owns one original port and at most two virtual ports.
-    for v, ports in enumerate(vertex_ports):
+    for ports in vertex_ports:
         ports = sorted(ports, key=neighbor_key)
-        if not ports:
-            continue
         previous_right = None
         for i, p in enumerate(ports):
             factor = len(factors)
@@ -112,7 +105,6 @@ def factorized_tables(state):
                 previous_right = None
             factors.append(local)
 
-    # Crossings remain four-port factors.
     for ports in crossing_ports:
         factor = len(factors)
         local = sorted(ports)
@@ -127,12 +119,37 @@ def factorized_tables(state):
     return factors, port_factor, arc_partner
 
 
+def plan(factor_ports, port_factor, arc_partner):
+    adjacency = [defaultdict(int) for _ in factor_ports]
+    for p, q in enumerate(arc_partner):
+        if p >= q:
+            continue
+        a, b = port_factor[p], port_factor[q]
+        if a != b:
+            adjacency[a][b] += 1
+            adjacency[b][a] += 1
+    order = _greedy_factor_order(adjacency, factor_ports)
+    active = []
+    processed = set()
+    peak = 0
+    boundary = 0
+    for factor in order:
+        active.extend(sorted(factor_ports[factor]))
+        peak = max(peak, len(active))
+        processed.add(factor)
+        active = [p for p in active if port_factor[arc_partner[p]] not in processed]
+        boundary = max(boundary, len(active))
+    if active:
+        raise RuntimeError("planner did not close")
+    return order, peak, boundary
+
+
 def report(family, n):
     state = prepared(family, n)
     raw_fp, raw_pf, raw_ap = raw_tables(state)
     fac_fp, fac_pf, fac_ap = factorized_tables(state)
-    raw_order, raw_peak = greedy_factor_order(raw_fp, raw_pf, raw_ap)
-    fac_order, fac_peak = greedy_factor_order(fac_fp, fac_pf, fac_ap)
+    raw_order, raw_peak, raw_boundary = plan(raw_fp, raw_pf, raw_ap)
+    fac_order, fac_peak, fac_boundary = plan(fac_fp, fac_pf, fac_ap)
     print(json.dumps({
         "family": family,
         "n": n,
@@ -140,9 +157,11 @@ def report(family, n):
         "raw_factors": len(raw_fp),
         "raw_ports": len(raw_ap),
         "raw_peak_ports": raw_peak,
+        "raw_boundary_ports": raw_boundary,
         "factorized_factors": len(fac_fp),
         "factorized_ports": len(fac_ap),
         "factorized_peak_ports": fac_peak,
+        "factorized_boundary_ports": fac_boundary,
         "raw_order": raw_order,
         "factorized_order": fac_order,
     }, sort_keys=True))
