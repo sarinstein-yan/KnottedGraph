@@ -1,0 +1,48 @@
+name: Yamada theta collision certification
+
+on:
+  pull_request:
+    paths:
+      - "dev/discover_yamada_theta_collisions.py"
+      - "dev/certify_theta_yamada_collision_candidates.py"
+      - ".github/workflows/yamada-theta-collision-certification.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certify-minimal-collisions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install KnottedGraph and independent Topoly oracle
+        run: uv sync --group dev --group benchmark
+      - name: Require production native Yamada backend
+        run: |
+          uv run --no-sync python - <<'PY'
+          from knotted_graph.invariants.yamada.native import native_available
+          assert native_available()
+          PY
+      - name: Build plantri 5.8
+        run: |
+          curl -fsSLo /tmp/plantri58.tar.gz https://users.cecs.anu.edu.au/~bdm/plantri/plantri58.tar.gz
+          mkdir -p /tmp/plantri-src
+          tar -xzf /tmp/plantri58.tar.gz -C /tmp/plantri-src --strip-components=1
+          cc -O3 -o /tmp/plantri /tmp/plantri-src/plantri.c
+      - name: Independently certify minimal Yamada collision pairs
+        run: |
+          uv run --no-sync python dev/certify_theta_yamada_collision_candidates.py \
+            --plantri /tmp/plantri \
+            --output research_results/theta8_collision_certification.json
+      - name: Upload independent certificates
+        uses: actions/upload-artifact@v4
+        with:
+          name: theta8-yamada-collision-certification
+          path: research_results/theta8_collision_certification.json
+          if-no-files-found: error
