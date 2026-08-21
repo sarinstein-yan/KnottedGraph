@@ -1,7 +1,6 @@
 import networkx as nx
 import numpy as np
 import pytest
-from skimage import morphology
 
 from knotted_graph.core import ensure_embedding
 from knotted_graph.extraction import (
@@ -84,7 +83,9 @@ def test_cropped_extraction_preserves_global_coordinates():
     assert graph.number_of_nodes() == 1
     assert graph.number_of_edges() == 1
     node = next(iter(graph.nodes()))
-    expected = np.asarray(next(iter(skeleton_image_to_graph(base).nodes(data=True)))[1]["pos"])
+    expected = np.asarray(
+        next(iter(skeleton_image_to_graph(base).nodes(data=True)))[1]["pos"]
+    )
     actual = np.asarray(graph.nodes[node]["pos"])
     assert np.array_equal(actual, expected + np.array([11, 7, 5]))
 
@@ -151,6 +152,7 @@ def test_disconnected_ring_components_are_preserved():
 
 
 def test_skeletonize_volume_matches_full_lee_and_preserves_global_coordinates():
+    morphology = pytest.importorskip("skimage.morphology")
     mask = np.zeros((64, 61, 59), dtype=bool)
     mask[37:53, 31:47, 28:44] = True
     mask[42:48, 26:52, 33:39] = True
