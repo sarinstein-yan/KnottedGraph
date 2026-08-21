@@ -1,0 +1,49 @@
+name: Yamada theta size-two prime frontier
+
+on:
+  pull_request:
+    paths:
+      - "dev/discover_yamada_theta_collisions.py"
+      - "dev/certify_theta_branched_lifts.py"
+      - "dev/certify_theta_branched_lifts_v2.py"
+      - "dev/search_prime_certified_yamada_pairs.py"
+      - "dev/search_all_size2_prime_collisions.py"
+      - ".github/workflows/yamada-theta-size2-prime-frontier.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan-size-two-frontier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install research environment
+        run: uv sync --group dev --group benchmark
+      - name: Build plantri 5.8
+        run: |
+          curl -fsSLo /tmp/plantri58.tar.gz https://users.cecs.anu.edu.au/~bdm/plantri/plantri58.tar.gz
+          mkdir -p /tmp/plantri-src
+          tar -xzf /tmp/plantri58.tar.gz -C /tmp/plantri-src --strip-components=1
+          cc -O3 -o /tmp/plantri /tmp/plantri-src/plantri.c
+      - name: Scan every size-two Yamada collision bucket
+        run: |
+          uv run --no-sync python dev/search_all_size2_prime_collisions.py \
+            --plantri /tmp/plantri \
+            --output research_results/theta8_all_size2_prime_search_certification.json \
+            --xyz-dir research_results/theta8_all_size2_lifts \
+            --rotations 2500
+      - name: Upload frontier certificate
+        uses: actions/upload-artifact@v4
+        with:
+          name: theta8-size2-prime-frontier
+          path: |
+            research_results/theta8_all_size2_prime_search_certification.json
+            research_results/theta8_all_size2_lifts/**
+          if-no-files-found: error
