@@ -7,6 +7,7 @@ on:
     paths:
       - "src/knotted_graph/invariants/yamada/diagram_frontier.py"
       - "src/knotted_graph/invariants/yamada/diagram_memo_dp.py"
+      - "tests/invariants/yamada/test_diagram_frontier.py"
       - "dev/benchmark_yamada_memo_dp_cycles.py"
       - "dev/benchmark_yamada_frontier_general.py"
       - ".github/workflows/yamada-kernel-breakthrough.yml"
@@ -38,6 +39,8 @@ jobs:
           from knotted_graph.invariants.yamada.native import native_available, native_import_error
           assert native_available(), native_import_error()
           PY
+      - name: Randomized exact frontier equivalence
+        run: uv run --no-sync pytest -q tests/invariants/yamada/test_diagram_frontier.py
       - name: Hard LLLV cycle benchmark and small exact gate
         run: uv run --no-sync python dev/benchmark_yamada_memo_dp_cycles.py
       - name: Generic adaptive frontier probe
