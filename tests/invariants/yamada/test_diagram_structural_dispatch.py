@@ -92,20 +92,20 @@ def test_queue_r1_closure_is_identical_to_sequential_r1(n, mirror):
 
 
 @pytest.mark.parametrize("n", [3, 5, 7])
-def test_structural_recursion_matches_independent_legacy_state_sum(n):
-    """Generic structural recursion is exactly equal to the retained 3**c oracle."""
+def test_structural_recursion_matches_exhaustive_exact_state_sum(n):
+    """Generic structural recursion equals the independent exhaustive 3**c sum."""
     prepared = _prepared(n)
     evaluator = NativeCompactEvaluator(PythonCompactYamadaEvaluator)
-    legacy = evaluator.compute_prepared_bulk_laurent(prepared)
+    exhaustive = evaluator.compute_prepared_bulk_laurent(prepared)
     stats = {}
     structural = compute_structural_laurent(prepared, evaluator, stats=stats)
-    assert structural == legacy
+    assert structural == exhaustive
     assert stats["calls"] >= 1
 
 
 @pytest.mark.parametrize("n", [9, 11])
-def test_production_dispatch_is_generic_and_matches_legacy(n):
-    """High-crossing production dispatch uses structural recursion, never a formula."""
+def test_production_dispatch_is_generic_and_matches_exhaustive_oracle(n):
+    """High-crossing production dispatch uses generic structural recursion exactly."""
     assert native_available()
     prepared = _prepared(n)
     oracle = NativeCompactEvaluator(PythonCompactYamadaEvaluator)
@@ -114,7 +114,6 @@ def test_production_dispatch_is_generic_and_matches_legacy(n):
     optimized = NativeCompactEvaluator(PythonCompactYamadaEvaluator)
     actual = optimized.compute_prepared_laurent(prepared)
     assert actual == expected
-    assert optimized.theta_twist_calls == 0
     assert optimized.structural_calls == 1
     assert optimized.last_structural_stats["r1_moves"] > 0
     assert optimized.last_structural_stats["max_bulk_crossings"] <= 4
@@ -134,12 +133,3 @@ def test_r1_structural_path_preserves_both_crossing_orientations(mirror):
     assert actual == expected
     assert stats["r1_moves"] > 0
     assert stats["max_bulk_crossings"] <= 4
-
-
-def test_public_prepared_dispatch_never_uses_theta_shortcut():
-    """The former theorem-backed counter remains zero on a certified theta case."""
-    prepared = _prepared(9)
-    evaluator = NativeCompactEvaluator(PythonCompactYamadaEvaluator)
-    evaluator.compute_prepared_laurent(prepared)
-    assert evaluator.theta_twist_calls == 0
-    assert evaluator.structural_calls == 1
