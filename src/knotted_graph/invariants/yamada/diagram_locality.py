@@ -1,10 +1,13 @@
 """Locality-enhanced exact structural Yamada evaluation.
 
 This module preserves the established generic structural evaluator's algebraic
-identities while replacing two global-search bottlenecks with local closure:
+identities while replacing global-search bottlenecks with local closure:
 
 * Reidemeister-II closure uses a mutable physical-arc matching and rebuilds the
   immutable prepared state only once after a maximal chain.
+* Inversion lookahead probes a virtual rotation of only four ports.  A complete
+  inverted prepared diagram is materialized only for the first successful
+  candidate, avoiding one O(c) table rebuild for every failed crossing probe.
 * Resolution lookahead checks only pairs among the surviving physical neighbors
   of the resolved crossing, because no remote crossing adjacency changed.
 
@@ -19,7 +22,6 @@ import itertools
 from .diagram_structural import (
     BULK_LEAF_MAX_CROSSINGS,
     _IsomorphicMemo,
-    _first_local_inversion,
     _reduce_r1_queue,
 )
 from .fast import add, shift
@@ -27,9 +29,47 @@ from .skein_hybrid import (
     _resolution_tables,
     _skein_delta,
     diagram_key,
+    invert_crossing,
     resolve_crossing,
 )
 from .state_compact import PreparedCompactStateBuilder
+
+
+def _rii_splices_for_orders(prepared, first_ports, second_ports):
+    """Return exact RII splice data for two supplied cyclic port orders."""
+    second_position = {port: index for index, port in enumerate(second_ports)}
+    shared = []
+    for first_position, first_port in enumerate(first_ports):
+        remote = prepared.arc_partner[first_port]
+        if remote in second_position:
+            shared.append((first_position, second_position[remote]))
+    if len(shared) != 2:
+        return None
+
+    first_positions = [entry[0] for entry in shared]
+    second_positions = [entry[1] for entry in shared]
+    if (first_positions[0] - first_positions[1]) % 4 not in (1, 3):
+        return None
+    if (second_positions[0] - second_positions[1]) % 4 not in (1, 3):
+        return None
+    if any((a % 2) != (b % 2) for a, b in shared):
+        return None
+
+    removed = set(first_ports) | set(second_ports)
+    splices = []
+    for first_position, second_position in shared:
+        first_external = first_ports[(first_position + 2) % 4]
+        second_external = second_ports[(second_position + 2) % 4]
+        remote_first = prepared.arc_partner[first_external]
+        remote_second = prepared.arc_partner[second_external]
+        if remote_first in removed or remote_second in removed:
+            return None
+        if remote_first == remote_second:
+            return None
+        splices.append((remote_first, remote_second))
+    if len({port for pair in splices for port in pair}) != 4:
+        return None
+    return tuple(splices)
 
 
 def _rii_pair_mutable(prepared, first, second, partner, active):
@@ -60,7 +100,7 @@ def _rii_pair_mutable(prepared, first, second, partner, active):
 
     removed = set(first_ports) | set(second_ports)
     splices = []
-    for first_position, second_position, in shared:
+    for first_position, second_position in shared:
         first_external = first_ports[(first_position + 2) % 4]
         second_external = second_ports[(second_position + 2) % 4]
         remote_first = partner[first_external]
@@ -193,14 +233,55 @@ def reduce_rii_queue(prepared, *, candidate_pairs=None):
     return _rebuild(prepared, partner, active), moves, checks
 
 
-def _neighbor_ids(prepared, crossing_index):
+def _neighbor_indices(prepared, crossing_index):
     result = set()
     for port in prepared.ordered_ports[crossing_index]:
         remote = prepared.arc_partner[port]
         neighbor = prepared.crossing_for_port[remote]
         if neighbor >= 0 and neighbor != crossing_index:
-            result.add(prepared.crossing_ids[neighbor])
+            result.add(neighbor)
     return result
+
+
+def _neighbor_ids(prepared, crossing_index):
+    return {
+        prepared.crossing_ids[index]
+        for index in _neighbor_indices(prepared, crossing_index)
+    }
+
+
+def _first_virtual_inversion(prepared):
+    """Probe inversions without rebuilding full resolution tables on misses.
+
+    The physical arc matching is unchanged by inversion.  Only the cyclic order
+    of the candidate crossing rotates, so the exact RII predicate can be tested
+    against each physical neighbor using that virtual four-port order.  The
+    immutable inverted state is constructed only after the first successful
+    probe, and the same single RII pair as the retained implementation is then
+    removed.
+    """
+    scans = 0
+    checks = 0
+    for crossing_index, ports in enumerate(prepared.ordered_ports):
+        scans += 1
+        virtual_ports = ports[1:] + ports[:1]
+        for neighbor in sorted(_neighbor_indices(prepared, crossing_index)):
+            checks += 1
+            splices = _rii_splices_for_orders(
+                prepared,
+                virtual_ports,
+                prepared.ordered_ports[neighbor],
+            )
+            if splices is None:
+                continue
+            inverted = invert_crossing(prepared, crossing_index)
+            reduced = inverted._remove_reidemeister_ii_pair(  # noqa: SLF001
+                crossing_index,
+                neighbor,
+                splices,
+            )
+            return (1, crossing_index, reduced), scans, checks
+    return None, scans, checks
 
 
 def _local_resolution_pairs(parent, crossing_index, child):
@@ -285,7 +366,7 @@ def compute_locality_laurent(prepared, evaluator, *, memo=None, stats=None):
             stats["max_bulk_crossings"] = max(stats["max_bulk_crossings"], crossing_count)
             value = evaluator.compute_prepared_bulk_laurent(state)
         else:
-            inversion, scans, checks = _first_local_inversion(state)
+            inversion, scans, checks = _first_virtual_inversion(state)
             stats["inversion_crossing_scans"] += scans
             stats["local_rii_pair_checks"] += checks
             if inversion is not None:
