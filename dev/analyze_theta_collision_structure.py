@@ -58,18 +58,23 @@ def two_terminal_subgraph(graph: nx.MultiGraph, keep_roles: tuple[int, int]) -> 
     sub.add_node("v", pos=np.asarray(graph.nodes["v"]["pos"], dtype=float))
     for _, _, data in graph.edges(data=True):
         if int(data["role"]) in keep_roles:
-            sub.add_edge("u", "v", role=int(data["role"]), pts=np.asarray(data["pts"], dtype=float))
+            sub.add_edge(
+                "u",
+                "v",
+                role=int(data["role"]),
+                pts=np.asarray(data["pts"], dtype=float),
+            )
     if sub.number_of_edges() != 2:
         raise AssertionError("expected a two-edge two-terminal subgraph")
     return sub
 
 
-def yamada(graph: nx.MultiGraph) -> str:
+def yamada(graph: nx.MultiGraph, *, normalize: bool) -> str:
     result = compute_yamada_polynomial(
         graph,
         A,
         rotation_angles=(0.0, 0.0, 0.0),
-        normalize=True,
+        normalize=normalize,
         n_jobs=1,
         crossing_warning_threshold=None,
         return_result=True,
@@ -87,7 +92,9 @@ def run(plantri: str, output: Path) -> dict:
         traces = core.trace_theta_edges(shadow)
         direct_roles = [i for i, trace in enumerate(traces) if len(trace) == 2]
         if direct_roles != [2]:
-            raise AssertionError(f"{label}: expected role 2 to be the direct edge, got {direct_roles}")
+            raise AssertionError(
+                f"{label}: expected role 2 to be the direct edge, got {direct_roles}"
+            )
         residual = two_terminal_subgraph(graph, (0, 1))
         records.append(
             {
@@ -96,8 +103,14 @@ def run(plantri: str, output: Path) -> dict:
                 "bits": bits,
                 "bitstring": format(bits, "08b"),
                 "constituents": constituent_data(edge_points),
-                "full_theta_yamada": yamada(graph),
-                "two_terminal_residual_yamada": yamada(residual),
+                "full_theta_yamada_normalized": yamada(graph, normalize=True),
+                "full_theta_yamada_raw": yamada(graph, normalize=False),
+                "two_terminal_residual_yamada_normalized": yamada(
+                    residual, normalize=True
+                ),
+                "two_terminal_residual_yamada_raw": yamada(
+                    residual, normalize=False
+                ),
                 "direct_edge_role": 2,
             }
         )
