@@ -7,6 +7,7 @@ on:
       - "dev/certify_theta_yamada_collision_candidates.py"
       - "dev/certify_theta_complement_group.py"
       - "dev/certify_theta_branched_lifts.py"
+      - "dev/certify_theta_branched_lifts_v2.py"
       - "dev/export_theta_collision_certificates.py"
       - "dev/analyze_theta_collision_structure.py"
       - ".github/workflows/yamada-theta-collision-certification.yml"
@@ -54,11 +55,17 @@ jobs:
           uv run --no-sync python dev/analyze_theta_collision_structure.py \
             --plantri /tmp/plantri \
             --output research_results/theta8_structure_analysis.json
-      - name: Construct and classify branched-cover lift knots
+      - name: Run original branched-cover diagnostic
         run: |
           uv run --no-sync python dev/certify_theta_branched_lifts.py \
             --plantri /tmp/plantri \
             --output research_results/theta8_branched_lift_certification.json \
+            --xyz-dir research_results/theta8_branched_lifts
+      - name: Run corrected ambient branched-cover certification
+        run: |
+          uv run --no-sync python dev/certify_theta_branched_lifts_v2.py \
+            --plantri /tmp/plantri \
+            --output research_results/theta8_branched_lift_v2_certification.json \
             --xyz-dir research_results/theta8_branched_lifts
       - name: Export exact diagram and reconstruction certificates
         run: |
