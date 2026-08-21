@@ -12,6 +12,7 @@ on:
       - "tests/invariants/yamada/**"
       - "dev/run_yamada_sanity_checks.py"
       - "dev/application_yamada_regression.py"
+      - "dev/benchmark_yamada_ab_ref.py"
       - "User_guide/benchmarks/01_sanity_checks.ipynb"
       - "User_guide/benchmarks/02_application_output_regression.ipynb"
       - "User_guide/benchmarks/04_synthetic_ground_truth_validation.ipynb"
@@ -59,6 +60,26 @@ jobs:
 
       - name: Published and independent sanity checks
         run: uv run --no-sync python dev/run_yamada_sanity_checks.py
+
+      - name: Direct same-runner A/B benchmark
+        run: |
+          set -euxo pipefail
+          ROOT="$PWD"
+          git worktree add --detach ../ab-base 5cd2776c3840ac7b7ac7eb5979b0e4e6b8d3dd11
+          git worktree add --detach ../ab-latest 63190fef71ba205da9b9c977c20c9b5909ec0154
+          cp "$ROOT/dev/benchmark_yamada_ab_ref.py" ../ab-base/dev/benchmark_yamada_ab_ref.py
+          cp "$ROOT/dev/benchmark_yamada_ab_ref.py" ../ab-latest/dev/benchmark_yamada_ab_ref.py
+          (
+            cd ../ab-base
+            uv sync --group dev --group benchmark
+            uv run --no-sync python dev/benchmark_yamada_ab_ref.py run --label baseline --output /tmp/yamada-ab-base.json --repeats 5 --timeout 180
+          )
+          (
+            cd ../ab-latest
+            uv sync --group dev --group benchmark
+            uv run --no-sync python dev/benchmark_yamada_ab_ref.py run --label latest --output /tmp/yamada-ab-latest.json --repeats 5 --timeout 180
+          )
+          uv run --no-sync python dev/benchmark_yamada_ab_ref.py compare /tmp/yamada-ab-base.json /tmp/yamada-ab-latest.json
 
       - name: Execute required benchmark notebooks
         env:
