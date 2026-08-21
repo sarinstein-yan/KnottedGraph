@@ -67,14 +67,25 @@ class _StructuralBulkProxy:
             from .diagram_frontier import (
                 FrontierLimitExceeded,
                 compute_diagram_frontier_laurent,
-                plan_diagram_frontier,
             )
+            from .frontier_ordering import plan_frontier_to_target
 
-            plan = plan_diagram_frontier(prepared)
+            plan = plan_frontier_to_target(prepared, FRONTIER_MAX_PEAK_PORTS)
             self._stats["frontier_plans"] = self._stats.get("frontier_plans", 0) + 1
             self._stats["max_frontier_planned_peak"] = max(
                 self._stats.get("max_frontier_planned_peak", 0), int(plan["peak_ports"])
             )
+            if plan.get("ordering_multistart"):
+                self._stats["frontier_multistart_plans"] = self._stats.get(
+                    "frontier_multistart_plans", 0
+                ) + 1
+                self._stats["frontier_ordering_candidates"] = self._stats.get(
+                    "frontier_ordering_candidates", 0
+                ) + int(plan.get("ordering_candidates", 0))
+                self._stats["max_frontier_initial_peak"] = max(
+                    self._stats.get("max_frontier_initial_peak", 0),
+                    int(plan.get("initial_peak_ports", plan["peak_ports"])),
+                )
             if plan["peak_ports"] <= FRONTIER_MAX_PEAK_PORTS:
                 self._stats["frontier_attempts"] = self._stats.get("frontier_attempts", 0) + 1
                 frontier_stats: dict = {}
