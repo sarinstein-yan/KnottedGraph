@@ -7,6 +7,7 @@ on:
       - "dev/certify_theta_yamada_collision_candidates.py"
       - "dev/certify_theta_complement_group.py"
       - "dev/export_theta_collision_certificates.py"
+      - "dev/analyze_theta_collision_structure.py"
       - ".github/workflows/yamada-theta-collision-certification.yml"
   workflow_dispatch:
 
@@ -47,6 +48,11 @@ jobs:
           uv run --no-sync python dev/certify_theta_complement_group.py \
             --plantri /tmp/plantri \
             --output research_results/theta8_complement_group_certification.json
+      - name: Analyze boundary structure of same-constituent candidates
+        run: |
+          uv run --no-sync python dev/analyze_theta_collision_structure.py \
+            --plantri /tmp/plantri \
+            --output research_results/theta8_structure_analysis.json
       - name: Export exact diagram and reconstruction certificates
         run: |
           uv run --no-sync python dev/export_theta_collision_certificates.py \
@@ -58,5 +64,6 @@ jobs:
           name: theta8-yamada-collision-certification
           path: |
             research_results/theta8_*certification.json
+            research_results/theta8_structure_analysis.json
             research_results/theta8_exact_certificates/**
           if-no-files-found: error
