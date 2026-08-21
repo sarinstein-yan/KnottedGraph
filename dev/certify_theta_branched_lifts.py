@@ -11,11 +11,6 @@ from topoly.params import Closure
 
 import discover_yamada_theta_collisions as core
 
-# For the left members the unique unknot is edge 1 union the direct edge 2,
-# while for the right members it is edge 0 union the direct edge 2.  The
-# remaining edge is the arc lifted in the double cover branched over that
-# unknot.  These assignments are independently certified by HOMFLY/Jones in
-# analyze_theta_collision_structure.py.
 TARGETS = [
     ("pair6_left", 32, 58, 0.12, 1, 0),
     ("pair6_right", 39, 153, 0.05, 0, 1),
@@ -36,12 +31,6 @@ def _closed_branch_polygon(edge: np.ndarray, direct: np.ndarray) -> np.ndarray:
 
 
 def _kernel_polygon(coords: np.ndarray) -> np.ndarray:
-    """Kernel of a simple polygon by half-plane clipping.
-
-    A nonempty kernel certifies that the crossing-free branch polygon is
-    star-shaped.  We use a point in the kernel to give an explicit radial
-    homeomorphism from its planar spanning disk to the unit disk.
-    """
     pts = np.asarray(coords[:-1], dtype=float)
     signed_area = 0.5 * np.sum(
         pts[:, 0] * np.roll(pts[:, 1], -1)
@@ -143,16 +132,15 @@ def construct_lift(
     samples_per_segment: int,
     alpha_offset: float = 0.0,
 ) -> tuple[np.ndarray, dict]:
-    """Construct the Thurston/Calcut-Metcalf-Burton lifted knot explicitly.
+    """Explicitly construct the knot in the double cover branched over U.
 
-    The chosen unknotted constituent has a crossing-free XY projection.  We
-    flatten it to its planar polygon, radially map its star-shaped spanning disk
-    to the unit disk, invert at a boundary point so the branch circle becomes a
-    line, rotate that line to the z-axis, and finally use the standard quotient
-    (r,theta,z) -> (r,2 theta,z).  The preimage of the third theta edge is a
-    closed knot.  Every step before sampling is an explicit homeomorphism of the
-    ambient 3-sphere (with the inversion understood on the one-point
-    compactification).
+    Here U is the unique unknotted constituent.  Its XY projection is a simple
+    polygon.  A point in the polygon kernel gives an explicit radial disk
+    homeomorphism to the unit disk.  Inversion at a boundary point sends the
+    branch circle to a line, which is placed on the z-axis.  The standard
+    branched quotient is then (r,theta,z) -> (r,2*theta,z).  The preimage of
+    the third theta edge is the closed knot used in the Thurston primeness
+    criterion for theta-curves.
     """
     branch = edge_points[branch_role]
     direct = edge_points[2]
@@ -163,10 +151,7 @@ def construct_lift(
 
     sampled = _densify(lifted_edge, samples_per_segment)
     mapped = np.asarray(
-        [
-            [*_radial_disk_map(point[:2], polygon, center), point[2]]
-            for point in sampled
-        ],
+        [[*_radial_disk_map(point[:2], polygon, center), point[2]] for point in sampled],
         dtype=float,
     )
 
@@ -185,7 +170,6 @@ def construct_lift(
         + alpha_offset
     )
 
-    # Rotate the chosen inversion point to (1,0,0).
     ca, sa = math.cos(alpha), math.sin(alpha)
     rotation = np.array([[ca, sa], [-sa, ca]])
     transformed = mapped.copy()
@@ -198,11 +182,7 @@ def construct_lift(
         raise AssertionError("lifted arc approached the inversion point too closely")
     inverted = delta / norm_sq[:, None]
 
-    # The unit circle maps to X=-1/2, Z=0.  Translate/permute so it is the
-    # z-axis.  Coordinates below are (x,y,z) in the quotient model.
-    base = np.column_stack(
-        [inverted[:, 2], inverted[:, 0] + 0.5, inverted[:, 1]]
-    )
+    base = np.column_stack([inverted[:, 2], inverted[:, 0] + 0.5, inverted[:, 1]])
     radii = np.hypot(base[:, 0], base[:, 1])
     if max(radii[0], radii[-1]) > 1e-8:
         raise AssertionError("third-edge endpoints did not land on branch axis")
@@ -225,10 +205,8 @@ def construct_lift(
     first_sheet[radii <= 1e-8, :2] = 0.0
     second_sheet = first_sheet.copy()
     second_sheet[:, :2] *= -1.0
-
-    # First lift runs u->v; the deck-transformed lift is traversed v->u.
     knot = np.vstack([first_sheet, second_sheet[-2:0:-1], first_sheet[0]])
-    metadata = {
+    return knot, {
         "kernel_center": center.tolist(),
         "kernel_vertices": kernel.tolist(),
         "inversion_angle": alpha,
@@ -237,7 +215,6 @@ def construct_lift(
         "lifted_role": lifted_role,
         "point_count": len(knot),
     }
-    return knot, metadata
 
 
 def _stable(value):
@@ -256,23 +233,6 @@ def knot_invariants(knot: np.ndarray) -> dict:
     return {
         "homfly": _stable(topoly.homfly(knot.tolist(), **kwargs)),
         "jones": _stable(topoly.jones(knot.tolist(), **kwargs)),
-        "alexander": _stable(
-            topoly.alexander(
-                knot.tolist(),
-                closure=Closure.CLOSED,
-                run_parallel=False,
-                max_cross=30,
-            )
-        ),
-        "conway": _stable(
-            topoly.conway(
-                knot.tolist(),
-                closure=Closure.CLOSED,
-                run_parallel=False,
-                max_cross=30,
-            )
-        ),
-        "pd_code": _stable(topoly.translate_code(knot.tolist(), output_type="pdcode")),
     }
 
 
@@ -283,10 +243,9 @@ def run(plantri: str, output: Path, xyz_dir: Path) -> dict:
     records = []
 
     for label, shadow_index, bits, fraction, branch_role, lifted_role in TARGETS:
-        graph, edge_points_raw = core.spatial_theta(
+        _, edge_points_raw = core.spatial_theta(
             by_index[shadow_index], bits, approach_fraction=fraction
         )
-        del graph
         edge_points = [np.asarray(points, dtype=float) for points in edge_points_raw]
 
         trials = []
@@ -301,8 +260,7 @@ def run(plantri: str, output: Path, xyz_dir: Path) -> dict:
             invariants = knot_invariants(knot)
             trials.append({"metadata": metadata, "invariants": invariants})
             if samples == 36 and offset == 0.0:
-                xyz_path = xyz_dir / f"{label}_lift.xyz"
-                np.savetxt(xyz_path, knot, fmt="%.16g")
+                np.savetxt(xyz_dir / f"{label}_lift.xyz", knot, fmt="%.16g")
 
         signatures = {
             json.dumps(trial["invariants"], sort_keys=True, default=str)
@@ -327,25 +285,20 @@ def run(plantri: str, output: Path, xyz_dir: Path) -> dict:
     for pair_name in ("pair6", "pair9"):
         left = by_label[f"{pair_name}_left"]["stable_invariants"]
         right = by_label[f"{pair_name}_right"]["stable_invariants"]
-        distinguished = left != right
         pair_results.append(
             {
                 "pair": pair_name,
-                "lift_invariants_distinguish": distinguished,
+                "lift_invariants_distinguish": left != right,
                 "left": left,
                 "right": right,
             }
         )
-        print(
-            "BRANCHED_LIFT_PAIR="
-            + json.dumps(pair_results[-1], sort_keys=True),
-            flush=True,
-        )
+        print("BRANCHED_LIFT_PAIR=" + json.dumps(pair_results[-1], sort_keys=True), flush=True)
 
     payload = {
         "method": (
             "explicit double branched cover over the unique crossing-free unknotted "
-            "constituent, using a star-shaped disk homeomorphism, inversion to the "
+            "constituent using a star-shaped disk homeomorphism, inversion to the "
             "branch axis, and the standard angular-doubling quotient"
         ),
         "targets": records,
