@@ -1,0 +1,72 @@
+name: YAMADA latest validation
+
+on:
+  push:
+    branches:
+      - agent/yamada-final-validation-20260821
+  pull_request:
+    branches:
+      - YAMADA_Optimization_LATEST
+    paths:
+      - "src/knotted_graph/invariants/yamada/**"
+      - "tests/invariants/yamada/**"
+      - "dev/run_yamada_sanity_checks.py"
+      - "dev/application_yamada_regression.py"
+      - "User_guide/benchmarks/01_sanity_checks.ipynb"
+      - "User_guide/benchmarks/02_application_output_regression.ipynb"
+      - "User_guide/benchmarks/04_synthetic_ground_truth_validation.ipynb"
+      - ".github/workflows/yamada-latest-validation.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: yamada-latest-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  exactness-and-notebooks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install complete validation environment
+        run: uv sync --extra all --group dev --group docs --group benchmark
+
+      - name: Require native backend
+        run: |
+          uv run --no-sync python - <<'PY'
+          from knotted_graph.invariants.yamada.native import native_available, native_import_error
+          assert native_available(), native_import_error()
+          PY
+
+      - name: Exact Yamada regression suite
+        run: >
+          uv run --no-sync pytest -q
+          tests/invariants/yamada/test_reidemeister_ii_preprocessing.py
+          tests/invariants/yamada/test_diagram_structural_dispatch.py
+          tests/invariants/yamada/test_native_prepared_state_sum.py
+          tests/invariants/yamada/test_optimization_fuzz_equivalence.py
+
+      - name: Published and independent sanity checks
+        run: uv run --no-sync python dev/run_yamada_sanity_checks.py
+
+      - name: Execute required benchmark notebooks
+        env:
+          PYTHONNOUSERSITE: "1"
+          MPLBACKEND: Agg
+          PYVISTA_OFF_SCREEN: "true"
+          PLOTLY_RENDERER: json
+        run: |
+          uv run --no-sync python dev/execute_notebook.py User_guide/benchmarks/01_sanity_checks.ipynb --timeout 7200
+          uv run --no-sync python dev/execute_notebook.py User_guide/benchmarks/02_application_output_regression.ipynb --timeout 7200
+          uv run --no-sync python dev/execute_notebook.py User_guide/benchmarks/04_synthetic_ground_truth_validation.ipynb --timeout 7200
