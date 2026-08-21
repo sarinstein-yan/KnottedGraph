@@ -11,6 +11,10 @@ from knotted_graph.invariants.yamada.diagram_unified import (
     contract_frontier_laurent,
     native_frontier_available,
 )
+from knotted_graph.invariants.yamada.factorized_frontier import (
+    compute_factorized_frontier_laurent,
+    native_factorized_available,
+)
 from knotted_graph.invariants.yamada.fast import add, shift
 from knotted_graph.invariants.yamada.skein_hybrid import _resolution_tables
 from knotted_graph.invariants.yamada.state_compact import PreparedCompactStateBuilder
@@ -76,6 +80,14 @@ def test_unified_matches_independent_exhaustive_random_diagrams(crossing_count):
     for offset in range(16):
         prepared = _random_prepared(117000 + 131 * crossing_count + offset, crossing_count)
         assert compute_unified_laurent(prepared) == _exhaustive(prepared)
+
+
+@pytest.mark.skipif(not native_factorized_available(), reason="native factorized frontier not built")
+@pytest.mark.parametrize("crossing_count", [0, 1, 2, 3, 4])
+def test_factorized_frontier_matches_independent_exhaustive(crossing_count):
+    for offset in range(32):
+        prepared = _random_prepared(119000 + 139 * crossing_count + offset, crossing_count)
+        assert compute_factorized_frontier_laurent(prepared) == _exhaustive(prepared)
 
 
 @pytest.mark.skipif(not native_frontier_available(), reason="native frontier not built")
