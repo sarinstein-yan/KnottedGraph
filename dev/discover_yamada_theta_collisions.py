@@ -21,6 +21,8 @@ A = sp.Symbol("A")
 
 @dataclass(frozen=True)
 class Shadow:
+    """A planar degree-(3,4) graph returned by plantri, with its rotation system."""
+
     index: int
     rotation: dict[int, tuple[int, ...]]
 
@@ -61,19 +63,31 @@ def parse_plantri_ascii(line: str, index: int) -> Shadow:
     return Shadow(index=index, rotation=rotation)
 
 
-def generate_shadows(plantri: str, crossings: int) -> list[Shadow]:
+def generate_shadow_candidates(plantri: str, crossings: int) -> list[Shadow]:
+    """Generate the 3-connected planar degree-sequence candidates.
+
+    These are *candidates*, not automatically theta shadows.  A genuine
+    crossing shadow must additionally have the transition system obtained by
+    pairing opposite half-edges at every 4-valent vertex decompose into exactly
+    three strands joining the two trivalent vertices.  That condition is
+    checked separately by :func:`trace_theta_edges`.
+    """
     vertices = crossings + 2
     edges = 2 * crossings + 3
     command = [plantri, "-p", "-c3", "-m3", f"-e{edges}", "-a", str(vertices)]
     proc = subprocess.run(command, check=True, capture_output=True, text=True)
-    shadows: list[Shadow] = []
+    candidates: list[Shadow] = []
     for line in proc.stdout.splitlines():
         if not line.strip():
             continue
-        shadow = parse_plantri_ascii(line, len(shadows))
+        shadow = parse_plantri_ascii(line, len(candidates))
         if sorted(dict(shadow.graph.degree()).values()) == [3, 3] + [4] * crossings:
-            shadows.append(shadow)
-    return shadows
+            candidates.append(shadow)
+    return candidates
+
+
+# Backward-compatible internal name used by the other research scripts on this branch.
+generate_shadows = generate_shadow_candidates
 
 
 def planar_positions(shadow: Shadow) -> dict[int, np.ndarray]:
@@ -121,6 +135,13 @@ def opposite(shadow: Shadow, crossing: int, incoming: int) -> int:
 
 
 def trace_theta_edges(shadow: Shadow) -> list[list[int]]:
+    """Recover the three abstract theta edges from a candidate crossing shadow.
+
+    At every 4-valent crossing vertex, a strand continues through the opposite
+    half-edge in the planar cyclic order.  A valid theta shadow must therefore
+    yield exactly three edge-disjoint u-to-v traces and must consume every
+    shadow edge exactly once.  Degree sequence alone does not imply this.
+    """
     u, v = shadow.trivalent_vertices
     traces: list[list[int]] = []
     for first in shadow.rotation[u]:
@@ -130,24 +151,61 @@ def trace_theta_edges(shadow: Shadow) -> list[list[int]]:
             if current in (u, v):
                 break
             if len(shadow.rotation[current]) != 4:
-                raise ValueError(f"shadow {shadow.index}: trace hit non-crossing vertex")
+                raise ValueError(
+                    f"shadow {shadow.index}: trace hit non-crossing vertex {current}"
+                )
             nxt = opposite(shadow, current, previous)
             path.append(nxt)
             previous, current = current, nxt
         else:
             raise ValueError(f"shadow {shadow.index}: strand trace did not terminate")
         if current != v:
-            raise ValueError(f"shadow {shadow.index}: strand returns to same trivalent vertex")
+            raise ValueError(
+                f"shadow {shadow.index}: opposite-edge transition returns a strand "
+                "to the same trivalent vertex"
+            )
         traces.append(path)
 
     traversed: dict[tuple[int, int], int] = defaultdict(int)
     for trace in traces:
         for a, b in zip(trace, trace[1:]):
             traversed[tuple(sorted((a, b)))] += 1
+
     expected = {tuple(sorted(edge)) for edge in shadow.graph.edges()}
-    if len(traces) != 3 or set(traversed) != expected or any(v != 1 for v in traversed.values()):
-        raise ValueError(f"shadow {shadow.index}: invalid theta-strand decomposition")
+    if len(traces) != 3:
+        raise ValueError(f"shadow {shadow.index}: expected exactly three theta strands")
+    if set(traversed) != expected:
+        missing = sorted(expected - set(traversed))
+        extra = sorted(set(traversed) - expected)
+        raise ValueError(
+            f"shadow {shadow.index}: transition system does not consume the shadow "
+            f"edge-for-edge (missing={missing}, extra={extra})"
+        )
+    multiply_used = sorted(edge for edge, count in traversed.items() if count != 1)
+    if multiply_used:
+        raise ValueError(
+            f"shadow {shadow.index}: transition system reuses shadow edges "
+            f"{multiply_used}"
+        )
     return traces
+
+
+def classify_theta_candidates(
+    candidates: list[Shadow],
+) -> tuple[list[Shadow], list[dict[str, object]]]:
+    """Separate genuine theta crossing shadows from degree-sequence candidates."""
+    accepted: list[Shadow] = []
+    rejected: list[dict[str, object]] = []
+    for shadow in candidates:
+        try:
+            traces = trace_theta_edges(shadow)
+        except ValueError as exc:
+            rejected.append({"shadow": shadow.index, "reason": str(exc)})
+            continue
+        accepted.append(shadow)
+        if len(traces) != 3:
+            raise AssertionError("trace_theta_edges returned a non-theta decomposition")
+    return accepted, rejected
 
 
 def passage_index(shadow: Shadow, crossing: int, before: int, after: int) -> int:
@@ -169,12 +227,7 @@ def expanded_trace_points(
     approach_fraction: float,
     crossing_height: float = 0.05,
 ) -> np.ndarray:
-    """Lift a theta strand while preserving the planar shadow edge-for-edge.
-
-    Each connector remains on an original planar shadow edge.  Only a tiny
-    neighbourhood of a degree-4 shadow vertex is replaced by a chord joining
-    opposite ports; the two such chords cross exactly once at that vertex.
-    """
+    """Lift a theta strand while preserving the planar shadow edge-for-edge."""
     points: list[np.ndarray] = []
 
     def xyz(vertex: int, z: float = 0.0) -> np.ndarray:
@@ -267,6 +320,7 @@ def constituent_cycle(edge_a: np.ndarray, edge_b: np.ndarray) -> np.ndarray:
 
 
 def topoly_constituent_signature(edge_points: list[np.ndarray]) -> tuple[str, ...]:
+    """Independent cycle-knot signature used only to certify Yamada collisions."""
     import topoly
 
     signatures = []
@@ -284,7 +338,7 @@ def assignment_record(
     bits: int,
     expected_crossings: int,
     approach_fraction: float,
-) -> tuple[dict, list[np.ndarray]]:
+) -> tuple[dict[str, object], list[np.ndarray]]:
     graph, edge_points = spatial_theta(
         shadow,
         bits,
@@ -296,7 +350,6 @@ def assignment_record(
         rotation_angles=(0.0, 0.0, 0.0),
         normalize=True,
         n_jobs=1,
-        method="negami",
         crossing_warning_threshold=None,
         return_result=True,
     )
@@ -329,31 +382,43 @@ def search(
     limit_shadows: int | None,
     limit_assignments: int | None,
     certify_collisions: bool,
-) -> dict:
+) -> dict[str, object]:
     if not native_available():
         raise RuntimeError("The production native Yamada backend is required")
 
-    shadows = generate_shadows(plantri, crossings)
-    total_shadow_count = len(shadows)
-    if crossings == 8 and total_shadow_count != 39:
+    all_candidates = generate_shadow_candidates(plantri, crossings)
+    plantri_candidate_count = len(all_candidates)
+    if crossings == 8 and plantri_candidate_count != 39:
         raise AssertionError(
-            f"Moriuchi reports 39 3-connected 8-crossing theta shadows; got {total_shadow_count}"
+            "Moriuchi reports 39 planar 3-connected degree-sequence candidates "
+            f"with two trivalent and eight 4-valent vertices; got {plantri_candidate_count}"
         )
+
+    candidates = all_candidates
     if limit_shadows is not None:
-        shadows = shadows[:limit_shadows]
+        candidates = candidates[:limit_shadows]
+
+    shadows, rejected_candidates = classify_theta_candidates(candidates)
+    for rejection in rejected_candidates:
+        print(
+            f"shadow {rejection['shadow']}: transition preflight SKIP -- "
+            f"{rejection['reason']}",
+            flush=True,
+        )
 
     assignment_count = 1 << crossings
     if limit_assignments is not None:
         assignment_count = min(assignment_count, limit_assignments)
 
-    records: list[dict] = []
+    records: list[dict[str, object]] = []
     edge_cache: dict[tuple[int, int], list[np.ndarray]] = {}
     geometry_fractions: dict[int, float] = {}
-    for shadow in shadows:
+    for searched_index, shadow in enumerate(shadows, start=1):
         fraction = choose_safe_approach_fraction(shadow, crossings)
         geometry_fractions[shadow.index] = fraction
         print(
-            f"shadow {shadow.index}: geometry preflight PASS at fraction={fraction}",
+            f"shadow {shadow.index}: theta+geometry preflight PASS "
+            f"at fraction={fraction}",
             flush=True,
         )
         for bits in range(assignment_count):
@@ -364,23 +429,25 @@ def search(
                 fraction,
             )
             records.append(record)
-            edge_cache[(shadow.index, bits)] = edge_points
+            if certify_collisions:
+                edge_cache[(shadow.index, bits)] = edge_points
         print(
-            f"shadow {shadow.index + 1}/{len(shadows)} complete; records={len(records)}",
+            f"valid theta shadow {searched_index}/{len(shadows)} complete; "
+            f"records={len(records)}",
             flush=True,
         )
 
-    buckets: dict[str, list[dict]] = defaultdict(list)
+    buckets: dict[str, list[dict[str, object]]] = defaultdict(list)
     for record in records:
-        buckets[record["yamada_key"]].append(record)
+        buckets[str(record["yamada_key"])].append(record)
     collision_buckets = [bucket for bucket in buckets.values() if len(bucket) > 1]
 
-    certified_pairs: list[dict] = []
+    certified_pairs: list[dict[str, object]] = []
     if certify_collisions:
         signature_cache: dict[tuple[int, int], tuple[str, ...]] = {}
         for bucket in collision_buckets:
             for record in bucket:
-                key = (record["shadow"], record["bits"])
+                key = (int(record["shadow"]), int(record["bits"]))
                 if key not in signature_cache:
                     signature_cache[key] = topoly_constituent_signature(edge_cache[key])
                 record["constituent_signature"] = signature_cache[key]
@@ -403,19 +470,27 @@ def search(
                                 "constituent_signature": right_sig,
                             },
                             "yamada": left["yamada"],
-                            "reason": "same normalized Yamada, different independent constituent-knot multiset",
+                            "reason": (
+                                "same normalized Yamada, different independent "
+                                "constituent-knot invariant multiset"
+                            ),
                         }
                     )
 
-    result = {
+    result: dict[str, object] = {
         "crossings": crossings,
-        "plantri_shadow_count": total_shadow_count,
-        "searched_shadow_count": len(shadows),
-        "assignments_per_shadow": assignment_count,
+        "plantri_candidate_count": plantri_candidate_count,
+        "considered_candidate_count": len(candidates),
+        "valid_theta_shadow_count": len(shadows),
+        "rejected_non_theta_candidate_count": len(rejected_candidates),
+        "rejected_candidates": rejected_candidates,
+        "assignments_per_valid_shadow": assignment_count,
         "diagram_count": len(records),
         "distinct_yamada_count": len(buckets),
         "collision_bucket_count": len(collision_buckets),
-        "largest_collision_bucket": max((len(bucket) for bucket in collision_buckets), default=1),
+        "largest_collision_bucket": max(
+            (len(bucket) for bucket in collision_buckets), default=1
+        ),
         "certified_nonisotopic_collision_pair_count": len(certified_pairs),
         "geometry_fractions": geometry_fractions,
         "certified_pairs": certified_pairs,
@@ -427,7 +502,13 @@ def search(
     compact = {
         k: v
         for k, v in result.items()
-        if k not in {"records", "collision_buckets", "certified_pairs"}
+        if k
+        not in {
+            "records",
+            "collision_buckets",
+            "certified_pairs",
+            "rejected_candidates",
+        }
     }
     print("SUMMARY=" + json.dumps(compact, sort_keys=True))
     if certified_pairs:
@@ -442,7 +523,14 @@ def main() -> None:
     parser.add_argument("--plantri", required=True)
     parser.add_argument("--crossings", type=int, default=8)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--limit-shadows", type=int)
+    parser.add_argument(
+        "--limit-shadows",
+        type=int,
+        help=(
+            "Limit plantri degree-sequence candidates before theta-transition "
+            "filtering; intended only for smoke tests."
+        ),
+    )
     parser.add_argument("--limit-assignments", type=int)
     parser.add_argument("--certify-collisions", action="store_true")
     args = parser.parse_args()
