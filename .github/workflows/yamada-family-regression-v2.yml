@@ -1,0 +1,36 @@
+name: Yamada family regression v2
+
+on:
+  push:
+    branches:
+      - agent/yamada-family-regression-fix-20260822
+  workflow_dispatch:
+
+jobs:
+  family-ab:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare baseline worktree
+        run: |
+          git worktree add --detach ../yamada-family-base 28eddbfdc4cb21dd63e0faaaeb953a999bb2d8db
+          cp dev/benchmark_yamada_family_regression_v2.py ../yamada-family-base/dev/benchmark_yamada_family_regression_v2.py
+      - name: Baseline pre-v2 family matrix
+        working-directory: ../yamada-family-base
+        run: |
+          uv sync --group dev --group benchmark
+          uv run --no-sync python dev/benchmark_yamada_family_regression_v2.py measure pre_v2 /tmp/yamada-family-base.json
+      - name: Current v2 family matrix
+        run: |
+          uv sync --group dev --group benchmark
+          uv run --no-sync python dev/benchmark_yamada_family_regression_v2.py measure v2 /tmp/yamada-family-v2.json
+      - name: Compare exact outputs and runtimes
+        run: |
+          uv run --no-sync python dev/benchmark_yamada_family_regression_v2.py compare /tmp/yamada-family-base.json /tmp/yamada-family-v2.json
