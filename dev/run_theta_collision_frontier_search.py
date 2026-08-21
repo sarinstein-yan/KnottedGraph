@@ -5,22 +5,41 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
+import networkx as nx
+
 from knotted_graph.invariants.yamada.native import native_available
 
 import discover_yamada_theta_collisions as core
 
+MORIUCHI_REPORTED_EIGHT_CROSSING_CANDIDATES = 39
+
+
+def abstract_isomorphism_classes(
+    candidates: list[core.Shadow],
+) -> tuple[list[list[int]], dict[int, int]]:
+    """Partition plantri outputs by underlying abstract graph isomorphism."""
+    representatives: list[core.Shadow] = []
+    classes: list[list[int]] = []
+    class_by_shadow: dict[int, int] = {}
+    for shadow in candidates:
+        graph = shadow.graph
+        class_index = None
+        for i, representative in enumerate(representatives):
+            if nx.is_isomorphic(graph, representative.graph):
+                class_index = i
+                break
+        if class_index is None:
+            class_index = len(representatives)
+            representatives.append(shadow)
+            classes.append([])
+        classes[class_index].append(shadow.index)
+        class_by_shadow[shadow.index] = class_index
+    return classes, class_by_shadow
+
 
 def admissible_theta_shadows(
-    plantri: str,
-    crossings: int,
+    candidates: list[core.Shadow],
 ) -> tuple[list[core.Shadow], list[dict]]:
-    candidates = core.generate_shadows(plantri, crossings)
-    if crossings == 8 and len(candidates) != 39:
-        raise AssertionError(
-            f"Moriuchi reports 39 degree-sequence candidates at eight crossings; "
-            f"plantri produced {len(candidates)}"
-        )
-
     accepted: list[core.Shadow] = []
     rejected: list[dict] = []
     for shadow in candidates:
@@ -50,9 +69,28 @@ def run(
         raise RuntimeError("The production native Yamada backend is required")
 
     all_candidates = core.generate_shadows(plantri, crossings)
-    accepted, rejected = admissible_theta_shadows(plantri, crossings)
+    abstract_classes, abstract_class_by_shadow = abstract_isomorphism_classes(all_candidates)
+    accepted_all, rejected = admissible_theta_shadows(all_candidates)
+    accepted = accepted_all
     if limit_shadows is not None:
         accepted = accepted[:limit_shadows]
+
+    if crossings == 8:
+        print(
+            "PLANTRI_AUDIT="
+            + json.dumps(
+                {
+                    "current_raw_degree_sequence_count": len(all_candidates),
+                    "current_abstract_isomorphism_class_count": len(abstract_classes),
+                    "moriuchi_reported_count": MORIUCHI_REPORTED_EIGHT_CROSSING_CANDIDATES,
+                    "duplicate_abstract_classes": [
+                        members for members in abstract_classes if len(members) > 1
+                    ],
+                },
+                sort_keys=True,
+            ),
+            flush=True,
+        )
 
     assignment_count = 1 << crossings
     if limit_assignments is not None:
@@ -74,6 +112,7 @@ def run(
                 crossings,
                 fraction,
             )
+            record["abstract_shadow_class"] = abstract_class_by_shadow[shadow.index]
             records.append(record)
         print(
             f"theta shadow {position}/{len(accepted)} complete; records={len(records)}",
@@ -95,7 +134,15 @@ def run(
     result = {
         "crossings": crossings,
         "plantri_degree_sequence_candidate_count": len(all_candidates),
-        "theta_admissible_shadow_count": len(accepted),
+        "abstract_shadow_isomorphism_class_count": len(abstract_classes),
+        "duplicate_abstract_shadow_classes": [
+            members for members in abstract_classes if len(members) > 1
+        ],
+        "moriuchi_reported_eight_crossing_candidate_count": (
+            MORIUCHI_REPORTED_EIGHT_CROSSING_CANDIDATES if crossings == 8 else None
+        ),
+        "theta_admissible_shadow_count_before_limit": len(accepted_all),
+        "theta_admissible_shadow_count_searched": len(accepted),
         "rejected_non_theta_shadow_count": len(rejected),
         "rejected_non_theta_shadows": rejected,
         "assignments_per_shadow": assignment_count,
@@ -113,7 +160,13 @@ def run(
     compact = {
         key: value
         for key, value in result.items()
-        if key not in {"records", "collision_buckets", "rejected_non_theta_shadows"}
+        if key
+        not in {
+            "records",
+            "collision_buckets",
+            "rejected_non_theta_shadows",
+            "duplicate_abstract_shadow_classes",
+        }
     }
     print("SUMMARY=" + json.dumps(compact, sort_keys=True), flush=True)
     if collision_buckets:
@@ -127,6 +180,7 @@ def run(
                     "members": [
                         {
                             "shadow": row["shadow"],
+                            "abstract_shadow_class": row["abstract_shadow_class"],
                             "bits": row["bits"],
                             "bitstring": row["bitstring"],
                         }
