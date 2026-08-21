@@ -124,19 +124,24 @@ def main(family: str, n: int, repeats: int):
         nonlocal terminal_frontier_stats
         if _yamada_terminal_frontier is None:
             raise RuntimeError("terminal frontier extension was not built")
-        terminal_frontier_stats = {}
         plan = plan_diagram_frontier(prepared)
-        value = _yamada_terminal_frontier.compute_prepared_frontier(
-            len(prepared.vertex_ids),
-            len(prepared.crossing_ids),
-            list(prepared.arc_partner),
-            list(prepared.fixed_terminal_index),
-            list(prepared.crossing_for_port),
-            list(prepared.plus_partner),
-            list(prepared.minus_partner),
-            list(plan["factor_order"]),
-            terminal_frontier_stats,
+        value, max_states, max_terminals, transitions = (
+            _yamada_terminal_frontier.compute_prepared_frontier(
+                len(prepared.vertex_ids),
+                len(prepared.crossing_ids),
+                list(prepared.arc_partner),
+                list(prepared.fixed_terminal_index),
+                list(prepared.crossing_for_port),
+                list(prepared.plus_partner),
+                list(prepared.minus_partner),
+                list(plan["factor_order"]),
+            )
         )
+        terminal_frontier_stats = {
+            "max_states": int(max_states),
+            "max_terminals": int(max_terminals),
+            "transitions": int(transitions),
+        }
         return tuple((int(power), int(coefficient)) for power, coefficient in value)
 
     reduced, exponent, rii_moves, r1_moves = _root_fixpoint(prepared)
