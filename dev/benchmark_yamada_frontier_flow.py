@@ -10,7 +10,6 @@ from knotted_graph.invariants.yamada.compact import (
     CompactGraph,
     PythonCompactYamadaEvaluator,
 )
-from knotted_graph.invariants.yamada.fast import multiply_sigma, scale
 from knotted_graph.invariants.yamada.native import NativeCompactEvaluator
 
 
@@ -47,14 +46,6 @@ def _q_poly_to_laurent(q_coefficients, vertex_count):
     for beta, coefficient in sorted(q_coefficients.items()):
         term = ((0, sign * int(coefficient)),)
         for _ in range(beta):
-            # q = sigma + 1, sigma = A^-1 + 1 + A.
-            term = multiply_sigma(term)
-            shifted = tuple((power, coeff) for power, coeff in term)
-            # The loop above multiplies by sigma, so directly building q by
-            # repeated dense Laurent convolution is clearer below.
-        # Recompute q^beta without relying on an intermediate sigma-only value.
-        term = ((0, sign * int(coefficient)),)
-        for _ in range(beta):
             out = defaultdict(int)
             for power, coeff in term:
                 out[power - 1] += coeff
@@ -74,7 +65,7 @@ def frontier_flow_laurent(graph: nx.MultiGraph, vertex_order=None):
     """Exact H(G;A) via a path-frontier flow-polynomial state sum.
 
     Uses H(G;A)=(-1)^|V| sum_{S subseteq E} (-1)^|S| q^beta(S),
-    q=A+2+A^-1.  The state retains only connectivity of active frontier
+    q=A+2+A^-1. The state retains only connectivity of active frontier
     vertices; selecting an edge within one current component increments beta.
     """
     graph = nx.MultiGraph(graph)
@@ -114,6 +105,7 @@ def frontier_flow_laurent(graph: nx.MultiGraph, vertex_order=None):
             introduced[(_canonical(labels + (next_label,)), beta)] = coefficient
         states = introduced
 
+        positions = {node: i for i, node in enumerate(active)}
         for u, v in backward[step]:
             if u == v:
                 updated = defaultdict(int)
@@ -123,16 +115,13 @@ def frontier_flow_laurent(graph: nx.MultiGraph, vertex_order=None):
                 states = {key: value for key, value in updated.items() if value}
                 continue
 
-            pos = {node: i for i, node in enumerate(active)}
-            left = pos[u]
-            right = pos[v]
+            left = positions[u]
+            right = positions[v]
             updated = defaultdict(int)
             for (labels, beta), coefficient in states.items():
-                # Edge absent.
                 updated[(labels, beta)] += coefficient
-                # Edge present contributes -1 and q only if it closes a cycle.
                 merged, closes_cycle = _union(labels, left, right)
-                updated[(merged, beta + (1 if closes_cycle else 0))] -= coefficient
+                updated[(merged, beta + int(closes_cycle))] -= coefficient
             states = {key: value for key, value in updated.items() if value}
 
         forget_positions = [
@@ -146,7 +135,9 @@ def frontier_flow_laurent(graph: nx.MultiGraph, vertex_order=None):
                 forgotten[(_forget(labels, forget_positions), beta)] += coefficient
             states = {key: value for key, value in forgotten.items() if value}
             remove = set(forget_positions)
-            active = [node for position, node in enumerate(active) if position not in remove]
+            active = [
+                node for position, node in enumerate(active) if position not in remove
+            ]
 
         max_frontier = max(max_frontier, len(active))
         max_states = max(max_states, len(states))
@@ -156,8 +147,16 @@ def frontier_flow_laurent(graph: nx.MultiGraph, vertex_order=None):
         if labels:
             raise RuntimeError("frontier did not close")
         q_coefficients[beta] += coefficient
-    q_coefficients = {beta: coefficient for beta, coefficient in q_coefficients.items() if coefficient}
-    return _q_poly_to_laurent(q_coefficients, graph.number_of_nodes()), max_frontier, max_states
+    q_coefficients = {
+        beta: coefficient
+        for beta, coefficient in q_coefficients.items()
+        if coefficient
+    }
+    return (
+        _q_poly_to_laurent(q_coefficients, graph.number_of_nodes()),
+        max_frontier,
+        max_states,
+    )
 
 
 def ladder(rows: int, columns: int):
@@ -182,7 +181,9 @@ def benchmark(rows, columns):
     compact = CompactGraph.from_networkx(graph)
 
     native_time, native_times, native_value = _median(
-        lambda: NativeCompactEvaluator(PythonCompactYamadaEvaluator).compute_laurent(compact)
+        lambda: NativeCompactEvaluator(PythonCompactYamadaEvaluator).compute_laurent(
+            compact
+        )
     )
     frontier_time, frontier_times, frontier_result = _median(
         lambda: frontier_flow_laurent(graph, order)
@@ -194,16 +195,25 @@ def benchmark(rows, columns):
             f"frontier={frontier_value}, native={native_value}"
         )
     print(
-        f"grid={rows}x{columns} V={graph.number_of_nodes()} E={graph.number_of_edges()} "
-        f"frontier={width} max_states={states} native_s={native_time:.9f} "
-        f"frontier_s={frontier_time:.9f} native_over_frontier={native_time/frontier_time:.6f}"
+        f"grid={rows}x{columns} V={graph.number_of_nodes()} "
+        f"E={graph.number_of_edges()} frontier={width} max_states={states} "
+        f"native_s={native_time:.9f} frontier_s={frontier_time:.9f} "
+        f"native_over_frontier={native_time/frontier_time:.6f}"
     )
     print(f"  native_times={native_times}")
     print(f"  frontier_times={frontier_times}")
 
 
 def main():
-    for rows, columns in ((2, 10), (2, 30), (2, 100), (2, 300), (3, 10), (3, 20), (3, 40)):
+    for rows, columns in (
+        (2, 10),
+        (2, 30),
+        (2, 100),
+        (2, 300),
+        (3, 10),
+        (3, 20),
+        (3, 40),
+    ):
         benchmark(rows, columns)
 
 
