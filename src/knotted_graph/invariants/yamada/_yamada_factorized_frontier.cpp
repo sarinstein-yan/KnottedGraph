@@ -130,12 +130,12 @@ void accumulate(Table& table, const std::vector<int>& key, const Poly& poly, int
     }
 }
 
-void accumulate_cycle(Table& table, const std::vector<int>& key, const Poly& poly) {
+void accumulate_q(Table& table, const std::vector<int>& key, const Poly& poly, int sign) {
     auto [it, inserted] = table.try_emplace(key);
-    it->second.add_from(poly, -1, -1);
-    it->second.add_from(poly, 0, -1);
-    it->second.add_from(poly, 0, -1);
-    it->second.add_from(poly, 1, -1);
+    it->second.add_from(poly, -1, sign);
+    it->second.add_from(poly, 0, sign);
+    it->second.add_from(poly, 0, sign);
+    it->second.add_from(poly, 1, sign);
     if (!inserted) {
         it->second.trim();
         if (it->second.empty()) table.erase(it);
@@ -272,8 +272,13 @@ LaurentOut compute(
                 updated.reserve(states.size());
                 for (const auto& [labels, poly] : states) {
                     std::vector<int> merged = labels;
-                    (void)unite(merged, left, right); // logical identification, never a graph cycle
-                    accumulate(updated, merged, poly, 0, 1);
+                    const bool cycle = unite(merged, left, right);
+                    // Identity wires carry no edge sign.  However, if this
+                    // logical vertex identification closes an already-selected
+                    // physical path, the quotient graph gains one cycle, hence
+                    // the required +q=(A^-1+2+A) factor.
+                    if (cycle) accumulate_q(updated, merged, poly, 1);
+                    else accumulate(updated, merged, poly, 0, 1);
                 }
                 states = std::move(updated);
             } else if (kind == PHYSICAL) {
@@ -283,7 +288,7 @@ LaurentOut compute(
                     accumulate(updated, labels, poly, 0, 1); // edge excluded
                     std::vector<int> merged = labels;
                     const bool cycle = unite(merged, left, right);
-                    if (cycle) accumulate_cycle(updated, merged, poly);
+                    if (cycle) accumulate_q(updated, merged, poly, -1);
                     else accumulate(updated, merged, poly, 0, -1);
                 }
                 states = std::move(updated);
