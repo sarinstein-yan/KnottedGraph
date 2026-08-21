@@ -5,15 +5,21 @@ on:
     branches:
       - YAMADA_Optimization_LATEST
     paths:
+      - "src/knotted_graph/invariants/yamada/diagram_frontier.py"
       - "src/knotted_graph/invariants/yamada/diagram_memo_dp.py"
       - "dev/benchmark_yamada_memo_dp_cycles.py"
+      - "dev/benchmark_yamada_frontier_general.py"
       - ".github/workflows/yamada-kernel-breakthrough.yml"
 
 permissions:
   contents: read
 
+concurrency:
+  group: yamada-kernel-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  hard-cycles:
+  frontier-validation:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
@@ -32,5 +38,7 @@ jobs:
           from knotted_graph.invariants.yamada.native import native_available, native_import_error
           assert native_available(), native_import_error()
           PY
-      - name: Benchmark exact memoized resolution DAG
+      - name: Hard LLLV cycle benchmark and small exact gate
         run: uv run --no-sync python dev/benchmark_yamada_memo_dp_cycles.py
+      - name: Generic adaptive frontier probe
+        run: uv run --no-sync python dev/benchmark_yamada_frontier_general.py
