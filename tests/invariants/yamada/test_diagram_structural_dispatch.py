@@ -7,7 +7,9 @@ import sys
 import pytest
 
 from knotted_graph.invariants.yamada.compact import PythonCompactYamadaEvaluator
+from knotted_graph.invariants.yamada.diagram_locality import _first_virtual_inversion
 from knotted_graph.invariants.yamada.diagram_structural import (
+    _first_local_inversion,
     _reduce_r1_queue,
     compute_structural_laurent,
 )
@@ -89,6 +91,26 @@ def test_queue_r1_closure_is_identical_to_sequential_r1(n, mirror):
     assert queue_exponent == sequential_exponent
     assert queue_moves == sequential_moves
     assert diagram_key(queue_state) == diagram_key(sequential_state)
+
+
+@pytest.mark.parametrize(
+    ("n", "mirror"),
+    [(5, False), (7, False), (9, False), (11, False), (9, True), (11, True)],
+)
+def test_virtual_inversion_probe_matches_materialized_selector(n, mirror):
+    """Virtual four-port probing chooses exactly the retained inversion branch."""
+    prepared = _prepared(n, mirror=mirror)
+    old, old_scans, old_checks = _first_local_inversion(prepared)
+    new, new_scans, new_checks = _first_virtual_inversion(prepared)
+
+    assert new_scans == old_scans
+    assert new_checks == old_checks
+    assert (new is None) == (old is None)
+    if old is not None:
+        assert new is not None
+        assert new[0] == old[0]
+        assert new[1] == old[1]
+        assert diagram_key(new[2]) == diagram_key(old[2])
 
 
 @pytest.mark.parametrize("n", [3, 5, 7])
