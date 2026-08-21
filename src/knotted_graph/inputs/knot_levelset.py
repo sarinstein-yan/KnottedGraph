@@ -239,7 +239,9 @@ def _surface_topology(mesh: LevelSetMesh) -> tuple[int, int, bool, int | None]:
 
     edge_counts: dict[tuple[int, int], int] = {}
     for a, b, c in faces:
-        union(int(a), int(b)); union(int(b), int(c)); union(int(c), int(a))
+        union(int(a), int(b))
+        union(int(b), int(c))
+        union(int(c), int(a))
         for left, right in ((a, b), (b, c), (c, a)):
             edge = tuple(sorted((int(left), int(right))))
             edge_counts[edge] = edge_counts.get(edge, 0) + 1
@@ -305,6 +307,7 @@ def tubular_convergence(
         diagnose_level(field, radius, span=span, dimension=dimension)
         for dimension in dimensions
     )
+
     def signature(item):
         return (
             item.volume_components, item.surface_components,
@@ -312,6 +315,7 @@ def tubular_convergence(
             item.touches_box_boundary, item.total_boundary_genus,
             item.matches_expected_tubular_neighborhood,
         )
+
     converged = bool(
         signature(diagnostics[-1]) == signature(diagnostics[-2])
         and diagnostics[-1].matches_expected_tubular_neighborhood is not False
