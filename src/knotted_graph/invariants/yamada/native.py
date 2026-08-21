@@ -3,10 +3,10 @@
 The public API remains pure Python. When the compiled extension is available,
 the compact deletion--contraction recurrence and state summation run in C++.
 If the native int64 coefficient fast path overflows, the computation is rerun
-with the existing arbitrary-precision Python Laurent kernel, preserving exactness.
+with the arbitrary-precision Python Laurent kernel, preserving exactness.
 
 Prepared diagrams use the generic exact structural engine for sufficiently large
-crossing count.  No theorem-family recognizer or precomputed polynomial is part
+crossing count. No theorem-family recognizer or precomputed polynomial is part
 of production dispatch; published formulas are used only by external validation
 benchmarks.
 """
@@ -48,7 +48,7 @@ def _as_laurent(value) -> tuple[tuple[int, int], ...]:
 
 
 class _MemoSizeProxy:
-    """Compatibility object for internal callers that only inspect ``len(memo)``."""
+    """Lightweight view for internal callers that inspect ``len(memo)``."""
 
     def __init__(self, evaluator: "NativeCompactEvaluator"):
         self._evaluator = evaluator
@@ -66,9 +66,6 @@ class NativeCompactEvaluator:
         self._native = _yamada_native.NativeEvaluator() if native_available() else None
         self.native_calls = 0
         self.fallback_calls = 0
-        # Retained for backward-compatible diagnostics. Production dispatch no
-        # longer invokes the former theorem-backed theta shortcut.
-        self.theta_twist_calls = 0
         self.structural_calls = 0
         self.last_structural_stats = None
         self.memo = _MemoSizeProxy(self)
@@ -149,6 +146,7 @@ class NativeCompactEvaluator:
                 self.fallback_calls += 1
 
         import itertools
+
         from .fast import add, shift
 
         evaluator = self._python()
@@ -186,7 +184,7 @@ class NativeCompactEvaluator:
 
 
 def make_native_or_python_evaluator(fallback_factory):
-    """Return the native wrapper when built, otherwise the existing Python evaluator."""
+    """Return the native wrapper when built, otherwise the Python evaluator."""
     if native_available():
         return NativeCompactEvaluator(fallback_factory)
     return fallback_factory()
