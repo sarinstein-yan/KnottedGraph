@@ -1,0 +1,43 @@
+name: Yamada frontier v2 public A/B
+
+on:
+  pull_request:
+    branches:
+      - YAMADA_Optimization_LATEST
+    paths:
+      - "src/knotted_graph/invariants/yamada/diagram_frontier.py"
+      - "dev/benchmark_yamada_frontier_v2_public_ab.py"
+      - ".github/workflows/yamada-frontier-v2-public-ab.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: yamada-frontier-v2-ab-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  public-ab:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Production baseline
+        run: |
+          git worktree add --detach ../frontier-v2-ab-base 28eddbfdc4cb21dd63e0faaaeb953a999bb2d8db
+          cp dev/benchmark_yamada_frontier_v2_public_ab.py ../frontier-v2-ab-base/dev/benchmark_yamada_frontier_v2_public_ab.py
+          cd ../frontier-v2-ab-base
+          uv sync --group dev --group benchmark
+          uv run --no-sync python dev/benchmark_yamada_frontier_v2_public_ab.py run baseline /tmp/frontier-v2-ab-base.json
+      - name: Candidate PR merge
+        run: |
+          uv sync --group dev --group benchmark
+          uv run --no-sync python dev/benchmark_yamada_frontier_v2_public_ab.py run candidate /tmp/frontier-v2-ab-candidate.json
+      - name: Exact compare and speedup
+        run: uv run --no-sync python dev/benchmark_yamada_frontier_v2_public_ab.py compare /tmp/frontier-v2-ab-base.json /tmp/frontier-v2-ab-candidate.json
