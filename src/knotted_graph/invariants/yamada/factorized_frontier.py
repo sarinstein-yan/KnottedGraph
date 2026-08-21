@@ -1,10 +1,10 @@
 """Exact low-arity factorization for the Yamada connectivity state sum.
 
 A fixed graph vertex is an equality constraint on all incident ports with one
-weight -1.  High arity is therefore representational, not mathematical.  We
+weight -1. High arity is therefore representational, not mathematical. We
 factor each such equality into a deterministic chain of arity <=3 equality
-factors joined by identity wires.  Exactly one factor carries the original -1
-weight; auxiliary equality factors carry +1.  Identity wires only identify
+factors joined by identity wires. Exactly one factor carries the original -1
+weight; auxiliary equality factors carry +1. Identity wires only identify
 connectivity variables and are *not* graph edges, so they never create the
 Yamada edge weight or cycle factor.
 
@@ -16,13 +16,22 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from .diagram_frontier import _greedy_factor_order
+from .diagram_frontier import _greedy_factor_order, compute_diagram_frontier_laurent
+
+try:
+    from . import _yamada_factorized_frontier
+except Exception:  # pragma: no cover - compiler/platform fallback
+    _yamada_factorized_frontier = None
 
 FACTOR_EQUALITY_NEG = 0
 FACTOR_EQUALITY_POS = 1
 FACTOR_CROSSING = 2
 WIRE_PHYSICAL = 0
 WIRE_IDENTITY = 1
+
+
+def native_factorized_available() -> bool:
+    return _yamada_factorized_frontier is not None
 
 
 def build_factorized_frontier(prepared):
@@ -55,7 +64,6 @@ def build_factorized_frontier(prepared):
     factor_types = []
     factor_ports = []
 
-    # Degree-zero fixed vertices still contribute their single -1 factor.
     for ports in vertex_ports:
         ordered = sorted(ports, key=neighbor_key)
         if not ordered:
@@ -121,10 +129,9 @@ def build_factorized_frontier(prepared):
             adjacency[right][left] += 1
     factor_order = _greedy_factor_order(adjacency, factor_ports)
 
-    # Crossing pairing tables extend across virtual identity ports with -1.
     plus_partner = [-1] * len(wire_partner)
     minus_partner = [-1] * len(wire_partner)
-    for crossing, ports in enumerate(prepared.ordered_ports):
+    for ports in prepared.ordered_ports:
         for port in ports:
             plus_partner[port] = int(prepared.plus_partner[port])
             minus_partner[port] = int(prepared.minus_partner[port])
@@ -140,3 +147,28 @@ def build_factorized_frontier(prepared):
         "original_port_count": original_port_count,
         "crossing_factor_by_index": tuple(crossing_factor_by_index),
     }
+
+
+def compute_factorized_frontier_laurent(prepared):
+    """Evaluate one prepared Yamada diagram with the single factorized DP."""
+    if _yamada_factorized_frontier is None:
+        # Exact portability fallback. This changes implementation, not the
+        # mathematical algorithm/result, on platforms without a native compiler.
+        return compute_diagram_frontier_laurent(prepared)
+
+    data = build_factorized_frontier(prepared)
+    try:
+        value = _yamada_factorized_frontier.compute_factorized_frontier(
+            list(data["factor_types"]),
+            list(data["port_factor"]),
+            list(data["wire_partner"]),
+            list(data["wire_type"]),
+            list(data["plus_partner"]),
+            list(data["minus_partner"]),
+            list(data["factor_order"]),
+        )
+    except OverflowError:
+        # Native int64 arithmetic is only an optimization. The Python DP is the
+        # arbitrary-precision exact fallback and never changes the invariant.
+        return compute_diagram_frontier_laurent(prepared)
+    return tuple((int(power), int(coefficient)) for power, coefficient in value)
