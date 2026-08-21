@@ -31,25 +31,33 @@ if(CMAKE_CXX_COMPILER)
         MODULE
         src/knotted_graph/invariants/yamada/_yamada_frontier_dense.cpp
     )
+    pybind11_add_module(
+        _yamada_terminal_frontier
+        MODULE
+        src/knotted_graph/invariants/yamada/_yamada_terminal_frontier.cpp
+    )
     target_compile_features(_yamada_native PRIVATE cxx_std_17)
     target_compile_features(_yamada_iso PRIVATE cxx_std_17)
     target_compile_features(_yamada_frontier PRIVATE cxx_std_17)
     target_compile_features(_yamada_frontier_dense PRIVATE cxx_std_17)
+    target_compile_features(_yamada_terminal_frontier PRIVATE cxx_std_17)
 
     if(MSVC)
         target_compile_options(_yamada_native PRIVATE /O2 /DNDEBUG)
         target_compile_options(_yamada_iso PRIVATE /O2 /DNDEBUG)
         target_compile_options(_yamada_frontier PRIVATE /O2 /DNDEBUG)
         target_compile_options(_yamada_frontier_dense PRIVATE /O2 /DNDEBUG)
+        target_compile_options(_yamada_terminal_frontier PRIVATE /O2 /DNDEBUG)
     else()
         target_compile_options(_yamada_native PRIVATE -O3 -DNDEBUG)
         target_compile_options(_yamada_iso PRIVATE -O3 -DNDEBUG)
         target_compile_options(_yamada_frontier PRIVATE -O3 -DNDEBUG)
         target_compile_options(_yamada_frontier_dense PRIVATE -O3 -DNDEBUG)
+        target_compile_options(_yamada_terminal_frontier PRIVATE -O3 -DNDEBUG)
     endif()
 
     install(
-        TARGETS _yamada_native _yamada_iso _yamada_frontier _yamada_frontier_dense
+        TARGETS _yamada_native _yamada_iso _yamada_frontier _yamada_frontier_dense _yamada_terminal_frontier
         LIBRARY DESTINATION knotted_graph/invariants/yamada
         RUNTIME DESTINATION knotted_graph/invariants/yamada
     )
