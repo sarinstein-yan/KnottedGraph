@@ -1,0 +1,41 @@
+name: Yamada frontier v2 state collapse
+
+on:
+  pull_request:
+    branches:
+      - YAMADA_Optimization_LATEST
+    paths:
+      - "src/knotted_graph/invariants/yamada/diagram_frontier.py"
+      - "dev/benchmark_yamada_frontier_v2_states.py"
+      - "dev/benchmark_yamada_frontier_v2_public_ab.py"
+      - ".github/workflows/yamada-frontier-v2-states.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  state-collapse:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Production baseline
+        run: |
+          git worktree add --detach ../frontier-v2-state-base 28eddbfdc4cb21dd63e0faaaeb953a999bb2d8db
+          cp dev/benchmark_yamada_frontier_v2_public_ab.py ../frontier-v2-state-base/dev/benchmark_yamada_frontier_v2_public_ab.py
+          cp dev/benchmark_yamada_frontier_v2_states.py ../frontier-v2-state-base/dev/benchmark_yamada_frontier_v2_states.py
+          cd ../frontier-v2-state-base
+          uv sync --group dev --group benchmark
+          uv run --no-sync python dev/benchmark_yamada_frontier_v2_states.py run baseline /tmp/frontier-v2-state-base.json
+      - name: Candidate
+        run: |
+          uv sync --group dev --group benchmark
+          uv run --no-sync python dev/benchmark_yamada_frontier_v2_states.py run candidate /tmp/frontier-v2-state-candidate.json
+      - name: Compare state collapse
+        run: uv run --no-sync python dev/benchmark_yamada_frontier_v2_states.py compare /tmp/frontier-v2-state-base.json /tmp/frontier-v2-state-candidate.json
