@@ -1,0 +1,43 @@
+name: Yamada unified state-DP research
+
+on:
+  push:
+    branches:
+      - research/yamada-unified-state-dp-20260822
+    paths:
+      - 'src/knotted_graph/invariants/yamada/**'
+      - 'dev/diagnose_yamada_unified_state_dp.py'
+      - '.github/workflows/yamada-unified-state-dp-research.yml'
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - family: THETA_N_VALUES
+            n: 15
+          - family: LLLV_CYCLE_N_VALUES
+            n: 15
+          - family: LLLV_THETA_S_VALUES
+            n: 11
+          - family: THETA_N_VALUES
+            n: 11
+          - family: LLLV_CYCLE_N_VALUES
+            n: 11
+          - family: LLLV_THETA_S_VALUES
+            n: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install package
+        run: python -m pip install -e .
+      - name: Build native Yamada extensions
+        run: python setup.py build_ext --inplace
+      - name: Diagnose unified state DP
+        run: python dev/diagnose_yamada_unified_state_dp.py '${{ matrix.family }}' '${{ matrix.n }}' --repeats 2
