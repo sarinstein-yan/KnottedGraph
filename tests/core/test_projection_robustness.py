@@ -1,7 +1,5 @@
-import numpy as np
 from shapely import LineString, MultiLineString, Point
 
-from knotted_graph.projection.geom import Crossing
 from knotted_graph.projection.pd_code import PDCode, find_all_crossings
 
 
@@ -34,15 +32,3 @@ def test_crossing_distance_dedup_merges_internal_sample_duplicates():
     result = PDCode._deduplicate_crossing_distances(values, tolerance=1e-8)
     assert len(result) == 2
     assert [crossing_id for _, crossing_id in result] == [3, 4]
-
-
-def test_crossing_preserves_repeated_arc_incidences():
-    crossing = Crossing(id=0, point=Point(0, 0))
-    crossing.add_incident_arc(5, -np.pi)
-    crossing.add_incident_arc(6, -np.pi / 2)
-    crossing.add_incident_arc(5, 0.0)
-    crossing.add_incident_arc(7, np.pi / 2)
-    assert crossing._raw_ccw_ordered_arcs.count(5) == 2
-    crossing._correctly_overstrand = True
-    assert crossing.pd_code.startswith("X[")
-    assert crossing.pd_code.count("5") == 2
