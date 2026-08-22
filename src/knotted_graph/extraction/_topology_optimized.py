@@ -12,8 +12,6 @@ plausible trace cannot later fail because an embedded edge has collapsed.
 
 from __future__ import annotations
 
-from collections import Counter
-
 import networkx as nx
 import numpy as np
 
@@ -202,22 +200,35 @@ def _diagnostic_summary(
 
 
 def _best_clean_candidate(candidates):
-    """Choose the most persistent clean safe topology, then the smallest scale."""
+    """Choose the most persistent isomorphism class, then the smallest scale.
+
+    The coarse fingerprint is only a cheap prefilter.  Degree sequences do not
+    determine graph topology (for example, K3,3 and the triangular prism have
+    the same node/edge counts and degree sequence), so recurrence is counted
+    only after an actual multigraph-isomorphism check.
+    """
     if not candidates:
         return None
-    counts = Counter(candidate[1][3] for candidate in candidates)
-    best_count = max(counts.values())
-    persistent_fingerprints = {
-        fingerprint for fingerprint, count in counts.items() if count == best_count
-    }
-    return min(
-        (
-            candidate
-            for candidate in candidates
-            if candidate[1][3] in persistent_fingerprints
-        ),
-        key=lambda candidate: candidate[0],
-    )[1]
+
+    classes: list[list[tuple[int, tuple]]] = []
+    for candidate in candidates:
+        _hops, summary = candidate
+        for group in classes:
+            representative = group[0][1]
+            if (
+                representative[3] == summary[3]
+                and nx.is_isomorphic(representative[1], summary[1])
+            ):
+                group.append(candidate)
+                break
+        else:
+            classes.append([candidate])
+
+    best_group = min(
+        classes,
+        key=lambda group: (-len(group), min(item[0] for item in group)),
+    )
+    return min(best_group, key=lambda item: item[0])[1]
 
 
 def constrained_persistent_extract(
