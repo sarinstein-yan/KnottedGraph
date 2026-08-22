@@ -2,6 +2,8 @@ name: Essential torus Yamada optimization
 
 on:
   pull_request:
+    branches:
+      - YAMADA_Optimization_LATEST
     paths:
       - "src/knotted_graph/invariants/yamada/**"
       - "dev/benchmark_topoly_essential_torus_scaling.py"
@@ -24,8 +26,6 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: perf/yamada-max-optimization
       - uses: astral-sh/setup-uv@v5
       - uses: actions/setup-python@v5
         with:
@@ -34,19 +34,20 @@ jobs:
       - name: Install benchmark environment
         run: uv sync --group dev --group benchmark
 
-      - name: Require native Yamada backend
+      - name: Require final Yamada backends
         run: |
           uv run --no-sync python - <<'PY'
           from knotted_graph.invariants.yamada.native import native_available, native_import_error
+          from knotted_graph.invariants.yamada.factorized_frontier import native_factorized_available
           assert native_available(), native_import_error()
+          assert native_factorized_available()
           PY
 
-      - name: Exact production structural tests
+      - name: Exact factorized production tests
         run: >
           uv run --no-sync pytest -q
-          tests/invariants/yamada/test_reidemeister_ii_preprocessing.py
-          tests/invariants/yamada/test_diagram_structural_dispatch.py
-          tests/invariants/yamada/test_skein_hybrid_candidate.py
+          tests/invariants/yamada/test_diagram_unified.py
+          tests/invariants/yamada/test_block_factorization_equivalence.py
           tests/invariants/yamada/test_native_prepared_state_sum.py
 
       - name: Published and independent Yamada sanity checks
