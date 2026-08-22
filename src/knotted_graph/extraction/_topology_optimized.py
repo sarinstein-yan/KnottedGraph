@@ -2,11 +2,11 @@
 
 A digital junction can occupy several voxels and thereby create a locally
 fragmented graph even when every visible vertex satisfies a nominal valence
-bound.  The selector traces the same sparse skeleton at adjacent junction-zone
-scales and prefers corrections that persist.  If strict two-scale persistence
-is unavailable, a clean one-hop-safe bounded-valence candidate is preferred
-over a zero-radius graph that is already known to violate the requested valence
-constraint.  Candidate geometry is validated before selection so a topologically
+bound. The selector traces the same sparse skeleton at adjacent junction-zone
+scales and prefers corrections that persist. If strict two-scale persistence is
+unavailable, a clean one-hop-safe bounded-valence candidate is preferred over a
+zero-radius graph that is already known to violate the requested valence
+constraint. Candidate geometry is validated before selection so a topologically
 plausible trace cannot later fail because an embedded edge has collapsed.
 """
 
@@ -120,10 +120,10 @@ def _embedded_geometry_safe(graph: nx.MultiGraph) -> bool:
     """Reject traces whose edge geometry would collapse during normalization.
 
     In particular, a self-loop must contain a genuine excursion away from its
-    node before returning to that node.  Merely having a self-loop in the
+    node before returning to that node. Merely having a self-loop in the
     abstract MultiGraph is not enough: a two-endpoint loop whose endpoints snap
     to the same vertex is not an embedded edge and later normalization correctly
-    rejects it.  Detecting that here lets the multi-scale selector try another
+    rejects it. Detecting that here lets the multi-scale selector try another
     junction radius instead of returning a doomed candidate.
     """
     positions: dict[object, np.ndarray] = {}
@@ -147,8 +147,14 @@ def _embedded_geometry_safe(graph: nx.MultiGraph) -> bool:
             normalized[0] = start
             normalized[-1] = start
         else:
-            forward = float(np.linalg.norm(points[0] - start) + np.linalg.norm(points[-1] - end))
-            reverse = float(np.linalg.norm(points[0] - end) + np.linalg.norm(points[-1] - start))
+            forward = float(
+                np.linalg.norm(points[0] - start)
+                + np.linalg.norm(points[-1] - end)
+            )
+            reverse = float(
+                np.linalg.norm(points[0] - end)
+                + np.linalg.norm(points[-1] - start)
+            )
             if reverse < forward:
                 normalized = normalized[::-1].copy()
             normalized[0] = start
@@ -158,11 +164,11 @@ def _embedded_geometry_safe(graph: nx.MultiGraph) -> bool:
         if len(normalized) < 2:
             return False
         if u == v:
-            # A closed embedded edge needs an interior point distinct from the
-            # common endpoint, hence at least start/interior/start after dedupe.
             if len(normalized) < 3:
                 return False
-            if not np.any(np.linalg.norm(normalized[1:-1] - start, axis=1) > 1e-10):
+            if not np.any(
+                np.linalg.norm(normalized[1:-1] - start, axis=1) > 1e-10
+            ):
                 return False
     return True
 
@@ -219,21 +225,20 @@ def constrained_persistent_extract(
     adjacency: list[list[int]],
     *,
     max_degree: int,
-    max_hops: int = 8,
+    max_hops: int = 4,
     anomaly_ratio: float = 0.15,
 ) -> nx.MultiGraph:
     """Return the best supported valence-valid digital-junction correction.
 
     Strict consecutive-scale persistence remains the highest-confidence route.
-    Every candidate must also carry nondegenerate embedded edge geometry.  The
-    default search spans eight voxel-neighbourhood scales: difficult Lee
-    skeleton junction clusters can extend beyond four 26-neighbour hops, while
-    topology persistence and short-edge diagnostics prevent accepting a larger
-    radius merely because it lowers the apparent valence.
+    Every candidate must also carry nondegenerate embedded edge geometry.
+    Diagonal adjacency artefacts are removed before this stage, so the
+    persistence search remains deliberately local rather than compensating for
+    shortcut cycles by aggressively enlarging junction zones.
 
     If strict persistence is unavailable, the most frequently recurring clean,
     one-hop-safe bounded-valence topology is chosen, breaking ties toward the
-    smallest repair scale.  The zero-radius graph is used only when no validated
+    smallest repair scale. The zero-radius graph is used only when no validated
     bounded-valence repair exists.
     """
     prepared = _prepared_components(coords, adjacency)
