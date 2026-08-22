@@ -178,16 +178,14 @@ def compute_factorized_frontier_laurent(prepared):
     require_native_factorized()
     data = build_factorized_frontier(prepared)
     try:
-        # pybind11's STL caster accepts Python tuples directly for std::vector,
-        # so avoid seven redundant O(n) list materializations on every call.
         value = _yamada_factorized_frontier.compute_factorized_frontier(
-            data["factor_types"],
-            data["port_factor"],
-            data["wire_partner"],
-            data["wire_type"],
-            data["plus_partner"],
-            data["minus_partner"],
-            data["factor_order"],
+            list(data["factor_types"]),
+            list(data["port_factor"]),
+            list(data["wire_partner"]),
+            list(data["wire_type"]),
+            list(data["plus_partner"]),
+            list(data["minus_partner"]),
+            list(data["factor_order"]),
         )
     except OverflowError:
         # This is an exact arbitrary-precision arithmetic safety net, not solver
