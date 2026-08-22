@@ -17,10 +17,67 @@ _NEIGHBOR_OFFSETS = tuple(
 )
 
 
+def _suppress_redundant_diagonal_shortcuts(
+    coords: np.ndarray,
+    adjacency: list[list[int]],
+) -> list[list[int]]:
+    """Remove digital diagonal shortcuts without changing connectivity.
+
+    A 26-neighbour voxel graph contains edges that are not centreline steps at
+    all.  For example, three occupied voxels forming an ordinary right-angle
+    polyline are pairwise 26-neighbours, so the raw adjacency is a triangle and
+    a tracer incorrectly sees a cycle.  A diagonal edge ``u-v`` is redundant
+    when an occupied common neighbour ``w`` connects the same endpoints through
+    two *strictly shorter* lattice steps.  Such an edge can be removed safely:
+    it already has a replacement path, and recursively any removed replacement
+    edge has still shorter steps, terminating at face-neighbour edges.
+
+    Sparse diagonal connections with no shorter common-neighbour path are kept,
+    so a genuinely diagonal digital curve remains connected.  This is a local,
+    deterministic reduction of adjacency artefacts; it does not delete voxels or
+    infer topology from the requested graph valence.
+    """
+    if not adjacency:
+        return adjacency
+
+    neighbours = [set(row) for row in adjacency]
+    remove: set[tuple[int, int]] = set()
+
+    for u, row in enumerate(adjacency):
+        for v in row:
+            if v <= u:
+                continue
+            delta = coords[v] - coords[u]
+            edge_sq = int(np.dot(delta, delta))
+            if edge_sq <= 1:
+                continue
+
+            for w in neighbours[u].intersection(neighbours[v]):
+                uw = coords[w] - coords[u]
+                wv = coords[v] - coords[w]
+                if int(np.dot(uw, uw)) < edge_sq and int(np.dot(wv, wv)) < edge_sq:
+                    remove.add((u, v))
+                    break
+
+    if not remove:
+        return adjacency
+
+    reduced: list[list[int]] = []
+    for u, row in enumerate(adjacency):
+        reduced.append(
+            [
+                v
+                for v in row
+                if (min(u, v), max(u, v)) not in remove
+            ]
+        )
+    return reduced
+
+
 def sparse_adjacency_exact_cropped(
     image: np.ndarray,
 ) -> tuple[np.ndarray, list[list[int]]]:
-    """Return deterministic 26-neighbour lists in the global voxel frame."""
+    """Return deterministic, shortcut-reduced 26-neighbour lists."""
     occupied = [
         np.flatnonzero(image.any(axis=(1, 2))),
         np.flatnonzero(image.any(axis=(0, 2))),
@@ -56,6 +113,8 @@ def sparse_adjacency_exact_cropped(
         keep = np.all(actual == wanted, axis=1)
         for u, v in zip(left[keep].tolist(), right[keep].tolist()):
             adjacency[u].append(v)
+
+    adjacency = _suppress_redundant_diagonal_shortcuts(coords, adjacency)
     return coords, adjacency
 
 
