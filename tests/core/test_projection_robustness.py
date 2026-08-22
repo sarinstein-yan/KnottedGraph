@@ -1,5 +1,8 @@
+import numpy as np
+import pytest
 from shapely import LineString, MultiLineString, Point
 
+from knotted_graph.projection.geom import Crossing
 from knotted_graph.projection.pd_code import PDCode, find_all_crossings
 
 
@@ -32,3 +35,19 @@ def test_crossing_distance_dedup_merges_internal_sample_duplicates():
     result = PDCode._deduplicate_crossing_distances(values, tolerance=1e-8)
     assert len(result) == 2
     assert [crossing_id for _, crossing_id in result] == [3, 4]
+
+
+def test_crossing_accepts_well_separated_transverse_half_edges():
+    crossing = Crossing(id=0, point=Point(0.0, 0.0))
+    for arc_id, angle in enumerate((0.0, 0.5 * np.pi, np.pi, -0.5 * np.pi)):
+        crossing.add_incident_arc(arc_id, angle)
+    assert len(crossing.incident_arcs) == 4
+
+
+def test_crossing_rejects_numerically_tangent_half_edges():
+    crossing = Crossing(id=0, point=Point(0.0, 0.0))
+    crossing.add_incident_arc(0, 0.0)
+    crossing.add_incident_arc(1, 1e-12)
+    crossing.add_incident_arc(2, np.pi)
+    with pytest.raises(ValueError, match="numerically tangent"):
+        crossing.add_incident_arc(3, np.pi + 1e-12)
