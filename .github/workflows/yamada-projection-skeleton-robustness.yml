@@ -59,10 +59,11 @@ jobs:
       - name: Re-run the 16 historical hard failures at original settings
         env:
           PYTHONNOUSERSITE: '1'
+          PYTHONUNBUFFERED: '1'
           MPLBACKEND: Agg
           PYVISTA_OFF_SCREEN: 'true'
           PLOTLY_RENDERER: json
-        run: uv run --no-sync python dev/_tmp_hard_failure_regression.py
+        run: uv run --no-sync python -u dev/_tmp_hard_failure_regression.py
 
       - name: Run 04 synthetic ground-truth validation
         env:
