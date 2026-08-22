@@ -58,20 +58,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Only bounded, self-contained notebooks belong in the automatic PR
+        # matrix. The full publication scaling experiment (03 -> 06) and the
+        # 200/300^3 physics gallery are intentionally handled separately below.
         notebook:
           - User_guide/00_user_guide.ipynb
           - User_guide/01_getting_started.ipynb
           - User_guide/02_core_workflows.ipynb
           - User_guide/03_advanced_and_reproduction.ipynb
-          - User_guide/applications/01_physics_applications.ipynb
           - User_guide/applications/02_mathematics_applications.ipynb
           - User_guide/applications/03_protein_applications.ipynb
           - User_guide/benchmarks/01_sanity_checks.ipynb
           - User_guide/benchmarks/02_application_output_regression.ipynb
-          - User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling_final_push.ipynb
           - User_guide/benchmarks/04_synthetic_ground_truth_validation.ipynb
           - User_guide/benchmarks/05_same_abstract_graph_distinct_embeddings.ipynb
-          - User_guide/benchmarks/06_paper_scaling_publication_figure_final_push.ipynb
 
     steps:
       - name: Check out optimization branch
@@ -89,8 +89,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install full notebook environment
-        run: |
-          uv sync --extra all --group dev --group docs --group benchmark
+        run: uv sync --extra all --group dev --group docs --group benchmark
 
       - name: Verify installed package and native Yamada backend
         run: |
@@ -120,5 +119,136 @@ jobs:
           MPLBACKEND: Agg
           PYVISTA_OFF_SCREEN: 'true'
           PLOTLY_RENDERER: json
+        run: uv run --no-sync python dev/execute_notebook.py "${{ matrix.notebook }}" --timeout 7200
+
+  audit-publication-benchmark-contract:
+    name: Audit publication benchmark 03 -> 06 contract
+    needs: normalize-notebooks
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out optimization branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate producer-consumer contract
         run: |
-          uv run --no-sync python dev/execute_notebook.py "${{ matrix.notebook }}" --timeout 7200
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          producer_path = Path('User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling_final_push.ipynb')
+          consumer_path = Path('User_guide/benchmarks/06_paper_scaling_publication_figure_final_push.ipynb')
+          csv_name = '03_knottedgraph_vs_topoly_scaling_rows.csv'
+
+          def sources(path):
+              data = json.loads(path.read_text(encoding='utf-8'))
+              return '\n'.join(''.join(cell.get('source', [])) if isinstance(cell.get('source', []), list) else str(cell.get('source', '')) for cell in data.get('cells', []))
+
+          producer = sources(producer_path)
+          consumer = sources(consumer_path)
+          assert csv_name in producer, 'Notebook 03 no longer writes the publication scaling CSV.'
+          assert csv_name in consumer, 'Notebook 06 no longer reads notebook 03 publication scaling CSV.'
+          assert 'run notebook 03 first' in consumer.lower(), 'Notebook 06 must document its notebook-03 prerequisite.'
+          assert '[50, 100, 200, 300, 400, 500]' in producer, 'Notebook 03 full publication-size sweep was unexpectedly reduced.'
+          print('PASS: notebook 03 remains the producer and notebook 06 the consumer of the same publication CSV; full publication sweep is preserved.')
+          PY
+
+  benchmark-pipeline:
+    name: Full publication benchmark notebooks 03 -> 06
+    if: github.event_name == 'workflow_dispatch'
+    needs: normalize-notebooks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Check out optimization branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install full notebook environment
+        run: uv sync --extra all --group dev --group docs --group benchmark
+
+      - name: Verify installed package and native Yamada backend
+        run: |
+          uv run --no-sync python - <<'PY'
+          from knotted_graph.invariants.yamada.native import native_available, native_import_error
+          from knotted_graph.invariants.yamada.factorized_frontier import native_factorized_available
+          assert native_available(), native_import_error()
+          assert native_factorized_available()
+          PY
+
+      - name: Audit notebook portability and environment semantics
+        run: |
+          uv run --no-sync python dev/validate_notebook_portability.py
+          uv run --no-sync python dev/normalize_notebook_environments.py --check
+
+      - name: Generate scaling results with notebook 03
+        env:
+          PYTHONNOUSERSITE: '1'
+          MPLBACKEND: Agg
+          PYVISTA_OFF_SCREEN: 'true'
+          PLOTLY_RENDERER: json
+        run: uv run --no-sync python dev/execute_notebook.py "User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling_final_push.ipynb" --timeout 7200
+
+      - name: Consume scaling results with notebook 06
+        env:
+          PYTHONNOUSERSITE: '1'
+          MPLBACKEND: Agg
+          PYVISTA_OFF_SCREEN: 'true'
+          PLOTLY_RENDERER: json
+        run: uv run --no-sync python dev/execute_notebook.py "User_guide/benchmarks/06_paper_scaling_publication_figure_final_push.ipynb" --timeout 7200
+
+  audit-resource-heavy-notebooks:
+    name: Audit resource-heavy physics notebook
+    needs: normalize-notebooks
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out optimization branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install validation environment
+        run: uv sync --extra all --group dev --group docs --group benchmark
+
+      - name: Validate notebook code and package semantics
+        run: |
+          uv run --no-sync python dev/validate_notebook_portability.py
+          uv run --no-sync python dev/normalize_notebook_environments.py --check
+          uv run --no-sync python - <<'PY'
+          from pathlib import Path
+          import nbformat
+          path = Path('User_guide/applications/01_physics_applications.ipynb')
+          nb = nbformat.read(path, as_version=4)
+          code_cells = [cell for cell in nb.cells if cell.cell_type == 'code']
+          assert code_cells, 'Physics notebook unexpectedly contains no code cells.'
+          assert any('dimension=300' in cell.source for cell in code_cells), (
+              'Physics notebook no longer contains its documented full-resolution example.'
+          )
+          print(f'PASS: validated {len(code_cells)} physics-notebook code cells without rewriting scientific resolution.')
+          PY
