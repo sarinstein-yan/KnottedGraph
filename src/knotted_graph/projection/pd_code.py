@@ -68,8 +68,21 @@ class YamadaComputationResult:
 class PDCode:
     """Process an embedded spatial graph into a planar-diagram representation."""
 
-    def __init__(self, skeleton_graph: nx.MultiGraph, tolerance: float = 1e-8):
-        self.skeleton_graph = ensure_embedding(skeleton_graph, copy=True, normalize=True)
+    def __init__(
+        self,
+        skeleton_graph: nx.MultiGraph,
+        tolerance: float = 1e-8,
+        *,
+        _already_normalized: bool = False,
+    ):
+        if _already_normalized:
+            self.skeleton_graph = skeleton_graph
+        else:
+            self.skeleton_graph = ensure_embedding(
+                skeleton_graph,
+                copy=True,
+                normalize=True,
+            )
         self.tolerance = float(tolerance)
         self.vertices: Dict[int, Vertex] = {}
         self.crossings: Dict[int, Crossing] = {}
@@ -151,13 +164,7 @@ class PDCode:
         *,
         tolerance: float,
     ) -> bool:
-        """Return True when two projected strands actually meet in 3-D.
-
-        This is the crucial distinction missing from the old endpoint-touch
-        rejection.  Two segments may ``touch`` in XY because a genuine crossing
-        lands exactly on an internal polyline sample point; if their interpolated
-        z coordinates differ, that point is still a real diagram crossing.
-        """
+        """Return True when two projected strands actually meet in 3-D."""
         z_a = PDCode._segment_z_at_xy(seg_a, point)
         z_b = PDCode._segment_z_at_xy(seg_b, point)
         return abs(z_a - z_b) <= tolerance
@@ -167,14 +174,7 @@ class PDCode:
         multilines: MultiLineString,
         tolerance: float = 1e-8,
     ) -> List[Point]:
-        """Find all proper projected crossings, including self-crossings.
-
-        Segment endpoint contacts are no longer discarded wholesale.  A contact
-        is ignored only when the two source segments coincide at the same 3-D
-        point (ordinary polyline continuity or a true graph vertex).  If two
-        strands share XY but have different heights, the point is a genuine
-        over/under crossing even when it lies at an artificial sampling vertex.
-        """
+        """Find all proper projected crossings, including self-crossings."""
         segment_list = PDCode._explode_to_segments(multilines)
         if len(segment_list) < 2:
             return []
@@ -212,15 +212,12 @@ class PDCode:
                 continue
 
             for point in points:
-                spatial_contact = PDCode._is_true_spatial_contact(
+                if PDCode._is_true_spatial_contact(
                     a,
                     b,
                     point,
                     tolerance=tolerance,
-                )
-                if spatial_contact:
-                    # Same 3-D point: either neighbouring polyline pieces or a
-                    # graph vertex.  It is not an over/under crossing.
+                ):
                     continue
                 seen.add((float(point.x), float(point.y)))
 
@@ -288,20 +285,68 @@ class PDCode:
         crossing_tree: STRtree,
         tolerance: float = 1e-8,
     ) -> List[Tuple[float, int]]:
-        """Indexed equivalent of :meth:`_project_crossings_on_edge`."""
-        intersections = []
-        coords = list(edge.coords)
-        segment_start_dist = 0.0
-        for i in range(len(coords) - 1):
-            segment = LineString([coords[i], coords[i + 1]])
-            query_geometry = segment.buffer(tolerance)
-            candidate_ids = sorted(int(idx) for idx in crossing_tree.query(query_geometry))
-            for crossing_id in candidate_ids:
-                crossing_pt = crossings[crossing_id]
-                if segment.distance(crossing_pt) < tolerance:
-                    dist_local = segment.project(crossing_pt)
-                    intersections.append((segment_start_dist + dist_local, crossing_id))
-            segment_start_dist += segment.length
+        """Batch-index crossings against all segments of one edge.
+
+        This is exactly equivalent to the historical per-segment buffered query,
+        but it moves geometry construction, tree querying, distance evaluation,
+        and line projection into Shapely/GEOS vectorized kernels.
+        """
+        if not crossings:
+            return []
+
+        coords = np.asarray(edge.coords, dtype=float)
+        if len(coords) < 2:
+            return []
+        segments = np.asarray(
+            [LineString([coords[i], coords[i + 1]]) for i in range(len(coords) - 1)],
+            dtype=object,
+        )
+        query_geometries = shapely.buffer(segments, float(tolerance))
+        pairs = crossing_tree.query(query_geometries)
+        if pairs.size == 0:
+            return []
+
+        segment_ids = pairs[0].astype(np.intp, copy=False)
+        crossing_ids = pairs[1].astype(np.intp, copy=False)
+        crossing_array = np.asarray(crossings, dtype=object)
+        segment_candidates = segments[segment_ids]
+        point_candidates = crossing_array[crossing_ids]
+
+        distances = np.asarray(
+            shapely.distance(segment_candidates, point_candidates),
+            dtype=float,
+        )
+        keep = distances < tolerance
+        if not np.any(keep):
+            return []
+
+        segment_ids = segment_ids[keep]
+        crossing_ids = crossing_ids[keep]
+        segment_candidates = segment_candidates[keep]
+        point_candidates = point_candidates[keep]
+        local_distances = np.asarray(
+            shapely.line_locate_point(segment_candidates, point_candidates),
+            dtype=float,
+        )
+
+        segment_lengths = np.asarray(shapely.length(segments), dtype=float)
+        segment_starts = np.empty(len(segment_lengths), dtype=float)
+        segment_starts[0] = 0.0
+        if len(segment_lengths) > 1:
+            np.cumsum(segment_lengths[:-1], out=segment_starts[1:])
+
+        intersections = [
+            (
+                float(segment_starts[int(segment_id)] + local_distance),
+                int(crossing_id),
+            )
+            for segment_id, crossing_id, local_distance in zip(
+                segment_ids.tolist(),
+                crossing_ids.tolist(),
+                local_distances.tolist(),
+                strict=True,
+            )
+        ]
         return PDCode._deduplicate_crossing_distances(
             intersections,
             tolerance=tolerance,
@@ -430,11 +475,7 @@ class PDCode:
         xid: int,
         incidence_angle: float,
     ) -> float:
-        """Return z for a specific half-edge incidence at a crossing.
-
-        For an arc that starts and ends at the same crossing, the arc ID alone
-        is insufficient; the incidence angle identifies which endpoint is meant.
-        """
+        """Return z for a specific half-edge incidence at a crossing."""
         crossing_pt = self.crossings[xid].point
         candidates: list[tuple[float, float]] = []
 
@@ -562,7 +603,8 @@ def _compute_projection(
     rotation_angles: tuple[float, float, float] | None,
     rotation_order: str,
 ) -> ProjectionResult:
-    processor = PDCode(skeleton_graph)
+    # Selection/sampling normalizes once before entering this private helper.
+    processor = PDCode(skeleton_graph, _already_normalized=True)
     pd_code = processor.compute(
         rotation_angles=rotation_angles,
         rotation_order=rotation_order,
@@ -619,6 +661,9 @@ def select_projection(
     if exact_angles is not None:
         return _compute_projection(skeleton_graph, exact_angles, rotation_order)
 
+    # Keep the public sampling contract intact.  ``sample_projections`` performs
+    # its own normalization for direct callers, while each per-angle PDCode now
+    # trusts the already-normalized graph and avoids another O(total points) copy.
     projections = sample_projections(
         skeleton_graph,
         num_rotation_samples=num_rotation_samples,
