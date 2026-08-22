@@ -58,13 +58,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Only self-contained notebooks belong in this matrix. The publication
-        # scaling notebook consumes a CSV produced by notebook 03 and is run in
-        # the ordered benchmark-pipeline job below. The full physics notebook is
-        # intentionally excluded from hosted-runner execution because its
-        # documented 200/300^3 grids are an interactive scientific workload;
-        # its code is portability-audited below and its Yamada outputs are
-        # covered by 02_application_output_regression.ipynb.
+        # Only bounded, self-contained notebooks belong in the automatic PR
+        # matrix. The full publication scaling experiment (03 -> 06) and the
+        # 200/300^3 physics gallery are intentionally handled separately below.
         notebook:
           - User_guide/00_user_guide.ipynb
           - User_guide/01_getting_started.ipynb
@@ -125,8 +121,48 @@ jobs:
           PLOTLY_RENDERER: json
         run: uv run --no-sync python dev/execute_notebook.py "${{ matrix.notebook }}" --timeout 7200
 
+  audit-publication-benchmark-contract:
+    name: Audit publication benchmark 03 -> 06 contract
+    needs: normalize-notebooks
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out optimization branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate producer-consumer contract
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          producer_path = Path('User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling_final_push.ipynb')
+          consumer_path = Path('User_guide/benchmarks/06_paper_scaling_publication_figure_final_push.ipynb')
+          csv_name = '03_knottedgraph_vs_topoly_scaling_rows.csv'
+
+          def sources(path):
+              data = json.loads(path.read_text(encoding='utf-8'))
+              return '\n'.join(''.join(cell.get('source', [])) if isinstance(cell.get('source', []), list) else str(cell.get('source', '')) for cell in data.get('cells', []))
+
+          producer = sources(producer_path)
+          consumer = sources(consumer_path)
+          assert csv_name in producer, 'Notebook 03 no longer writes the publication scaling CSV.'
+          assert csv_name in consumer, 'Notebook 06 no longer reads notebook 03 publication scaling CSV.'
+          assert 'run notebook 03 first' in consumer.lower(), 'Notebook 06 must document its notebook-03 prerequisite.'
+          assert '[50, 100, 200, 300, 400, 500]' in producer, 'Notebook 03 full publication-size sweep was unexpectedly reduced.'
+          print('PASS: notebook 03 remains the producer and notebook 06 the consumer of the same publication CSV; full publication sweep is preserved.')
+          PY
+
   benchmark-pipeline:
-    name: Benchmark notebooks 03 -> 06
+    name: Full publication benchmark notebooks 03 -> 06
+    if: github.event_name == 'workflow_dispatch'
     needs: normalize-notebooks
     runs-on: ubuntu-24.04
     timeout-minutes: 180
