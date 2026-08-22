@@ -59,7 +59,7 @@ def skeleton_image_to_graph(
     skeleton_image: ArrayLike,
     *,
     max_junction_degree: int | None = None,
-    adaptive_max_hops: int = 8,
+    adaptive_max_hops: int = 4,
     anomaly_ratio: float = 0.15,
 ) -> nx.MultiGraph:
     """Convert a 3-D skeleton image with the canonical sparse extractor."""
@@ -75,7 +75,7 @@ def topology_aware_skeleton_image_to_graph(
     skeleton_image: ArrayLike,
     *,
     max_junction_degree: int | None = None,
-    adaptive_max_hops: int = 8,
+    adaptive_max_hops: int = 4,
     anomaly_ratio: float = 0.15,
 ) -> nx.MultiGraph:
     """Alias for :func:`skeleton_image_to_graph` with explicit topology controls."""
