@@ -1,0 +1,46 @@
+name: Temporary exact hard-case matrix
+
+on:
+  push:
+    branches:
+      - diagnostic/hard-exact-matrix-20260822
+  pull_request:
+    branches:
+      - YAMADA_Optimization_LATEST
+
+permissions:
+  contents: read
+
+jobs:
+  hard-case:
+    strategy:
+      fail-fast: false
+      matrix:
+        case_id: [37, 71, 147, 148, 149, 172, 174, 175, 178, 185, 201, 202, 203, 218, 224, 240]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install complete validation environment
+        run: uv sync --extra all --group dev --group benchmark
+      - name: Verify native Yamada backends
+        run: |
+          uv run --no-sync python - <<'PY'
+          from knotted_graph.invariants.yamada.native import native_available, native_import_error
+          from knotted_graph.invariants.yamada.factorized_frontier import native_factorized_available
+          assert native_available(), native_import_error()
+          assert native_factorized_available()
+          PY
+      - name: Run exact historical case ${{ matrix.case_id }}
+        env:
+          CASE_ID: '${{ matrix.case_id }}'
+          PYTHONNOUSERSITE: '1'
+          PYTHONUNBUFFERED: '1'
+          MPLBACKEND: Agg
+          PYVISTA_OFF_SCREEN: 'true'
+          PLOTLY_RENDERER: json
+        run: uv run --no-sync python -u dev/_tmp_hard_exact_case.py
