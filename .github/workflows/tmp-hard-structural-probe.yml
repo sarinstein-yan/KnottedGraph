@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - diagnostic/hard-source-inspect-20260822
+  pull_request:
+    branches:
+      - YAMADA_Optimization_LATEST
 
 permissions:
   contents: read
