@@ -11,4 +11,9 @@ payload = "".join(
     for index in range(1, 5)
 )
 assert len(payload) == 14200, len(payload)
-exec(zlib.decompress(base64.b64decode(payload)))
+source = zlib.decompress(base64.b64decode(payload)).decode("utf-8")
+old = "generate_hard_ground_truths(N_GROUND_TRUTH, RANDOM_SEED)"
+new = "generate_hard_ground_truths(N_GROUND_TRUTH)"
+assert old in source, "Expected historical-regression call signature not found"
+source = source.replace(old, new)
+exec(compile(source, "<hard_failure_regression>", "exec"))
