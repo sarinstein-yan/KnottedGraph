@@ -1,5 +1,6 @@
 from pathlib import Path
 import base64
+import os
 import zlib
 
 import networkx as nx
@@ -22,11 +23,18 @@ random_seed = namespace["RANDOM_SEED"]
 ground_truths = generate(250, seed=random_seed)
 print(f"Generated {len(ground_truths)} deterministic hard cases", flush=True)
 
-target_ids = {147, 148, 149, 174, 175, 178, 201, 202, 203}
+case_env = os.environ.get("CASE_ID")
+if case_env:
+    target_ids = {int(case_env)}
+else:
+    target_ids = {147, 148, 149, 174, 175, 178, 201, 202, 203}
+
+found = 0
 for item in ground_truths:
     case_id = int(item["id"])
     if case_id not in target_ids:
         continue
+    found += 1
     print("\n" + "=" * 72, flush=True)
     print(
         f"CASE {case_id} {item['variant']} grid={item['grid_size']} "
@@ -45,15 +53,23 @@ for item in ground_truths:
             max_junction_degree=namespace["MAX_ALLOWED_DEGREE"],
         )
         raw_deg = dict(extracted.degree())
-        raw_loops = [(u, v, k, len(data.get("pts", ()))) for u, v, k, data in extracted.edges(keys=True, data=True) if u == v]
+        raw_loops = [
+            (u, v, k, len(data.get("pts", ())))
+            for u, v, k, data in extracted.edges(keys=True, data=True)
+            if u == v
+        ]
         print(
             "RAW",
             {
                 "nodes": extracted.number_of_nodes(),
                 "edges": extracted.number_of_edges(),
-                "components": nx.number_connected_components(extracted) if extracted.number_of_nodes() else 0,
+                "components": nx.number_connected_components(extracted)
+                if extracted.number_of_nodes()
+                else 0,
                 "max_degree": max(raw_deg.values(), default=0),
-                "degree_hist": dict(sorted(__import__("collections").Counter(raw_deg.values()).items())),
+                "degree_hist": dict(
+                    sorted(__import__("collections").Counter(raw_deg.values()).items())
+                ),
                 "self_loops": raw_loops,
             },
             flush=True,
@@ -61,18 +77,31 @@ for item in ground_truths:
         world = namespace["_graph_from_voxel_to_world"](extracted, dx=dx)
         recovered = namespace["_cleanup_reconstructed_graph"](world, dx=dx)
         rec_deg = dict(recovered.degree())
-        rec_loops = [(u, v, k, len(data.get("pts", ()))) for u, v, k, data in recovered.edges(keys=True, data=True) if u == v]
+        rec_loops = [
+            (u, v, k, len(data.get("pts", ())))
+            for u, v, k, data in recovered.edges(keys=True, data=True)
+            if u == v
+        ]
         print(
             "CLEAN",
             {
                 "nodes": recovered.number_of_nodes(),
                 "edges": recovered.number_of_edges(),
-                "components": nx.number_connected_components(recovered) if recovered.number_of_nodes() else 0,
+                "components": nx.number_connected_components(recovered)
+                if recovered.number_of_nodes()
+                else 0,
                 "max_degree": max(rec_deg.values(), default=0),
-                "degree_hist": dict(sorted(__import__("collections").Counter(rec_deg.values()).items())),
+                "degree_hist": dict(
+                    sorted(__import__("collections").Counter(rec_deg.values()).items())
+                ),
                 "self_loops": rec_loops,
             },
             flush=True,
         )
     except Exception as exc:
         print(f"ERROR {type(exc).__name__}: {exc}", flush=True)
+
+if found != len(target_ids):
+    raise RuntimeError(
+        f"Expected {len(target_ids)} requested cases, found {found}: {sorted(target_ids)}"
+    )
