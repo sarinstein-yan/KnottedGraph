@@ -5,7 +5,7 @@ on:
   push:
     branches:
       - main
-      - Latest_Workplace
+      - YAMADA_Optimization_LATEST
 
 permissions:
   contents: read
