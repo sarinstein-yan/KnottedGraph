@@ -1,0 +1,48 @@
+name: Temporary Yamada finalization metadata cleanup
+
+on:
+  pull_request:
+    branches: [YAMADA_Optimization_LATEST]
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.head_ref == 'audit/yamada-finalization-20260822'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Canonicalize notebook metadata and remove helper workflow
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path('.')
+          changed = []
+          for path in sorted((root / 'User_guide').rglob('*.ipynb')):
+              nb = json.loads(path.read_text())
+              metadata = nb.setdefault('metadata', {})
+              if metadata.get('based_on_branch') == 'Latest_Workplace':
+                  metadata['based_on_branch'] = 'YAMADA_Optimization_LATEST'
+                  path.write_text(json.dumps(nb, indent=1, ensure_ascii=False) + '\n')
+                  changed.append(str(path))
+          print('metadata-updated:', changed)
+          PY
+          rm -f .github/workflows/tmp-finalize-yamada.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add User_guide .github/workflows/tmp-finalize-yamada.yml
+          if git diff --cached --quiet; then
+            echo 'No cleanup changes needed.'
+            exit 0
+          fi
+          git commit -m 'Canonicalize notebook branch metadata'
+          git push origin HEAD:${{ github.head_ref }}
