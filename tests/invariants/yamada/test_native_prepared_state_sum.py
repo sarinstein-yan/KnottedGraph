@@ -2,17 +2,16 @@ from __future__ import annotations
 
 import itertools
 
+import networkx as nx
+import numpy as np
 import sympy as sp
 
+from knotted_graph.invariants.yamada.compact import PythonCompactYamadaEvaluator
 from knotted_graph.invariants.yamada.fast import add, shift
 from knotted_graph.invariants.yamada.native import NativeCompactEvaluator, native_available
 from knotted_graph.invariants.yamada.polynomial import Yamada, _ordered_crossing_ports
 from knotted_graph.invariants.yamada.state_compact import PreparedCompactStateBuilder
-from knotted_graph.invariants.yamada.compact import PythonCompactYamadaEvaluator
 from knotted_graph.projection import PDCode
-import networkx as nx
-import numpy as np
-
 
 
 def _crossed_cycle():
@@ -53,18 +52,17 @@ def _python_state_sum(prepared):
     return total
 
 
-def test_native_prepared_path_matches_exact_python_state_sum():
+def test_native_exhaustive_oracle_matches_exact_python_state_sum():
     assert native_available()
-    # The ordinary projection pipeline creates the prepared diagram; the test
-    # deliberately uses a public graph constructor and no benchmark fixtures.
+    # This is deliberately a validation oracle, not a production diagram route.
     processor = PDCode(_crossed_cycle())
     processor.compute(rotation_angles=(0.0, 0.0, 0.0))
     prepared = _prepared_from_pd(processor)
     evaluator = NativeCompactEvaluator(PythonCompactYamadaEvaluator)
-    assert evaluator.compute_prepared_laurent(prepared) == _python_state_sum(prepared)
+    assert evaluator.compute_prepared_bulk_laurent(prepared) == _python_state_sum(prepared)
 
 
-def test_public_result_is_identical_with_native_prepared_dispatch():
+def test_public_method_aliases_use_identical_production_algorithm():
     A = sp.Symbol("A")
     processor = PDCode(_crossed_cycle())
     processor.compute(rotation_angles=(0.0, 0.0, 0.0))
