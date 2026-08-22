@@ -53,6 +53,14 @@ jobs:
             tests/core/test_topology_aware_skeleton.py \
             tests/invariants
 
+      - name: Re-run the 16 historical hard failures at original settings
+        env:
+          PYTHONNOUSERSITE: '1'
+          MPLBACKEND: Agg
+          PYVISTA_OFF_SCREEN: 'true'
+          PLOTLY_RENDERER: json
+        run: uv run --no-sync python dev/_tmp_hard_failure_regression.py
+
       - name: Run 04 synthetic ground-truth validation
         env:
           PYTHONNOUSERSITE: '1'
