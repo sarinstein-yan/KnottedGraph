@@ -2,13 +2,16 @@
 
 A digital junction can occupy several voxels and thereby create a locally
 fragmented graph even when every visible vertex satisfies a nominal valence
-bound.  The selector below traces the same sparse skeleton at adjacent
-junction-zone scales and accepts a correction only when the reduced topology is
-stable.  If persistence cannot be demonstrated it fails closed to the exact
-zero-radius sparse trace.
+bound.  The selector traces the same sparse skeleton at adjacent junction-zone
+scales and prefers corrections that persist.  If strict two-scale persistence
+is unavailable, a clean one-hop-safe bounded-valence candidate is now preferred
+over a zero-radius graph that is already known to violate the requested valence
+constraint.
 """
 
 from __future__ import annotations
+
+from collections import Counter
 
 import networkx as nx
 import numpy as np
@@ -125,6 +128,25 @@ def _diagnostic_summary(
     return reduced, clean, _core_fingerprint(reduced), not has_mergeable_short_edge
 
 
+def _best_clean_candidate(candidates):
+    """Choose the most persistent clean safe topology, then the smallest scale."""
+    if not candidates:
+        return None
+    counts = Counter(candidate[1][3] for candidate in candidates)
+    best_count = max(counts.values())
+    persistent_fingerprints = {
+        fingerprint for fingerprint, count in counts.items() if count == best_count
+    }
+    return min(
+        (
+            candidate
+            for candidate in candidates
+            if candidate[1][3] in persistent_fingerprints
+        ),
+        key=lambda candidate: candidate[0],
+    )[1]
+
+
 def constrained_persistent_extract(
     coords: np.ndarray,
     adjacency: list[list[int]],
@@ -133,7 +155,18 @@ def constrained_persistent_extract(
     max_hops: int = 4,
     anomaly_ratio: float = 0.15,
 ) -> nx.MultiGraph:
-    """Return a persistent valence-valid correction or fail closed to base."""
+    """Return the best supported valence-valid digital-junction correction.
+
+    Strict consecutive-scale persistence remains the highest-confidence route.
+    The old final fallback, however, returned the zero-radius trace even when it
+    was explicitly known to violate ``max_degree``.  That defeated the purpose
+    of supplying a valence hint and caused stable degree-4/5 digital artifacts in
+    subcubic reconstructions.  We now retain every clean, one-hop-safe candidate
+    and, if strict persistence is unavailable, select the most frequently
+    recurring clean topology (breaking ties toward the smallest repair scale).
+    The zero-radius graph is used only when no validated bounded-valence repair
+    exists.
+    """
     prepared = _prepared_components(coords, adjacency)
 
     def build(hops: int):
@@ -149,9 +182,12 @@ def constrained_persistent_extract(
     if base[2] and base[4]:
         return base[0]
 
+    clean_candidates = []
     previous = base
     for hops in range(1, max_hops + 1):
         current = build(hops)
+        if current[2] and current[4]:
+            clean_candidates.append((hops, current))
         if (
             previous[2]
             and current[2]
@@ -160,4 +196,8 @@ def constrained_persistent_extract(
         ):
             return previous[0]
         previous = current
+
+    fallback = _best_clean_candidate(clean_candidates)
+    if fallback is not None:
+        return fallback[0]
     return base[0]
