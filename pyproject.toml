@@ -54,6 +54,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+knot-fields = [
+    "scikit-image",
+]
 nodal = [
     "poly2graph",
     "scikit-image",
