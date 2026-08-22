@@ -4,7 +4,7 @@ import argparse
 import json
 import statistics
 
-from benchmark_topoly_essential_torus_scaling import prepare_essential_torus
+from benchmark_dobrynin_vesnin_theta_family import prepare_theta_family
 import benchmark_topoly_paper_scaling as base
 
 DEFAULT_N_VALUES = (3, 5, 7, 9, 11, 13, 15, 17, 19)
@@ -52,7 +52,7 @@ def _independent_theta_terms(n: int) -> dict[int, int]:
 
 
 def benchmark_n(n: int, repeats: int, timeout_s: float):
-    _graph, processor, pdcode = prepare_essential_torus(n)
+    _graph, processor, pdcode = prepare_theta_family(n)
     expected = _independent_theta_terms(n)
     kg_times: list[float] = []
     tp_times: list[float] = []
