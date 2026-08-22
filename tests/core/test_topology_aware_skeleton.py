@@ -8,6 +8,7 @@ from knotted_graph.extraction import (
     skeletonize_volume,
     topology_aware_skeleton_image_to_graph,
 )
+from knotted_graph.extraction._topology_optimized import _embedded_geometry_safe
 
 
 def _trivalent_t_skeleton(size=25):
@@ -137,10 +138,42 @@ def test_pure_ring_is_closed_self_loop():
     u, v, data = next(iter(graph.edges(data=True)))
     assert u == v
     points = np.asarray(data["pts"], dtype=float)
-    node_pos = np.asarray(graph.nodes[u]["pos"], dtype=float)
+    node_pos = np.asarray(graph.nodes[u]["pos"])
     assert np.array_equal(points[0], node_pos)
     assert np.array_equal(points[-1], node_pos)
+    assert _embedded_geometry_safe(graph)
     ensure_embedding(graph, copy=False, normalize=False)
+
+
+def test_candidate_geometry_rejects_collapsed_self_loop():
+    graph = nx.MultiGraph()
+    graph.add_node(0, pos=np.array([2.0, 3.0, 4.0]))
+    graph.add_edge(
+        0,
+        0,
+        pts=np.array([[2.0, 3.0, 4.0], [2.0, 3.0, 4.0]]),
+        weight=0.0,
+    )
+    assert not _embedded_geometry_safe(graph)
+
+
+def test_candidate_geometry_accepts_nontrivial_self_loop():
+    graph = nx.MultiGraph()
+    graph.add_node(0, pos=np.array([0.0, 0.0, 0.0]))
+    graph.add_edge(
+        0,
+        0,
+        pts=np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [1.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0],
+            ]
+        ),
+        weight=3.0,
+    )
+    assert _embedded_geometry_safe(graph)
 
 
 def test_disconnected_ring_components_are_preserved():
