@@ -1,0 +1,30 @@
+name: Temporary hard structural probe
+
+on:
+  push:
+    branches:
+      - diagnostic/hard-source-inspect-20260822
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install validation environment
+        run: uv sync --extra all --group dev --group benchmark
+      - name: Probe remaining reconstruction cases
+        env:
+          PYTHONNOUSERSITE: '1'
+          PYTHONUNBUFFERED: '1'
+          MPLBACKEND: Agg
+          PYVISTA_OFF_SCREEN: 'true'
+          PLOTLY_RENDERER: json
+        run: uv run --no-sync python -u dev/_tmp_hard_structural_probe.py
