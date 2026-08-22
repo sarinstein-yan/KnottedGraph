@@ -51,6 +51,7 @@ jobs:
           uv run --no-sync pytest -q \
             tests/core/test_projection_robustness.py \
             tests/core/test_topology_aware_skeleton.py \
+            tests/core/test_topology_persistence_selection.py \
             tests/invariants
 
       - name: Inspect exact hard-regression call path
