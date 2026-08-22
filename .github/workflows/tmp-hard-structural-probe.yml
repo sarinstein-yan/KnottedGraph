@@ -13,8 +13,12 @@ permissions:
 
 jobs:
   probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        case_id: [147, 148, 149, 174, 175, 178, 201, 202, 203]
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -23,8 +27,9 @@ jobs:
           python-version: '3.12'
       - name: Install validation environment
         run: uv sync --extra all --group dev --group benchmark
-      - name: Probe remaining reconstruction cases
+      - name: Probe reconstruction case ${{ matrix.case_id }}
         env:
+          CASE_ID: '${{ matrix.case_id }}'
           PYTHONNOUSERSITE: '1'
           PYTHONUNBUFFERED: '1'
           MPLBACKEND: Agg
