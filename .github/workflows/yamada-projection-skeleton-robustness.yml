@@ -53,6 +53,9 @@ jobs:
             tests/core/test_topology_aware_skeleton.py \
             tests/invariants
 
+      - name: Inspect exact hard-regression call path
+        run: uv run --no-sync python dev/_tmp_hard_source_inspect.py
+
       - name: Re-run the 16 historical hard failures at original settings
         env:
           PYTHONNOUSERSITE: '1'
