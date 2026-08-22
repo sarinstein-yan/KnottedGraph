@@ -2,7 +2,7 @@ name: User-guide notebooks
 
 on:
   pull_request:
-    branches: [Latest_Workplace]
+    branches: [YAMADA_Optimization_LATEST]
   workflow_dispatch:
 
 permissions:
@@ -99,11 +99,14 @@ jobs:
           import sys
           import knotted_graph
           from knotted_graph.invariants.yamada.native import native_available, native_import_error
+          from knotted_graph.invariants.yamada.factorized_frontier import native_factorized_available
           print("Python:", sys.executable)
           print("KnottedGraph:", Path(knotted_graph.__file__).resolve())
-          print("Native Yamada backend:", native_available())
+          print("Native resolved-graph Yamada backend:", native_available())
+          print("Factorized diagram Yamada backend:", native_factorized_available())
           print("Native import error:", native_import_error())
           assert native_available(), native_import_error()
+          assert native_factorized_available()
           PY
 
       - name: Audit notebook portability and environment semantics
