@@ -1,0 +1,105 @@
+name: Arbitrary knot fields final-audit integration
+
+on:
+  pull_request:
+    paths:
+      - "src/knotted_graph/inputs/braid_field.py"
+      - "src/knotted_graph/inputs/knot_catalogue.py"
+      - "src/knotted_graph/inputs/knot_field.py"
+      - "src/knotted_graph/inputs/knot_levelset.py"
+      - "src/knotted_graph/inputs/knot_path.py"
+      - "src/knotted_graph/inputs/__init__.py"
+      - "src/knotted_graph/applications/knot_deformation.py"
+      - "src/knotted_graph/applications/nodal/deformation.py"
+      - "src/knotted_graph/applications/nodal/__init__.py"
+      - "tests/inputs/test_analytic_knot_fields.py"
+      - "tests/applications/test_knot_field_deformations.py"
+      - "User_guide/applications/04_analytic_knot_fields.ipynb"
+      - "User_guide/00_user_guide.ipynb"
+      - "doc/applications/analytic_knot_fields.md"
+      - "pyproject.toml"
+      - ".github/workflows/arbitrary-knot-fields-final-audit.yml"
+  push:
+    branches:
+      - integration/arbitrary-knot-fields-final-audit
+
+permissions:
+  contents: read
+
+jobs:
+  feature-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install full application environment
+        run: uv sync --group dev --group docs --extra all
+      - name: Require final optimized Yamada backends
+        run: |
+          uv run --no-sync python - <<'PY'
+          from knotted_graph.invariants.yamada.native import native_available
+          from knotted_graph.invariants.yamada.factorized_frontier import native_factorized_available
+          assert native_available()
+          assert native_factorized_available()
+          PY
+      - name: Lint arbitrary-knot integration
+        run: >-
+          uv run --no-sync ruff check
+          src/knotted_graph/inputs/braid_field.py
+          src/knotted_graph/inputs/knot_catalogue.py
+          src/knotted_graph/inputs/knot_field.py
+          src/knotted_graph/inputs/knot_levelset.py
+          src/knotted_graph/inputs/knot_path.py
+          src/knotted_graph/applications/knot_deformation.py
+          src/knotted_graph/applications/nodal/deformation.py
+          tests/inputs/test_analytic_knot_fields.py
+          tests/applications/test_knot_field_deformations.py
+      - name: Run arbitrary-knot regression suite
+        run: >-
+          uv run --no-sync pytest -q
+          tests/inputs/test_analytic_knot_fields.py
+          tests/applications/test_knot_field_deformations.py
+      - name: Validate notebook portability
+        run: |
+          uv run --no-sync python dev/validate_notebook_portability.py
+          uv run --no-sync python dev/normalize_notebook_environments.py --check
+      - name: Execute analytic-knot User Guide notebook
+        env:
+          PYTHONNOUSERSITE: "1"
+          MPLBACKEND: Agg
+          PYVISTA_OFF_SCREEN: "true"
+          PLOTLY_RENDERER: json
+        run: >-
+          uv run --no-sync python dev/execute_notebook.py
+          User_guide/applications/04_analytic_knot_fields.ipynb --timeout 1800
+
+  protected-path-audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Assert protected performance paths are unchanged
+        shell: bash
+        run: |
+          git fetch origin perf/final-performance-audit-ebb0aae
+          protected=(
+            CMakeLists.txt
+            src/knotted_graph/extraction
+            src/knotted_graph/invariants/yamada
+            src/knotted_graph/projection
+            dev/final_performance_audit.py
+            dev/final_performance_audit_medium.py
+            User_guide/benchmarks
+          )
+          if ! git diff --quiet origin/perf/final-performance-audit-ebb0aae...HEAD -- "${protected[@]}"; then
+            echo "ERROR: arbitrary-knot integration modified protected final-audit paths"
+            git diff --stat origin/perf/final-performance-audit-ebb0aae...HEAD -- "${protected[@]}"
+            exit 1
+          fi
+          echo "PASS: protected final-audit paths are unchanged"
