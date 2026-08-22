@@ -49,28 +49,30 @@ class Crossing:
     _correctly_overstrand: bool = field(default=None, init=False, repr=False)
     
     def add_incident_arc(self, arc_id: int, angle: float):
-        """Add one half-edge incidence, preserving repeated arc IDs."""
+        """Add an incident arc with its angle."""
         self.incident_arcs.append((arc_id, angle))
     
     @cached_property
     def _raw_ccw_ordered_arcs(self) -> List[int]:
-        """Return the four crossing incidences counter-clockwise.
-
-        A legitimate self-crossing can contain the same arc ID more than once:
-        an arc may start and end at the same crossing.  The previous code
-        silently dropped every such crossing, which made the computed diagram
-        depend on where a crossing landed relative to the polyline sampling.
-        Incidences, rather than unique arc IDs, are the relevant objects here.
-        """
+        """Return the incident arcs ordered counter-clockwise by angle."""
         assert len(self.incident_arcs) == 4, \
             "Crossing must have exactly 4 incidences."
+        
         arc_ids, angles = zip(*self.incident_arcs)
+        if len(set(arc_ids)) < 4:
+            return []  # Trivial self-crossing
+        
+        # Sort by angle for counter-clockwise order
         ccw_idx = np.argsort(angles)
         return [arc_ids[i] for i in ccw_idx]
 
     @cached_property
     def ccw_ordered_arcs(self) -> List[int]:
+        # Rotate if the overstranding is incorrect
         raw_order = self._raw_ccw_ordered_arcs
+        if not raw_order:
+            return [] # Trivial self-crossing
+
         assert self._correctly_overstrand is not None, \
             "Overstranding information is not set."
         if not self._correctly_overstrand:
@@ -80,7 +82,10 @@ class Crossing:
     @cached_property
     def pd_code(self) -> str:
         """Return the crossing as PD code."""
-        return f"X[{','.join(map(str, self.ccw_ordered_arcs))}]"
+        arcs = self.ccw_ordered_arcs
+        if not arcs:
+            return ""
+        return f"X[{','.join(map(str, arcs))}]"
 
 
 @dataclass
