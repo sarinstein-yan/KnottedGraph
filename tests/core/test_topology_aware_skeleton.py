@@ -8,6 +8,7 @@ from knotted_graph.extraction import (
     skeletonize_volume,
     topology_aware_skeleton_image_to_graph,
 )
+from knotted_graph.extraction._optimized import sparse_adjacency_exact_cropped
 from knotted_graph.extraction._topology_optimized import _embedded_geometry_safe
 
 
@@ -59,6 +60,36 @@ def test_canonical_extractor_collapses_digital_junction_with_valence_hint():
     assert graph.number_of_edges() == 3
     assert sorted(dict(graph.degree()).values()) == [1, 1, 1, 3]
     ensure_embedding(graph, copy=False, normalize=False)
+
+
+def test_redundant_diagonal_does_not_turn_right_angle_into_cycle():
+    image = np.zeros((5, 5, 5), dtype=bool)
+    image[1, 1, 2] = True
+    image[2, 1, 2] = True
+    image[2, 2, 2] = True
+
+    coords, adjacency = sparse_adjacency_exact_cropped(image)
+    degrees = sorted(len(row) for row in adjacency)
+    assert coords.shape == (3, 3)
+    assert degrees == [1, 1, 2]
+
+    graph = skeleton_image_to_graph(image)
+    assert graph.number_of_nodes() == 2
+    assert graph.number_of_edges() == 1
+    assert not any(u == v for u, v in graph.edges())
+
+
+def test_necessary_diagonal_step_is_preserved():
+    image = np.zeros((4, 4, 4), dtype=bool)
+    image[1, 1, 1] = True
+    image[2, 2, 1] = True
+
+    _, adjacency = sparse_adjacency_exact_cropped(image)
+    assert [len(row) for row in adjacency] == [1, 1]
+
+    graph = skeleton_image_to_graph(image)
+    assert graph.number_of_nodes() == 2
+    assert graph.number_of_edges() == 1
 
 
 def test_alias_and_canonical_extractor_are_identical():
