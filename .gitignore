@@ -30,7 +30,6 @@ share/python-wheels/
 MANIFEST
 
 # PyInstaller
-#  Usually these files are written by a python script from a template, so as to inject date/other infos into it.
 *.manifest
 *.spec
 
@@ -57,17 +56,17 @@ cover/
 *.mo
 *.pot
 
-# Django stuff:
+# Django stuff
 *.log
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
 
-# Flask stuff:
+# Flask stuff
 instance/
 .webassets-cache
 
-# Scrapy stuff:
+# Scrapy stuff
 .scrapy
 
 # Sphinx documentation
@@ -83,18 +82,17 @@ target/
 # Jupyter Notebook
 .ipynb_checkpoints
 User_guide/benchmarks/.benchmark_checkpoints/
+# Notebook 03 timing rows are a local resume ledger, not a versioned publication snapshot.
+User_guide/benchmarks/results/03_knottedgraph_vs_topoly_scaling_rows.csv
 
 # IPython
 profile_default/
 ipython_config.py
 
 # pyenv
-#   For a library or package, you might want to ignore these files since the code is
-#   intended to run in multiple environments; otherwise, check them in:
 # .python-version
 
 # pipenv
-#   Similar to Pipfile.lock, it is generally recommended to include Pipfile.lock in version control.
 #Pipfile.lock
 
 # UV
