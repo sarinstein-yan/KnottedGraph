@@ -24,6 +24,9 @@ PLOTTING_ONLY = {
     Path("User_guide/benchmarks/06_paper_scaling_publication_figure.ipynb"),
 }
 
+# Notebook code must import the installed package. Prepending the raw source tree
+# bypasses editable-install import hooks and can hide the compiled _yamada_native
+# extension, producing misleading fallback/performance results.
 SOURCE_OVERRIDE_PATTERNS = (
     re.compile(r"sys\.path\.insert\([^\n]*src", re.IGNORECASE),
     re.compile(r"PYTHONPATH[^\n]*src", re.IGNORECASE),
@@ -38,6 +41,7 @@ def _cell_source(cell: dict) -> str:
 
 
 def _python_for_ast(source: str) -> str:
+    """Return the Python portion of an IPython/Jupyter code cell for AST checks."""
     return "\n".join(
         line
         for line in source.splitlines()
@@ -59,6 +63,8 @@ def _cwd_dependent_repo_path(text: str) -> bool:
 
 def _markdown_math_errors(text: str) -> list[str]:
     errors: list[str] = []
+    # Both $...$/$$...$$ and \(...\)/\[...\] are valid in the supported
+    # notebook renderers. Reject only accidental bare [ ... ] LaTeX blocks.
     if BARE_MATH_BLOCK.search(text):
         errors.append(
             "Markdown contains a standalone [ ... ] LaTeX block; "
@@ -89,6 +95,9 @@ def validate_notebook(path: Path) -> list[str]:
         except SyntaxError as exc:
             errors.append(f"cell {index}: Python syntax error: {exc}")
 
+        # Historical application regression intentionally injects each detached
+        # worktree's source path in a subprocess so two revisions can be compared.
+        # It is correctness-only, never a performance benchmark.
         historical_regression = path.name == "02_application_output_regression.ipynb"
         if not historical_regression:
             for pattern in SOURCE_OVERRIDE_PATTERNS:
