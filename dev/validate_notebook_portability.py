@@ -8,7 +8,6 @@ import re
 ROOT = Path(__file__).resolve().parents[1]
 USER_GUIDE = ROOT / "User_guide"
 
-LEGACY_MATH_DELIMITERS = (r"\(", r"\)", r"\[", r"\]")
 BARE_MATH_BLOCK = re.compile(
     r"(?ms)(?:^|\n)[ \t]*\[[ \t]*\n"
     r".*?\\(?:frac|text|operatorname|mathbb|mathrm|rm|Upsilon|Delta|sum|prod).*?"
@@ -41,6 +40,15 @@ def _cell_source(cell: dict) -> str:
     return str(source)
 
 
+def _python_for_ast(source: str) -> str:
+    """Return the Python portion of an IPython/Jupyter code cell for AST checks."""
+    return "\n".join(
+        line
+        for line in source.splitlines()
+        if not line.lstrip().startswith(("%", "!"))
+    )
+
+
 def _cwd_dependent_repo_path(text: str) -> bool:
     bad_literals = (
         'Path("User_guide/',
@@ -55,16 +63,12 @@ def _cwd_dependent_repo_path(text: str) -> bool:
 
 def _markdown_math_errors(text: str) -> list[str]:
     errors: list[str] = []
-    legacy = [token for token in LEGACY_MATH_DELIMITERS if token in text]
-    if legacy:
-        errors.append(
-            "Markdown math uses legacy delimiters "
-            f"{legacy}; use $...$ inline and $$...$$ for display math"
-        )
+    # Both $...$/$$...$$ and \(...\)/\[...\] are valid in the supported
+    # notebook renderers. Reject only accidental bare [ ... ] LaTeX blocks.
     if BARE_MATH_BLOCK.search(text):
         errors.append(
             "Markdown contains a standalone [ ... ] LaTeX block; "
-            "use $$...$$ for display math"
+            "use an explicit math delimiter"
         )
     return errors
 
@@ -87,7 +91,7 @@ def validate_notebook(path: Path) -> list[str]:
 
         code_texts.append(source)
         try:
-            ast.parse(source or "pass")
+            ast.parse(_python_for_ast(source) or "pass")
         except SyntaxError as exc:
             errors.append(f"cell {index}: Python syntax error: {exc}")
 
@@ -142,8 +146,8 @@ def main() -> int:
 
     print(
         f"PASS: {len(notebooks)} User_guide notebooks use installed-package semantics, "
-        "repo-rooted paths, valid Python cells, backend provenance for Yamada, "
-        "and $...$/$$...$$ Markdown math delimiters."
+        "repo-rooted paths, valid Python/IPython cells, backend provenance for Yamada, "
+        "and explicit Markdown math delimiters."
     )
     return 0
 
