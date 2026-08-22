@@ -4,9 +4,10 @@ A digital junction can occupy several voxels and thereby create a locally
 fragmented graph even when every visible vertex satisfies a nominal valence
 bound.  The selector traces the same sparse skeleton at adjacent junction-zone
 scales and prefers corrections that persist.  If strict two-scale persistence
-is unavailable, a clean one-hop-safe bounded-valence candidate is now preferred
+is unavailable, a clean one-hop-safe bounded-valence candidate is preferred
 over a zero-radius graph that is already known to violate the requested valence
-constraint.
+constraint.  Candidate geometry is validated before selection so a topologically
+plausible trace cannot later fail because an embedded edge has collapsed.
 """
 
 from __future__ import annotations
@@ -104,6 +105,68 @@ def _anomaly_from_reduced(reduced: nx.MultiGraph, ratio: float) -> int:
     return count
 
 
+def _drop_consecutive_duplicates(points: np.ndarray, tolerance: float = 1e-10) -> np.ndarray:
+    """Return a polyline with adjacent duplicate samples removed."""
+    if len(points) == 0:
+        return points
+    keep = [0]
+    for index in range(1, len(points)):
+        if float(np.linalg.norm(points[index] - points[keep[-1]])) > tolerance:
+            keep.append(index)
+    return points[np.asarray(keep, dtype=np.intp)]
+
+
+def _embedded_geometry_safe(graph: nx.MultiGraph) -> bool:
+    """Reject traces whose edge geometry would collapse during normalization.
+
+    In particular, a self-loop must contain a genuine excursion away from its
+    node before returning to that node.  Merely having a self-loop in the
+    abstract MultiGraph is not enough: a two-endpoint loop whose endpoints snap
+    to the same vertex is not an embedded edge and later normalization correctly
+    rejects it.  Detecting that here lets the multi-scale selector try another
+    junction radius instead of returning a doomed candidate.
+    """
+    positions: dict[object, np.ndarray] = {}
+    for node, data in graph.nodes(data=True):
+        pos = np.asarray(data.get("pos"), dtype=float)
+        if pos.shape != (3,) or not np.isfinite(pos).all():
+            return False
+        positions[node] = pos
+
+    for u, v, data in graph.edges(data=True):
+        points = np.asarray(data.get("pts"), dtype=float)
+        if points.ndim != 2 or points.shape[1:] != (3,) or len(points) < 2:
+            return False
+        if not np.isfinite(points).all():
+            return False
+
+        start = positions[u]
+        end = positions[v]
+        normalized = points.copy()
+        if u == v:
+            normalized[0] = start
+            normalized[-1] = start
+        else:
+            forward = float(np.linalg.norm(points[0] - start) + np.linalg.norm(points[-1] - end))
+            reverse = float(np.linalg.norm(points[0] - end) + np.linalg.norm(points[-1] - start))
+            if reverse < forward:
+                normalized = normalized[::-1].copy()
+            normalized[0] = start
+            normalized[-1] = end
+
+        normalized = _drop_consecutive_duplicates(normalized)
+        if len(normalized) < 2:
+            return False
+        if u == v:
+            # A closed embedded edge needs an interior point distinct from the
+            # common endpoint, hence at least start/interior/start after dedupe.
+            if len(normalized) < 3:
+                return False
+            if not np.any(np.linalg.norm(normalized[1:-1] - start, axis=1) > 1e-10):
+                return False
+    return True
+
+
 def _diagnostic_summary(
     graph: nx.MultiGraph,
     *,
@@ -115,7 +178,11 @@ def _diagnostic_summary(
     reduced = reduced_weighted(pruned)
     max_observed_degree = max((degree for _, degree in reduced.degree()), default=0)
     anomaly_count = _anomaly_from_reduced(reduced, anomaly_ratio)
-    clean = max_observed_degree <= max_degree and anomaly_count == 0
+    clean = (
+        max_observed_degree <= max_degree
+        and anomaly_count == 0
+        and _embedded_geometry_safe(graph)
+    )
 
     survivors = set(pruned.nodes())
     has_mergeable_short_edge = any(
@@ -152,20 +219,22 @@ def constrained_persistent_extract(
     adjacency: list[list[int]],
     *,
     max_degree: int,
-    max_hops: int = 4,
+    max_hops: int = 8,
     anomaly_ratio: float = 0.15,
 ) -> nx.MultiGraph:
     """Return the best supported valence-valid digital-junction correction.
 
     Strict consecutive-scale persistence remains the highest-confidence route.
-    The old final fallback, however, returned the zero-radius trace even when it
-    was explicitly known to violate ``max_degree``.  That defeated the purpose
-    of supplying a valence hint and caused stable degree-4/5 digital artifacts in
-    subcubic reconstructions.  We now retain every clean, one-hop-safe candidate
-    and, if strict persistence is unavailable, select the most frequently
-    recurring clean topology (breaking ties toward the smallest repair scale).
-    The zero-radius graph is used only when no validated bounded-valence repair
-    exists.
+    Every candidate must also carry nondegenerate embedded edge geometry.  The
+    default search spans eight voxel-neighbourhood scales: difficult Lee
+    skeleton junction clusters can extend beyond four 26-neighbour hops, while
+    topology persistence and short-edge diagnostics prevent accepting a larger
+    radius merely because it lowers the apparent valence.
+
+    If strict persistence is unavailable, the most frequently recurring clean,
+    one-hop-safe bounded-valence topology is chosen, breaking ties toward the
+    smallest repair scale.  The zero-radius graph is used only when no validated
+    bounded-valence repair exists.
     """
     prepared = _prepared_components(coords, adjacency)
 
@@ -190,7 +259,9 @@ def constrained_persistent_extract(
             clean_candidates.append((hops, current))
         if (
             previous[2]
+            and previous[4]
             and current[2]
+            and current[4]
             and previous[3] == current[3]
             and nx.is_isomorphic(previous[1], current[1])
         ):
