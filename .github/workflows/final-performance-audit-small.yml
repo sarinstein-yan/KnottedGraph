@@ -9,6 +9,9 @@ on:
       - "src/knotted_graph/projection/pd_code.py"
       - "src/knotted_graph/invariants/yamada/**"
       - "src/knotted_graph/extraction/**"
+      - "tests/projection/**"
+      - "tests/extraction/**"
+      - "tests/invariants/yamada/**"
       - ".github/workflows/final-performance-audit-small.yml"
   workflow_dispatch:
 
@@ -31,12 +34,30 @@ jobs:
           python-version: "3.12"
       - name: Install compact audit environment
         run: uv sync --extra nodal --group dev
-      - name: Require native Yamada backend
+      - name: Require native Yamada backends
         run: |
           uv run --no-sync python - <<'PY'
+          from knotted_graph.invariants.yamada.native import native_available
           from knotted_graph.invariants.yamada.factorized_frontier import native_factorized_available
+          assert native_available()
           assert native_factorized_available()
-          print("factorized native backend active")
+          print("resolved-graph and factorized native Yamada backends active")
           PY
+      - name: Run focused correctness gates
+        run: >
+          uv run --no-sync pytest -q
+          tests/projection/test_crossing_projection_index_equivalence.py
+          tests/projection/test_crossing_search_regression.py
+          tests/projection/test_trivial_self_crossing_convention.py
+          tests/extraction/test_sparse_adjacency_integrated_shortcuts.py
+          tests/extraction/test_skeleton_bounds_equivalence.py
+          tests/invariants/yamada/test_projection_policy.py
+          tests/invariants/yamada/test_rii_candidate_index_equivalence.py
+          tests/invariants/yamada/test_compact_kernel_equivalence.py
+          tests/invariants/yamada/test_compact_state_builder_equivalence.py
+          tests/invariants/yamada/test_crossing_backends.py
+          tests/invariants/yamada/test_diagram_unified.py
+          tests/invariants/yamada/test_native_backend.py
+          tests/invariants/yamada/test_native_prepared_state_sum.py
       - name: Run small-scale stage audit
         run: uv run --no-sync python dev/final_performance_audit.py
