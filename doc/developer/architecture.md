@@ -40,6 +40,21 @@ enable the fail-closed persistence-based junction repair. The library does not
 assume trivalence globally: if no bound is supplied, generic higher-valence
 spatial graphs are not contracted merely for optimization.
 
+## Yamada Evaluation Policy
+
+`Yamada.compute()` has one diagram-level production algorithm: the exact
+factorized-connectivity dynamic program implemented by
+`factorized_frontier.py` and `_yamada_factorized_frontier`. There is no
+crossing-count threshold, theorem-family recognizer, empirical dispatcher, or
+structural skein-recursion alternative in the production route.
+
+The compiled factorized extension is required for diagram-level production
+execution. A stale or incomplete installation fails with an explicit rebuild
+instruction instead of silently selecting an older evaluator. The compact
+resolved-graph kernel remains available for crossing-free graphs and
+`compute_yamada_from_states()` compatibility. Exhaustive/raw evaluators are
+retained only as exact validation or arithmetic-overflow safety references.
+
 ## Yamada Projection Policy
 
 `knotted_graph.projection.compute_yamada_polynomial` is the canonical embedded
