@@ -22,7 +22,7 @@ from knotted_graph.applications.nodal.models import (
 )
 from knotted_graph.core import ThetaGraph
 from knotted_graph.invariants.yamada import (
-    compute_yamada_polynomial_recursive,
+    compute_graph_yamada_polynomial,
     laurent_y_to_sigma_polynomial,
 )
 from knotted_graph.projection import PDCode, compute_yamada_polynomial, select_projection
@@ -205,7 +205,7 @@ def _math_theta_cases() -> list[dict[str, Any]]:
     rows = []
     for s in range(2, 8):
         graph = ThetaGraph(s)
-        polynomial = compute_yamada_polynomial_recursive(graph, Y)
+        polynomial = compute_graph_yamada_polynomial(graph, Y)
         rows.append(
             {
                 "application": "mathematics",
@@ -223,7 +223,7 @@ def _math_catalog_cases() -> list[dict[str, Any]]:
     rows = []
     for family_name, args, label in NOTEBOOK_YAMADA_EXAMPLES:
         graph, _ = build_graph_case(family_name, *args)
-        yamada_y = sp.expand(compute_yamada_polynomial_recursive(graph, Y))
+        yamada_y = sp.expand(compute_graph_yamada_polynomial(graph, Y))
         yamada_sigma = laurent_y_to_sigma_polynomial(yamada_y, Y, sigma).as_expr()
         rows.append(
             {
@@ -244,7 +244,7 @@ def _math_cylinder_scan() -> list[dict[str, Any]]:
     rows = []
     for cols in range(3, 7):
         graph, _ = build_graph_case("cylinder", 2, cols)
-        yamada_y = sp.expand(compute_yamada_polynomial_recursive(graph, Y))
+        yamada_y = sp.expand(compute_graph_yamada_polynomial(graph, Y))
         yamada_sigma = laurent_y_to_sigma_polynomial(yamada_y, Y, sigma).as_expr()
         rows.append(
             {

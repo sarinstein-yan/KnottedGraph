@@ -355,7 +355,11 @@ def validate(path, nb):
     for c in nb["cells"]:
         if c.get("cell_type") == "code":
             s = text(c)
-            ast.parse(s or "pass")
+            parseable = "\n".join(
+                line for line in s.splitlines()
+                if not line.lstrip().startswith(("%", "!"))
+            )
+            ast.parse(parseable or "pass")
             if path.name != "02_application_output_regression.ipynb":
                 for frag in SOURCE_OVERRIDE_FRAGMENTS:
                     if frag in s:
