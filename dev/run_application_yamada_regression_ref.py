@@ -1,11 +1,10 @@
 """Run the application Yamada regression against one detached revision.
 
-This helper is intentionally limited to the historical output-regression notebook.
-It places the requested worktree first on ``sys.path`` so an editable install of
-another revision cannot leak into the comparison.  When the current regression
-driver uses the former graph-Yamada function name, a revision-local compatibility
-name is injected only inside this subprocess and delegates immediately to the
-revision's current graph evaluator.
+This helper is intentionally limited to the historical application-output regression.
+It places the requested worktree's ``src`` directory first on ``sys.path`` so an
+editable install of another revision cannot leak into the comparison. A tiny API
+compatibility shim is installed only inside this subprocess so the current regression
+driver can execute against ``Latest_Workplace`` as well as the current optimized head.
 """
 
 from __future__ import annotations
@@ -24,10 +23,13 @@ def main() -> None:
 
     import knotted_graph.invariants.yamada as yamada
 
-    compatibility_name = "compute_yamada_" + "polynomial_recursive"
-    if not hasattr(yamada, compatibility_name):
-        current = getattr(yamada, "compute_graph_yamada_polynomial")
-        setattr(yamada, compatibility_name, current)
+    # Current optimized revisions expose compute_graph_yamada_polynomial; the
+    # historical Latest_Workplace revision exposes compute_yamada_polynomial_recursive.
+    # Make either spelling available without changing either revision's implementation.
+    if not hasattr(yamada, "compute_graph_yamada_polynomial"):
+        yamada.compute_graph_yamada_polynomial = yamada.compute_yamada_polynomial_recursive
+    if not hasattr(yamada, "compute_yamada_polynomial_recursive"):
+        yamada.compute_yamada_polynomial_recursive = yamada.compute_graph_yamada_polynomial
 
     runpy.run_path(str(driver), run_name="__main__")
 
