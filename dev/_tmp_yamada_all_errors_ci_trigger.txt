@@ -1,1 +1,1 @@
-temporary CI trigger for repository-wide YAMADA_Optimization_LATEST audit; delete before merge
+temporary CI trigger for final bounded repository-wide YAMADA_Optimization_LATEST audit; delete before merge
