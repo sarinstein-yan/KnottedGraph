@@ -47,10 +47,33 @@ class Crossing:
     point: Point
     incident_arcs: List[Tuple[int, float]] = field(default_factory=list)
     _correctly_overstrand: bool = field(default=None, init=False, repr=False)
+    _transversality_tolerance: ClassVar[float] = 1e-10
     
     def add_incident_arc(self, arc_id: int, angle: float):
-        """Add an incident arc with its angle."""
-        self.incident_arcs.append((arc_id, angle))
+        """Add an incident half-edge and reject numerically tangent crossings.
+
+        A generic planar-diagram crossing has four distinct local half-edge
+        directions.  If two cyclically adjacent rays are indistinguishable to
+        floating-point precision, the two projected strands are tangent (or
+        effectively tangent) and their crossing combinatorics are not stable
+        under an arbitrarily small perturbation.  Such a projection must be
+        rejected and another rotation sampled rather than treated as a valid PD.
+
+        The test is dimensionless: it uses angular separation only, so it does
+        not depend on the spatial scale of the embedded graph.
+        """
+        self.incident_arcs.append((arc_id, float(angle)))
+        if len(self.incident_arcs) == 4:
+            angles = np.mod(
+                np.sort(np.asarray([value for _, value in self.incident_arcs])),
+                2.0 * np.pi,
+            )
+            angles.sort()
+            cyclic = np.diff(np.r_[angles, angles[0] + 2.0 * np.pi])
+            if float(cyclic.min()) <= self._transversality_tolerance:
+                raise ValueError(
+                    "Nongeneric projection: crossing strands are numerically tangent."
+                )
     
     @cached_property
     def _raw_ccw_ordered_arcs(self) -> List[int]:
