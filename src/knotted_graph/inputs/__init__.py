@@ -8,12 +8,30 @@ PyVista.
 
 from importlib import import_module
 
+from .braid_field import (
+    BraidValidationReport,
+    SemiholomorphicPolynomial,
+    braid_component_count,
+    braid_permutation,
+    braid_to_semiholomorphic,
+    geometric_braid_roots,
+    infer_braid_strands,
+)
 from .coordinate_chain import (
     CoordinateInputResult,
     coordinates_to_multigraph,
     from_coordinate_chain,
     validate_coords,
 )
+from .knot_catalogue import KnotCatalogueEntry, available_knot_names, get_knot_entry
+from .knot_field import DEFAULT_SPAN, KnotFunction, inverse_stereographic_s3, sample_s3
+from .knot_levelset import (
+    FieldSample,
+    LevelSetDiagnostics,
+    LevelSetMesh,
+    TubularConvergenceReport,
+)
+from .knot_path import KnotFunctionPath, PathGauge
 from .mmcif import (
     MMCIFBackboneInputResult,
     from_mmcif_backbone,
@@ -55,12 +73,27 @@ def __getattr__(name: str):
 
 
 __all__ = [
+    "BraidValidationReport",
     "CoordinateInputResult",
+    "DEFAULT_SPAN",
+    "FieldSample",
+    "KnotCatalogueEntry",
+    "KnotFunction",
+    "KnotFunctionPath",
+    "LevelSetDiagnostics",
+    "LevelSetMesh",
     "MMCIFBackboneInputResult",
     "PDBBackboneInputResult",
+    "PathGauge",
     "PolymerInputResult",
+    "SemiholomorphicPolynomial",
     "SpatialGraphInputResult",
     "SurfaceInputResult",
+    "TubularConvergenceReport",
+    "available_knot_names",
+    "braid_component_count",
+    "braid_permutation",
+    "braid_to_semiholomorphic",
     "coordinates_to_multigraph",
     "from_coordinate_chain",
     "from_gromacs_gro",
@@ -71,6 +104,11 @@ __all__ = [
     "from_protein_ca_backbone",
     "from_spatial_graph_csv",
     "from_surface_mesh",
+    "geometric_braid_roots",
+    "get_knot_entry",
+    "infer_braid_strands",
+    "inverse_stereographic_s3",
+    "sample_s3",
     "validate_coords",
     "validate_spatial_graph",
     "validate_surface_mesh",
