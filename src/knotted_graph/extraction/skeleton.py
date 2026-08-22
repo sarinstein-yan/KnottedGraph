@@ -15,6 +15,20 @@ __all__ = [
 ]
 
 
+def _occupied_bounds(image: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Return occupied half-open bounds without materializing all voxel indices."""
+    occupied_axes = (
+        np.flatnonzero(image.any(axis=(1, 2))),
+        np.flatnonzero(image.any(axis=(0, 2))),
+        np.flatnonzero(image.any(axis=(0, 1))),
+    )
+    if any(indices.size == 0 for indices in occupied_axes):
+        raise ValueError("The interior mask does not contain any True voxels.")
+    starts = np.asarray([int(indices[0]) for indices in occupied_axes], dtype=np.intp)
+    stops = np.asarray([int(indices[-1]) + 1 for indices in occupied_axes], dtype=np.intp)
+    return starts, stops
+
+
 def skeletonize_volume(mask: ArrayLike, *, padding: int = 1) -> np.ndarray:
     """Skeletonize only the occupied 3-D bounding box and restore global indices.
 
@@ -31,9 +45,7 @@ def skeletonize_volume(mask: ArrayLike, *, padding: int = 1) -> np.ndarray:
     if padding < 0:
         raise ValueError("padding must be non-negative")
 
-    occupied = np.argwhere(image)
-    if occupied.size == 0:
-        raise ValueError("The interior mask does not contain any True voxels.")
+    starts, stops = _occupied_bounds(image)
 
     try:
         from skimage import morphology
@@ -42,8 +54,8 @@ def skeletonize_volume(mask: ArrayLike, *, padding: int = 1) -> np.ndarray:
             "skeletonize_volume requires scikit-image; install the nodal extra."
         ) from exc
 
-    starts = np.maximum(occupied.min(axis=0) - padding, 0)
-    stops = np.minimum(occupied.max(axis=0) + padding + 1, image.shape)
+    starts = np.maximum(starts - padding, 0)
+    stops = np.minimum(stops + padding, image.shape)
     slices = tuple(slice(int(lo), int(hi)) for lo, hi in zip(starts, stops))
     cropped = image[slices]
     local = morphology.skeletonize(cropped, method="lee")

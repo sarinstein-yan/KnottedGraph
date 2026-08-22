@@ -52,9 +52,6 @@ class PreparedCompactStateBuilder:
         }
         arcs_by_id = {arc.id: arc for arc in arcs}
 
-        # Each physical arc owns exactly two integer ports. Keeping the external
-        # (arc_id, side) convention only during preparation removes tuple hashing
-        # and dictionary access from every one of the 3^c state builds.
         port_index: dict[Port, int] = {}
         port_count = 2 * len(arcs)
         arc_partner = [-1] * port_count
@@ -110,64 +107,69 @@ class PreparedCompactStateBuilder:
     def _find_reidemeister_ii_pair(self):
         """Return one conservatively recognized Reidemeister-II crossing pair.
 
-        A removable bigon consists of two crossings joined by exactly two
-        physical arcs. Those arcs occupy adjacent cyclic positions at both
-        crossings and preserve over/under parity between their endpoints.
-
-        Mathematical justification: invariance under Reidemeister II is part of
-        Yamada regular isotopy; https://doi.org/10.1002/jgt.3190130503.
+        Candidate pairs are indexed directly from physical crossing-to-crossing
+        arcs.  The former implementation compared every crossing pair and rebuilt
+        a port-position dictionary for each comparison.  Sorting the sparse
+        candidate keys by ``(first, second)`` preserves the historical search
+        order exactly while avoiding the quadratic empty-pair scan.
         """
         arc_partner = self.arc_partner
+        crossing_for_port = self.crossing_for_port
+        port_position = [-1] * len(arc_partner)
+        for crossing, ports in enumerate(self.ordered_ports):
+            for position, port in enumerate(ports):
+                port_position[port] = position
 
-        for first in range(len(self.ordered_ports)):
+        shared_by_pair: dict[tuple[int, int], list[tuple[int, int, int, int]]] = {}
+        for first, first_ports in enumerate(self.ordered_ports):
+            for first_position, first_port in enumerate(first_ports):
+                partner = arc_partner[first_port]
+                second = crossing_for_port[partner]
+                # Record each crossing-to-crossing physical arc once, in the
+                # same orientation used by the former first/second nested loop.
+                if second < 0 or second >= first:
+                    continue
+                second_position = port_position[partner]
+                if second_position < 0:
+                    continue
+                shared_by_pair.setdefault((first, second), []).append(
+                    (first_position, second_position, first_port, partner)
+                )
+
+        for first, second in sorted(shared_by_pair):
+            shared = shared_by_pair[(first, second)]
+            if len(shared) != 2:
+                continue
+
             first_ports = self.ordered_ports[first]
-            for second in range(first):
-                second_ports = self.ordered_ports[second]
-                second_position = {port: i for i, port in enumerate(second_ports)}
-                shared = []
-                for first_position, first_port in enumerate(first_ports):
-                    partner = arc_partner[first_port]
-                    if partner not in second_position:
-                        continue
-                    shared.append(
-                        (
-                            first_position,
-                            second_position[partner],
-                            first_port,
-                            partner,
-                        )
-                    )
+            second_ports = self.ordered_ports[second]
+            first_positions = [entry[0] for entry in shared]
+            second_positions = [entry[1] for entry in shared]
+            if (first_positions[0] - first_positions[1]) % 4 not in (1, 3):
+                continue
+            if (second_positions[0] - second_positions[1]) % 4 not in (1, 3):
+                continue
+            if any((a % 2) != (b % 2) for a, b, _, _ in shared):
+                continue
 
-                if len(shared) != 2:
-                    continue
-
-                first_positions = [entry[0] for entry in shared]
-                second_positions = [entry[1] for entry in shared]
-                if (first_positions[0] - first_positions[1]) % 4 not in (1, 3):
-                    continue
-                if (second_positions[0] - second_positions[1]) % 4 not in (1, 3):
-                    continue
-                if any((a % 2) != (b % 2) for a, b, _, _ in shared):
-                    continue
-
-                removed = set(first_ports) | set(second_ports)
-                splices = []
-                valid = True
-                for first_position, second_position_index, _, _ in shared:
-                    first_external = first_ports[(first_position + 2) % 4]
-                    second_external = second_ports[(second_position_index + 2) % 4]
-                    remote_first = arc_partner[first_external]
-                    remote_second = arc_partner[second_external]
-                    if (
-                        remote_first in removed
-                        or remote_second in removed
-                        or remote_first == remote_second
-                    ):
-                        valid = False
-                        break
-                    splices.append((remote_first, remote_second))
-                if valid and len({port for pair in splices for port in pair}) == 4:
-                    return first, second, tuple(splices)
+            removed = set(first_ports) | set(second_ports)
+            splices = []
+            valid = True
+            for first_position, second_position, _, _ in shared:
+                first_external = first_ports[(first_position + 2) % 4]
+                second_external = second_ports[(second_position + 2) % 4]
+                remote_first = arc_partner[first_external]
+                remote_second = arc_partner[second_external]
+                if (
+                    remote_first in removed
+                    or remote_second in removed
+                    or remote_first == remote_second
+                ):
+                    valid = False
+                    break
+                splices.append((remote_first, remote_second))
+            if valid and len({port for pair in splices for port in pair}) == 4:
+                return first, second, tuple(splices)
         return None
 
     def _remove_reidemeister_ii_pair(self, first, second, splices):
@@ -239,13 +241,7 @@ class PreparedCompactStateBuilder:
         )
 
     def reduce_reidemeister_ii(self):
-        """Cancel all conservatively detectable Reidemeister-II bigons.
-
-        The returned builder represents the same regular-isotopy class while
-        containing two fewer crossings per accepted move. The original builder
-        is not mutated. See https://doi.org/10.1002/jgt.3190130503 for the
-        underlying regular-isotopy invariance.
-        """
+        """Cancel all conservatively detectable Reidemeister-II bigons."""
         current = self
         count = 0
         while True:
@@ -260,8 +256,6 @@ class PreparedCompactStateBuilder:
         if len(state) != crossing_count:
             raise ValueError("State length must match the number of crossings.")
 
-        # Original graph vertices are always present. Unresolved crossings are
-        # appended in crossing order, exactly matching the reference builder.
         crossing_terminal_index = [-1] * crossing_count
         node_count = len(self.vertex_ids)
         for crossing_index, spin in enumerate(state):
@@ -278,8 +272,6 @@ class PreparedCompactStateBuilder:
         minus_partner = self.minus_partner
         port_count = len(arc_partner)
 
-        # Byte storage is materially cheaper than a set of tuple ports and is
-        # sufficient because each physical arc edge is consumed at most once.
         visited = bytearray(port_count)
         graph_edges: list[tuple[int, int]] = []
 
@@ -292,7 +284,6 @@ class PreparedCompactStateBuilder:
                 return crossing_terminal_index[crossing_index]
             return -1
 
-        # Trace all terminal-to-terminal resolved graph edges.
         for start_port in range(port_count):
             start_terminal = terminal_index(start_port)
             if start_terminal < 0 or visited[start_port]:
@@ -326,9 +317,6 @@ class PreparedCompactStateBuilder:
                 if current < 0:
                     raise RuntimeError("Malformed crossing resolution table.")
 
-        # Remaining unvisited arc ports form terminal-free closed components.
-        # The reference representation uses one dummy vertex with one loop for
-        # each such component.
         closed_loop_count = 0
         for start_port in range(port_count):
             if visited[start_port]:

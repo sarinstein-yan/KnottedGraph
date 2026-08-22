@@ -12,6 +12,7 @@ on:
       - "src/knotted_graph/core/**"
       - "dev/run_yamada_sanity_checks.py"
       - "dev/run_skeletonization_45_validation.py"
+      - "dev/final_performance_audit_medium.py"
       - "dev/benchmark_topoly_extended_scaling.py"
       - "dev/benchmark_topoly_random_cubic_ensemble.py"
       - "dev/generate_topoly_random_cubic_corpus.py"
@@ -54,6 +55,41 @@ jobs:
         run: uv run --no-sync pytest -q tests/invariants/yamada
       - name: Run published and independent exact sanity checks
         run: uv run --no-sync python dev/run_yamada_sanity_checks.py
+
+  medium-performance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Create exact baseline worktree
+        run: git worktree add --detach /tmp/kg-baseline ebb0aae5d0e028aeaa2efd732a575ac1c68dd427
+      - name: Build isolated baseline and optimized environments
+        run: |
+          python -m venv /tmp/kg-base-venv
+          python -m venv /tmp/kg-opt-venv
+          /tmp/kg-base-venv/bin/python -m pip install --upgrade pip
+          /tmp/kg-opt-venv/bin/python -m pip install --upgrade pip
+          /tmp/kg-base-venv/bin/pip install '/tmp/kg-baseline[nodal]'
+          /tmp/kg-opt-venv/bin/pip install '.[nodal]'
+      - name: Run deterministic medium baseline
+        env:
+          PYTHONNOUSERSITE: "1"
+          OMP_NUM_THREADS: "1"
+          OPENBLAS_NUM_THREADS: "1"
+        run: /tmp/kg-base-venv/bin/python "$GITHUB_WORKSPACE/dev/final_performance_audit_medium.py" --output /tmp/base-medium.json
+      - name: Run deterministic medium optimized head
+        env:
+          PYTHONNOUSERSITE: "1"
+          OMP_NUM_THREADS: "1"
+          OPENBLAS_NUM_THREADS: "1"
+        run: /tmp/kg-opt-venv/bin/python "$GITHUB_WORKSPACE/dev/final_performance_audit_medium.py" --output /tmp/opt-medium.json
+      - name: Require exact outputs and accepted speedups
+        run: /tmp/kg-opt-venv/bin/python dev/final_performance_audit_medium.py --compare /tmp/base-medium.json /tmp/opt-medium.json
 
   validation-notebooks:
     runs-on: ubuntu-latest
