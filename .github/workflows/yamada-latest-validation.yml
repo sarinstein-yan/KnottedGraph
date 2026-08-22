@@ -3,7 +3,7 @@ name: YAMADA latest validation
 on:
   push:
     branches:
-      - cleanup/yamada-single-production-path-20260822
+      - YAMADA_Optimization_LATEST
   pull_request:
     branches:
       - YAMADA_Optimization_LATEST
@@ -58,12 +58,12 @@ jobs:
       - name: Exact Yamada regression suite
         run: >
           uv run --no-sync pytest -q
-          tests/invariants/yamada/test_reidemeister_ii_preprocessing.py
           tests/invariants/yamada/test_native_prepared_state_sum.py
           tests/invariants/yamada/test_optimization_fuzz_equivalence.py
           tests/invariants/yamada/test_diagram_frontier.py
           tests/invariants/yamada/test_diagram_unified.py
           tests/invariants/yamada/test_crossing_backends.py
+          tests/invariants/yamada/test_block_factorization_equivalence.py
 
       - name: Published and independent sanity checks
         run: uv run --no-sync python dev/run_yamada_sanity_checks.py
