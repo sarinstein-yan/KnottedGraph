@@ -83,19 +83,22 @@ struct Poly {
     }
 };
 
-std::vector<int> canonical(const std::vector<int>& labels) {
+void canonicalize(std::vector<int>& labels) {
+    if (labels.empty()) return;
     int maximum = -1;
     for (int label : labels) maximum = std::max(maximum, label);
     std::vector<int> remap(static_cast<std::size_t>(maximum + 1), -1);
-    std::vector<int> out;
-    out.reserve(labels.size());
     int next = 0;
-    for (int label : labels) {
+    for (int& label : labels) {
         int& mapped = remap[static_cast<std::size_t>(label)];
         if (mapped < 0) mapped = next++;
-        out.push_back(mapped);
+        label = mapped;
     }
-    return out;
+}
+
+std::vector<int> canonical(std::vector<int> labels) {
+    canonicalize(labels);
+    return labels;
 }
 
 bool unite(std::vector<int>& labels, int left, int right) {
@@ -104,7 +107,7 @@ bool unite(std::vector<int>& labels, int left, int right) {
     if (a == b) return true;
     const int low = std::min(a, b), high = std::max(a, b);
     for (int& value : labels) if (value == high) value = low;
-    labels = canonical(labels);
+    canonicalize(labels);
     return false;
 }
 
@@ -203,15 +206,15 @@ LaurentOut compute(
     states.emplace(std::vector<int>{}, std::move(one));
     std::vector<int> active;
     std::vector<char> processed(static_cast<std::size_t>(factor_count), 0);
+    std::vector<int> position(static_cast<std::size_t>(port_count), -1);
 
     for (int step = 0; step < factor_count; ++step) {
         const int factor = factor_order[static_cast<std::size_t>(step)];
         const auto& ports = factor_ports[static_cast<std::size_t>(factor)];
         active.insert(active.end(), ports.begin(), ports.end());
-        std::unordered_map<int, int> position;
-        position.reserve(active.size() * 2 + 1);
+        std::fill(position.begin(), position.end(), -1);
         for (int i = 0; i < static_cast<int>(active.size()); ++i)
-            position.emplace(active[static_cast<std::size_t>(i)], i);
+            position[static_cast<std::size_t>(active[static_cast<std::size_t>(i)])] = i;
 
         const int type = factor_types[static_cast<std::size_t>(factor)];
         if (type != EQ_NEG && type != EQ_POS && type != CROSSING)
@@ -226,31 +229,38 @@ LaurentOut compute(
             for (int label : old_labels) next_label = std::max(next_label, label + 1);
             std::vector<int> base = old_labels;
             for (std::size_t i = 0; i < ports.size(); ++i) base.push_back(next_label++);
-            base = canonical(base);
+            canonicalize(base);
 
             const int options = type == CROSSING ? 3 : 1;
             for (int option = 0; option < options; ++option) {
                 std::vector<int> labels = base;
                 if (type != CROSSING || option == 2) {
                     if (!ports.empty()) {
-                        const int anchor = position.at(ports.front());
+                        const int anchor = position[static_cast<std::size_t>(ports.front())];
+                        if (anchor < 0) throw std::runtime_error("factor port escaped active frontier");
                         for (std::size_t i = 1; i < ports.size(); ++i) {
-                            if (unite(labels, anchor, position.at(ports[i])))
+                            const int other_position = position[static_cast<std::size_t>(ports[i])];
+                            if (other_position < 0)
+                                throw std::runtime_error("factor port escaped active frontier");
+                            if (unite(labels, anchor, other_position))
                                 throw std::runtime_error("local equality unexpectedly closed cycle");
                         }
                     }
                 } else {
                     const auto& partners = option == 0 ? plus_partner : minus_partner;
-                    std::vector<char> seen(static_cast<std::size_t>(port_count), 0);
                     for (int port : ports) {
-                        if (seen[static_cast<std::size_t>(port)]) continue;
                         const int other = partners[static_cast<std::size_t>(port)];
-                        auto found = position.find(other);
-                        if (other < 0 || found == position.end())
+                        if (other < 0 || other >= port_count)
                             throw std::runtime_error("crossing smoothing partner escaped factor");
-                        seen[static_cast<std::size_t>(port)] = 1;
-                        seen[static_cast<std::size_t>(other)] = 1;
-                        if (unite(labels, position.at(port), found->second))
+                        const int left_position = position[static_cast<std::size_t>(port)];
+                        const int right_position = position[static_cast<std::size_t>(other)];
+                        if (left_position < 0 || right_position < 0)
+                            throw std::runtime_error("crossing smoothing partner escaped factor");
+                        // Each smoothing pair is symmetric; process it once by
+                        // global port id instead of allocating a port_count-sized
+                        // seen vector for every state transition.
+                        if (port > other) continue;
+                        if (unite(labels, left_position, right_position))
                             throw std::runtime_error("crossing smoothing unexpectedly closed cycle");
                     }
                 }
@@ -265,7 +275,9 @@ LaurentOut compute(
         states = std::move(introduced);
 
         for (const auto& [left_port, right_port] : wires_at[static_cast<std::size_t>(step)]) {
-            const int left = position.at(left_port), right = position.at(right_port);
+            const int left = position[static_cast<std::size_t>(left_port)];
+            const int right = position[static_cast<std::size_t>(right_port)];
+            if (left < 0 || right < 0) throw std::runtime_error("wire escaped active frontier");
             const int kind = wire_type[static_cast<std::size_t>(left_port)];
             if (kind == IDENTITY) {
                 Table updated;
@@ -273,10 +285,6 @@ LaurentOut compute(
                 for (const auto& [labels, poly] : states) {
                     std::vector<int> merged = labels;
                     const bool cycle = unite(merged, left, right);
-                    // Identity wires carry no edge sign.  However, if this
-                    // logical vertex identification closes an already-selected
-                    // physical path, the quotient graph gains one cycle, hence
-                    // the required +q=(A^-1+2+A) factor.
                     if (cycle) accumulate_q(updated, merged, poly, 1);
                     else accumulate(updated, merged, poly, 0, 1);
                 }
@@ -285,7 +293,7 @@ LaurentOut compute(
                 Table updated;
                 updated.reserve(states.size() * 2U);
                 for (const auto& [labels, poly] : states) {
-                    accumulate(updated, labels, poly, 0, 1); // edge excluded
+                    accumulate(updated, labels, poly, 0, 1);
                     std::vector<int> merged = labels;
                     const bool cycle = unite(merged, left, right);
                     if (cycle) accumulate_q(updated, merged, poly, -1);
@@ -311,11 +319,12 @@ LaurentOut compute(
                 std::vector<int> kept;
                 kept.reserve(kept_positions.size());
                 for (int index : kept_positions) kept.push_back(labels[static_cast<std::size_t>(index)]);
-                kept = canonical(kept);
+                canonicalize(kept);
                 accumulate(forgotten, kept, poly, 0, 1);
             }
             states = std::move(forgotten);
             std::vector<int> new_active;
+            new_active.reserve(kept_positions.size());
             for (int index : kept_positions) new_active.push_back(active[static_cast<std::size_t>(index)]);
             active = std::move(new_active);
         }
