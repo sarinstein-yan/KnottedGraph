@@ -1,0 +1,78 @@
+name: Yamada projection and skeleton robustness
+
+on:
+  push:
+    branches:
+      - fix/yamada-projection-skeleton-robustness-20260822
+  pull_request:
+    branches:
+      - YAMADA_Optimization_LATEST
+
+permissions:
+  contents: read
+
+concurrency:
+  group: yamada-projection-skeleton-robustness-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install complete validation environment
+        run: uv sync --extra all --group dev --group docs --group benchmark
+
+      - name: Verify native Yamada backends
+        run: |
+          uv run --no-sync python - <<'PY'
+          from knotted_graph.invariants.yamada.native import native_available, native_import_error
+          from knotted_graph.invariants.yamada.factorized_frontier import native_factorized_available
+          print('native resolved-graph backend:', native_available())
+          print('native import error:', native_import_error())
+          print('native factorized backend:', native_factorized_available())
+          assert native_available(), native_import_error()
+          assert native_factorized_available()
+          PY
+
+      - name: Run targeted projection and skeleton tests
+        run: |
+          uv run --no-sync pytest -q \
+            tests/core/test_projection_robustness.py \
+            tests/core/test_topology_aware_skeleton.py \
+            tests/invariants
+
+      - name: Run 04 synthetic ground-truth validation
+        env:
+          PYTHONNOUSERSITE: '1'
+          MPLBACKEND: Agg
+          PYVISTA_OFF_SCREEN: 'true'
+          PLOTLY_RENDERER: json
+        run: uv run --no-sync python dev/execute_notebook.py User_guide/benchmarks/04_synthetic_ground_truth_validation.ipynb --timeout 7200
+
+      - name: Run 01 Yamada sanity checks
+        env:
+          PYTHONNOUSERSITE: '1'
+          MPLBACKEND: Agg
+          PYVISTA_OFF_SCREEN: 'true'
+          PLOTLY_RENDERER: json
+        run: uv run --no-sync python dev/execute_notebook.py User_guide/benchmarks/01_sanity_checks.ipynb --timeout 7200
+
+      - name: Run 02 application output regression
+        env:
+          PYTHONNOUSERSITE: '1'
+          MPLBACKEND: Agg
+          PYVISTA_OFF_SCREEN: 'true'
+          PLOTLY_RENDERER: json
+        run: uv run --no-sync python dev/execute_notebook.py User_guide/benchmarks/02_application_output_regression.ipynb --timeout 7200
