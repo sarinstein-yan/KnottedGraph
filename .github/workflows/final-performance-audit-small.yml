@@ -1,0 +1,42 @@
+name: Final performance audit small
+
+on:
+  push:
+    branches:
+      - perf/final-performance-audit-ebb0aae
+    paths:
+      - "dev/final_performance_audit.py"
+      - "src/knotted_graph/projection/pd_code.py"
+      - "src/knotted_graph/invariants/yamada/**"
+      - "src/knotted_graph/extraction/**"
+      - ".github/workflows/final-performance-audit-small.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: final-performance-audit-small-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install compact audit environment
+        run: uv sync --extra nodal --group dev
+      - name: Require native Yamada backend
+        run: |
+          uv run --no-sync python - <<'PY'
+          from knotted_graph.invariants.yamada.factorized_frontier import native_factorized_available
+          assert native_factorized_available()
+          print("factorized native backend active")
+          PY
+      - name: Run small-scale stage audit
+        run: uv run --no-sync python dev/final_performance_audit.py
