@@ -12,8 +12,10 @@ physical path, however, the graph cycle rank increases and the state receives
 the usual +q = A^-1 + 2 + A cycle factor. An included physical edge carries
 -1 and therefore contributes -q when it closes a cycle.
 
-This is an exact reparameterization of the same state sum and contains no
-runtime-, family-, crossing-count-, or benchmark-dependent dispatch.
+This is the sole production diagram evaluator. It contains no runtime-, family-,
+crossing-count-, or benchmark-dependent dispatch. A missing compiled factorized
+extension is treated as an installation error rather than silently selecting an
+older diagram algorithm.
 """
 
 from __future__ import annotations
@@ -22,10 +24,12 @@ from collections import defaultdict
 
 from .diagram_frontier import _greedy_factor_order, compute_diagram_frontier_laurent
 
+_FACTORIZED_IMPORT_ERROR: Exception | None = None
 try:
     from . import _yamada_factorized_frontier
-except Exception:  # pragma: no cover - compiler/platform fallback
+except Exception as exc:  # pragma: no cover - compiler/platform installation guard
     _yamada_factorized_frontier = None
+    _FACTORIZED_IMPORT_ERROR = exc
 
 FACTOR_EQUALITY_NEG = 0
 FACTOR_EQUALITY_POS = 1
@@ -36,6 +40,22 @@ WIRE_IDENTITY = 1
 
 def native_factorized_available() -> bool:
     return _yamada_factorized_frontier is not None
+
+
+def factorized_import_error() -> Exception | None:
+    return _FACTORIZED_IMPORT_ERROR
+
+
+def require_native_factorized() -> None:
+    """Fail clearly instead of silently selecting a superseded diagram backend."""
+    if native_factorized_available():
+        return
+    detail = f" Original import error: {_FACTORIZED_IMPORT_ERROR!r}." if _FACTORIZED_IMPORT_ERROR else ""
+    raise RuntimeError(
+        "The optimized factorized Yamada extension is not available. Rebuild the "
+        "current checkout in the active environment, for example with "
+        "`python -m pip install -e '.[benchmark]' --force-reinstall`." + detail
+    )
 
 
 def build_factorized_frontier(prepared):
@@ -154,12 +174,8 @@ def build_factorized_frontier(prepared):
 
 
 def compute_factorized_frontier_laurent(prepared):
-    """Evaluate one prepared Yamada diagram with the single factorized DP."""
-    if _yamada_factorized_frontier is None:
-        # Exact portability fallback. This changes implementation, not the
-        # mathematical invariant, on platforms without the native extension.
-        return compute_diagram_frontier_laurent(prepared)
-
+    """Evaluate one prepared Yamada diagram with the sole production DP."""
+    require_native_factorized()
     data = build_factorized_frontier(prepared)
     try:
         value = _yamada_factorized_frontier.compute_factorized_frontier(
@@ -172,7 +188,7 @@ def compute_factorized_frontier_laurent(prepared):
             list(data["factor_order"]),
         )
     except OverflowError:
-        # Native int64 arithmetic is only an optimization. The Python DP is the
-        # arbitrary-precision exact fallback and never changes the invariant.
+        # This is an exact arbitrary-precision arithmetic safety net, not solver
+        # dispatch: it is reached only if the optimized int64 kernel overflows.
         return compute_diagram_frontier_laurent(prepared)
     return tuple((int(power), int(coefficient)) for power, coefficient in value)

@@ -43,12 +43,15 @@ jobs:
       - name: Install core development environment
         run: uv sync --group dev
 
-      - name: Require compiled Yamada backend
+      - name: Require compiled Yamada backends
         run: |
           uv run --no-sync python - <<'PY'
           from knotted_graph.invariants.yamada.native import native_available
-          print("native Yamada backend:", native_available())
-          assert native_available(), "CI compiler is available but native extension was not built"
+          from knotted_graph.invariants.yamada.factorized_frontier import native_factorized_available
+          print("resolved-graph native Yamada backend:", native_available())
+          print("factorized diagram Yamada backend:", native_factorized_available())
+          assert native_available(), "CI compiler is available but resolved-graph extension was not built"
+          assert native_factorized_available(), "CI compiler is available but factorized diagram extension was not built"
           PY
 
       - name: Run base-dependency tests
@@ -79,11 +82,13 @@ jobs:
       - name: Install all Python extras
         run: uv sync --group dev --all-extras
 
-      - name: Require compiled Yamada backend
+      - name: Require compiled Yamada backends
         run: |
           uv run --no-sync python - <<'PY'
           from knotted_graph.invariants.yamada.native import native_available
+          from knotted_graph.invariants.yamada.factorized_frontier import native_factorized_available
           assert native_available()
+          assert native_factorized_available()
           PY
 
       - name: Audit repository consistency
@@ -135,7 +140,7 @@ jobs:
         run: |
           WHEEL=$(python -c "from pathlib import Path; print(next(Path('dist').glob('*.whl')))")
           "${{ matrix.venv-python }}" -m pip install "$WHEEL"
-      - name: Smoke-test installed wheel and native backend
+      - name: Smoke-test installed wheel and native backends
         shell: bash
         run: |
           "${{ matrix.venv-python }}" - <<'PY'
@@ -144,13 +149,16 @@ jobs:
           from knotted_graph.core import ThetaGraph
           from knotted_graph.invariants.yamada import compute_graph_yamada_polynomial
           from knotted_graph.invariants.yamada.native import native_available
+          from knotted_graph.invariants.yamada.factorized_frontier import native_factorized_available
 
           A = sp.Symbol("A")
           result = compute_graph_yamada_polynomial(ThetaGraph(3), A)
           print("version:", knotted_graph.__version__)
-          print("native Yamada backend:", native_available())
+          print("resolved-graph native Yamada backend:", native_available())
+          print("factorized diagram Yamada backend:", native_factorized_available())
           print("Theta_3:", result)
-          assert native_available(), "built wheel does not contain native Yamada extension"
+          assert native_available(), "built wheel does not contain resolved-graph Yamada extension"
+          assert native_factorized_available(), "built wheel does not contain factorized diagram Yamada extension"
           assert result != 0
           PY
   lint:

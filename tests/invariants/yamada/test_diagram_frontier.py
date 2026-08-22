@@ -12,8 +12,26 @@ from knotted_graph.invariants.yamada.diagram_frontier import (
     plan_diagram_frontier,
 )
 from knotted_graph.invariants.yamada.fast import add, shift
-from knotted_graph.invariants.yamada.skein_hybrid import _resolution_tables
-from knotted_graph.invariants.yamada.state_compact import PreparedCompactStateBuilder
+from knotted_graph.invariants.yamada.state_compact import (
+    PreparedCompactStateBuilder,
+    _MINUS_PAIRS,
+    _PLUS_PAIRS,
+)
+
+
+def _resolution_tables(ordered_ports, port_count):
+    plus_partner = [-1] * port_count
+    minus_partner = [-1] * port_count
+    for ports in ordered_ports:
+        for a, b in _PLUS_PAIRS:
+            pa, pb = ports[a], ports[b]
+            plus_partner[pa] = pb
+            plus_partner[pb] = pa
+        for a, b in _MINUS_PAIRS:
+            pa, pb = ports[a], ports[b]
+            minus_partner[pa] = pb
+            minus_partner[pb] = pa
+    return tuple(plus_partner), tuple(minus_partner)
 
 
 def _random_prepared(seed: int, crossing_count: int):

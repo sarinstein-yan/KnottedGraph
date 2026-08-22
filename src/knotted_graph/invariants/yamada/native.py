@@ -1,15 +1,14 @@
-"""Optional native backend for exact Yamada evaluation.
+"""Optional native kernels for exact resolved-graph Yamada evaluation.
 
-The public API remains pure Python. When the compiled extension is available,
-the compact deletion--contraction recurrence and state summation run in C++.
-If the native int64 coefficient fast path overflows, the computation is rerun
-with the arbitrary-precision Python Laurent kernel, preserving exactness.
+Diagram-level production evaluation is implemented exclusively by the generic
+factorized-connectivity dynamic program in :mod:`factorized_frontier`.  This
+module therefore contains no crossing-count dispatch, structural skein router,
+or benchmark-tuned frontier selection.
 
-Prepared diagrams use the generic exact structural engine for sufficiently large
-crossing count. When that engine would otherwise fall back to a large exhaustive
-3**c state sum, a conservative width-adaptive diagram-frontier backend may be
-used instead. No theorem-family recognizer or precomputed polynomial is part of
-production dispatch; published formulas are used only by external validation.
+The compiled ``_yamada_native`` extension is retained for exact crossing-free
+compact-graph evaluation and for the explicitly named exhaustive prepared-state
+oracle used by validation.  If its int64 coefficient fast path overflows, the
+arbitrary-precision Python Laurent kernel is used instead.
 """
 
 from __future__ import annotations
@@ -24,13 +23,9 @@ except Exception as exc:  # pragma: no cover - platform/build fallback
     _yamada_native = None
     _NATIVE_IMPORT_ERROR = exc
 
-STRUCTURAL_DISPATCH_MIN_CROSSINGS = 8
-FRONTIER_FALLBACK_MIN_CROSSINGS = 10
-FRONTIER_MAX_PEAK_PORTS = 10
-FRONTIER_MAX_STATES = 100_000
-
 
 def native_available() -> bool:
+    """Return whether the resolved-graph native kernel is available."""
     return _yamada_native is not None
 
 
@@ -54,76 +49,15 @@ class _MemoSizeProxy:
         return self._evaluator.memo_size
 
 
-class _StructuralBulkProxy:
-    """Intercept only expensive structural bulk fallbacks with frontier DP."""
-
-    def __init__(self, evaluator: "NativeCompactEvaluator", stats: dict):
-        self._evaluator = evaluator
-        self._stats = stats
-
-    def compute_prepared_bulk_laurent(self, prepared):
-        crossing_count = len(prepared.crossing_ids)
-        if crossing_count >= FRONTIER_FALLBACK_MIN_CROSSINGS:
-            from .diagram_frontier import (
-                FrontierLimitExceeded,
-                compute_diagram_frontier_laurent,
-            )
-            from .frontier_ordering import plan_frontier_to_target
-
-            plan = plan_frontier_to_target(prepared, FRONTIER_MAX_PEAK_PORTS)
-            self._stats["frontier_plans"] = self._stats.get("frontier_plans", 0) + 1
-            self._stats["max_frontier_planned_peak"] = max(
-                self._stats.get("max_frontier_planned_peak", 0), int(plan["peak_ports"])
-            )
-            if plan.get("ordering_multistart"):
-                self._stats["frontier_multistart_plans"] = self._stats.get(
-                    "frontier_multistart_plans", 0
-                ) + 1
-                self._stats["frontier_ordering_candidates"] = self._stats.get(
-                    "frontier_ordering_candidates", 0
-                ) + int(plan.get("ordering_candidates", 0))
-                self._stats["max_frontier_initial_peak"] = max(
-                    self._stats.get("max_frontier_initial_peak", 0),
-                    int(plan.get("initial_peak_ports", plan["peak_ports"])),
-                )
-            if plan["peak_ports"] <= FRONTIER_MAX_PEAK_PORTS:
-                self._stats["frontier_attempts"] = self._stats.get("frontier_attempts", 0) + 1
-                frontier_stats: dict = {}
-                try:
-                    value = compute_diagram_frontier_laurent(
-                        prepared,
-                        factor_order=plan["factor_order"],
-                        max_peak_ports=FRONTIER_MAX_PEAK_PORTS,
-                        max_states=FRONTIER_MAX_STATES,
-                        stats=frontier_stats,
-                    )
-                except FrontierLimitExceeded:
-                    self._stats["frontier_aborts"] = self._stats.get("frontier_aborts", 0) + 1
-                else:
-                    self._evaluator.frontier_calls += 1
-                    self._stats["frontier_successes"] = self._stats.get("frontier_successes", 0) + 1
-                    self._stats["max_frontier_states"] = max(
-                        self._stats.get("max_frontier_states", 0),
-                        int(frontier_stats.get("max_states", 0)),
-                    )
-                    self._stats["frontier_transitions"] = self._stats.get(
-                        "frontier_transitions", 0
-                    ) + int(frontier_stats.get("transitions", 0))
-                    return value
-
-        return self._evaluator.compute_prepared_bulk_laurent(prepared)
-
-
 class NativeCompactEvaluator:
+    """Exact compact evaluator for already-resolved crossing-free multigraphs."""
+
     def __init__(self, fallback_factory):
         self._fallback_factory = fallback_factory
         self._fallback = None
         self._native = _yamada_native.NativeEvaluator() if native_available() else None
         self.native_calls = 0
         self.fallback_calls = 0
-        self.structural_calls = 0
-        self.frontier_calls = 0
-        self.last_structural_stats = None
         self.memo = _MemoSizeProxy(self)
 
     @property
@@ -156,6 +90,7 @@ class NativeCompactEvaluator:
         return self._python().compute_laurent(compact)
 
     def compute_many_laurent(self, states: Iterable[tuple[Any, int]]):
+        """Evaluate already-resolved states; retained for compatibility APIs."""
         materialized = list(states)
         if self._native is not None:
             try:
@@ -178,7 +113,7 @@ class NativeCompactEvaluator:
         return total
 
     def compute_prepared_bulk_laurent(self, prepared):
-        """Exact exhaustive prepared-state sum; retained as an independent oracle."""
+        """Exhaustive 3**c prepared-state oracle for tests and validation only."""
         if self._native is not None and hasattr(self._native, "compute_prepared"):
             try:
                 self.native_calls += 1
@@ -212,20 +147,6 @@ class NativeCompactEvaluator:
             )
         return total
 
-    def compute_prepared_laurent(self, prepared):
-        crossing_count = len(prepared.crossing_ids)
-        if crossing_count < STRUCTURAL_DISPATCH_MIN_CROSSINGS:
-            return self.compute_prepared_bulk_laurent(prepared)
-
-        from .diagram_structural import compute_structural_laurent
-
-        stats: dict = {}
-        proxy = _StructuralBulkProxy(self, stats)
-        self.structural_calls += 1
-        value = compute_structural_laurent(prepared, proxy, stats=stats)
-        self.last_structural_stats = stats
-        return value
-
     def compute(self, graph, variable):
         from .fast import to_sympy
 
@@ -233,6 +154,7 @@ class NativeCompactEvaluator:
 
 
 def make_native_or_python_evaluator(fallback_factory):
+    """Select native/Python only for resolved compact-graph evaluation."""
     if native_available():
         return NativeCompactEvaluator(fallback_factory)
     return fallback_factory()

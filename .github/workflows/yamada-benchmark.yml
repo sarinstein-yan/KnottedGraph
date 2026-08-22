@@ -43,12 +43,12 @@ jobs:
           python-version: "3.12"
       - name: Install development environment
         run: uv sync --group dev
-      - name: Require production native backend
+      - name: Require final factorized production backend
         run: |
           uv run --no-sync python - <<'PY'
-          from knotted_graph.invariants.yamada.native import native_available
-          assert native_available(), "native backend was not built"
-          print("production native Yamada backend: active")
+          from knotted_graph.invariants.yamada.factorized_frontier import native_factorized_available
+          assert native_factorized_available(), "factorized Yamada backend was not built"
+          print("production factorized Yamada backend: active")
           PY
       - name: Run exact Yamada invariant tests
         run: uv run --no-sync pytest -q tests/invariants/yamada
@@ -75,11 +75,11 @@ jobs:
           python-version: "3.12"
       - name: Install complete notebook environment
         run: uv sync --extra all --group dev --group benchmark
-      - name: Require production native backend
+      - name: Require final factorized production backend
         run: |
           uv run --no-sync python - <<'PY'
-          from knotted_graph.invariants.yamada.native import native_available
-          assert native_available(), "native backend was not built"
+          from knotted_graph.invariants.yamada.factorized_frontier import native_factorized_available
+          assert native_factorized_available(), "factorized Yamada backend was not built"
           PY
       - name: Execute validation notebook
         env:
@@ -123,11 +123,11 @@ jobs:
           python-version: "3.12"
       - name: Install environment and Topoly
         run: uv sync --group dev --group benchmark
-      - name: Require production native backend
+      - name: Require final factorized production backend
         run: |
           uv run --no-sync python - <<'PY'
-          from knotted_graph.invariants.yamada.native import native_available
-          assert native_available()
+          from knotted_graph.invariants.yamada.factorized_frontier import native_factorized_available
+          assert native_factorized_available()
           PY
       - name: Validate paper benchmark design
         run: uv run --no-sync pytest -q tests/benchmarks/test_topoly_paper_setup.py
