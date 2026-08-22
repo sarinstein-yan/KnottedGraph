@@ -50,7 +50,7 @@ EXTRA_RE = re.compile(r"knotted_graph\[([A-Za-z0-9_-]+)\]")
 ABSOLUTE_LOCAL_RE = re.compile(
     r"(?:/Users/[^\s\"'`]+|/home/[^\s\"'`]+|[A-Za-z]:\\\\Users\\\\[^\s\"'`]+)"
 )
-NOTEBOOK_MATRIX_RE = re.compile(r"^\s*-\s+(User_guide/[^\s]+\.ipynb)\s*$", re.M)
+NOTEBOOK_CI_PATH_RE = re.compile(r"User_guide/[A-Za-z0-9_./-]+\.ipynb")
 
 
 def tracked_files() -> list[Path]:
@@ -266,16 +266,16 @@ def main() -> None:
             check_links(notebook, markdown, failures)
 
     workflow = texts[ROOT / ".github" / "workflows" / "notebooks.yml"]
-    matrix = set(NOTEBOOK_MATRIX_RE.findall(workflow))
+    ci_covered = set(NOTEBOOK_CI_PATH_RE.findall(workflow))
     actual = {
         path.relative_to(ROOT).as_posix()
         for path in notebooks
         if path.is_relative_to(ROOT / "User_guide")
     }
-    for missing in sorted(actual - matrix):
-        failures.append(f"User-guide notebook missing from CI matrix: {missing}")
-    for stale in sorted(matrix - actual):
-        failures.append(f"CI matrix references missing notebook: {stale}")
+    for missing in sorted(actual - ci_covered):
+        failures.append(f"User-guide notebook missing from notebook CI coverage: {missing}")
+    for stale in sorted(ci_covered - actual):
+        failures.append(f"notebook CI references missing notebook: {stale}")
 
     pyproject = tomllib.loads(texts[ROOT / "pyproject.toml"])
     extras = set(pyproject["project"].get("optional-dependencies", {}))
