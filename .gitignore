@@ -83,6 +83,8 @@ target/
 .ipynb_checkpoints
 User_guide/benchmarks/.benchmark_checkpoints/
 # Figure input snapshots under User_guide/benchmarks/results are versioned.
+# Local-only publication figure workspace lives next to this repo.
+/FigureGeneration/
 
 # IPython
 profile_default/
