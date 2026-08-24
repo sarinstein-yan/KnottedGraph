@@ -1942,6 +1942,9 @@ all = [
 benchmark = [
     { name = "topoly" },
 ]
+knot-fields = [
+    { name = "scikit-image" },
+]
 nodal = [
     { name = "minorminer" },
     { name = "poly2graph" },
@@ -2025,6 +2028,7 @@ requires-dist = [
     { name = "pyvista", extras = ["all"], marker = "extra == 'nodal'" },
     { name = "pyvista", extras = ["all"], marker = "extra == 'surface'" },
     { name = "scikit-image", marker = "extra == 'all'" },
+    { name = "scikit-image", marker = "extra == 'knot-fields'" },
     { name = "scikit-image", marker = "extra == 'nodal'" },
     { name = "shapely" },
     { name = "sympy" },
@@ -2034,7 +2038,7 @@ requires-dist = [
     { name = "topoly", marker = "extra == 'benchmark'", specifier = "==1.1.0" },
     { name = "tqdm" },
 ]
-provides-extras = ["nodal", "surface", "viz", "repulsion", "notebook", "benchmark", "all"]
+provides-extras = ["knot-fields", "nodal", "surface", "viz", "repulsion", "notebook", "benchmark", "all"]
 
 [package.metadata.requires-dev]
 benchmark = [{ name = "topoly", specifier = "==1.1.0" }]

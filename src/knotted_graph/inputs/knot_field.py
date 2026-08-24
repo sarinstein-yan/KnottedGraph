@@ -180,7 +180,19 @@ class KnotFunction:
             return None
         return complex(np.asarray(self.evaluate_s3(0.0, 1.0)).item())
 
-    def symbolic_r3_expression(self, symbols: Sequence[sp.Symbol] | None = None) -> sp.Expr:
+    def symbolic_r3_expression(
+        self,
+        symbols: Sequence[sp.Symbol] | None = None,
+        *,
+        simplify: bool = True,
+    ) -> sp.Expr:
+        """Return a symbolic R3 expression for the field.
+
+        ``simplify=False`` skips the final rational cancellation step.  That is
+        useful for notebooks and previews because full stereographic expansion
+        of braid-derived Fourier polynomials can be much slower than the rest
+        of the tutorial.
+        """
         if self.semiholomorphic is None:
             expression = self.metadata.get("sympy_expression")
             if expression is None:
@@ -194,11 +206,12 @@ class KnotFunction:
         cosine, sine = sp.Float(np.cos(self.s3_chart_angle)), sp.Float(np.sin(self.s3_chart_angle))
         us, vs, vbs = sp.symbols("u v vbar")
         expression = self.semiholomorphic.to_sympy(us, vs, vbs)
-        return sp.cancel(expression.subs({
+        substituted = expression.subs({
             us: cosine * u + sine * v,
             vs: -sine * u + cosine * v,
             vbs: -sine * ubar + cosine * vbar,
-        }))
+        })
+        return sp.cancel(substituted) if simplify else substituted
 
     def sample(self, *, span: Span3D = DEFAULT_SPAN, dimension=96):
         from .knot_levelset import sample_field

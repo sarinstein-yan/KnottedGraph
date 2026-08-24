@@ -5,6 +5,7 @@ import random
 
 import pytest
 
+from knotted_graph.invariants.yamada import factorized_frontier as factorized_module
 from knotted_graph.invariants.yamada.compact import PythonCompactYamadaEvaluator
 from knotted_graph.invariants.yamada.diagram_unified import (
     compute_unified_laurent,
@@ -94,6 +95,53 @@ def _exhaustive(prepared):
     return total
 
 
+def _as_laurent(value):
+    return tuple((int(power), int(coefficient)) for power, coefficient in value)
+
+
+def _factorized_has_bigint_backend() -> bool:
+    return native_factorized_available() and hasattr(
+        factorized_module._yamada_factorized_frontier,
+        "compute_factorized_frontier_bigint",
+    )
+
+
+def _single_vertex_loop_args(loop_count: int):
+    port_count = 2 * loop_count
+    wire_partner = [-1] * port_count
+    for index in range(loop_count):
+        left = 2 * index
+        right = left + 1
+        wire_partner[left] = right
+        wire_partner[right] = left
+    return (
+        [0],
+        [0] * port_count,
+        wire_partner,
+        [0] * port_count,
+        [-1] * port_count,
+        [-1] * port_count,
+        [0],
+    )
+
+
+def _mul_poly(left, right):
+    out = {}
+    for left_power, left_coeff in left.items():
+        for right_power, right_coeff in right.items():
+            power = left_power + right_power
+            out[power] = out.get(power, 0) + left_coeff * right_coeff
+    return {power: coeff for power, coeff in out.items() if coeff}
+
+
+def _single_vertex_loop_expected(loop_count: int):
+    poly = {0: -1}
+    one_minus_q = {-1: -1, 0: -1, 1: -1}
+    for _ in range(loop_count):
+        poly = _mul_poly(poly, one_minus_q)
+    return tuple(sorted(poly.items()))
+
+
 @pytest.mark.parametrize("crossing_count", [0, 1, 2, 3, 4])
 def test_unified_matches_independent_exhaustive_random_diagrams(crossing_count):
     for offset in range(16):
@@ -107,6 +155,64 @@ def test_factorized_frontier_matches_independent_exhaustive(crossing_count):
     for offset in range(32):
         prepared = _random_prepared(119000 + 139 * crossing_count + offset, crossing_count)
         assert compute_factorized_frontier_laurent(prepared) == _exhaustive(prepared)
+
+
+@pytest.mark.skipif(
+    not _factorized_has_bigint_backend(),
+    reason="native factorized bigint frontier not built",
+)
+@pytest.mark.parametrize("crossing_count", [0, 1, 2, 3, 4])
+def test_factorized_native_int64_and_bigint_backends_agree(crossing_count):
+    for offset in range(8):
+        prepared = _random_prepared(123000 + 149 * crossing_count + offset, crossing_count)
+        data = factorized_module.build_factorized_frontier(prepared)
+        args = factorized_module._frontier_args(data)
+        int64_value = factorized_module._yamada_factorized_frontier.compute_factorized_frontier_int64(*args)
+        bigint_value = factorized_module._yamada_factorized_frontier.compute_factorized_frontier_bigint(*args)
+        assert _as_laurent(bigint_value) == _as_laurent(int64_value)
+
+
+@pytest.mark.skipif(
+    not _factorized_has_bigint_backend(),
+    reason="native factorized bigint frontier not built",
+)
+def test_factorized_native_bigint_handles_true_int64_overflow():
+    args = _single_vertex_loop_args(45)
+    with pytest.raises(OverflowError):
+        factorized_module._yamada_factorized_frontier.compute_factorized_frontier_int64(*args)
+
+    actual = _as_laurent(
+        factorized_module._yamada_factorized_frontier.compute_factorized_frontier_bigint(*args)
+    )
+    assert actual == _single_vertex_loop_expected(45)
+    assert max(abs(coefficient) for _, coefficient in actual) > 2**63 - 1
+
+
+def test_factorized_overflow_dispatch_uses_native_bigint(monkeypatch):
+    calls = []
+
+    class FakeFactorizedExtension:
+        def compute_factorized_frontier_int64(self, *args):
+            calls.append("int64")
+            raise OverflowError("forced test overflow")
+
+        def compute_factorized_frontier_bigint(self, *args):
+            calls.append("bigint")
+            return ((0, 2**80),)
+
+    monkeypatch.setattr(
+        factorized_module,
+        "_yamada_factorized_frontier",
+        FakeFactorizedExtension(),
+    )
+    stats = {}
+    prepared = _random_prepared(125000, 0)
+
+    assert factorized_module.compute_factorized_frontier_laurent(prepared, stats=stats) == (
+        (0, 2**80),
+    )
+    assert calls == ["int64", "bigint"]
+    assert stats == {"coefficient_backend": "native-bigint", "int64_overflow": True}
 
 
 @pytest.mark.skipif(not native_frontier_available(), reason="native frontier not built")

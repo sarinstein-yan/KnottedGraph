@@ -1,17 +1,20 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <boost/multiprecision/cpp_int.hpp>
+
 #include <algorithm>
 #include <cstdint>
 #include <limits>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
 namespace py = pybind11;
-using Coeff = std::int64_t;
-using LaurentOut = std::vector<std::pair<int, Coeff>>;
+using FastCoeff = std::int64_t;
+using BigCoeff = boost::multiprecision::cpp_int;
 
 namespace {
 constexpr int EQ_NEG = 0;
@@ -24,18 +27,33 @@ constexpr int IDENTITY = 1;
     throw std::overflow_error("factorized Yamada coefficient exceeded int64");
 }
 
-Coeff add_checked(Coeff a, Coeff b) {
-    constexpr Coeff hi = std::numeric_limits<Coeff>::max();
-    constexpr Coeff lo = std::numeric_limits<Coeff>::min();
-    if ((b > 0 && a > hi - b) || (b < 0 && a < lo - b)) overflow();
-    return a + b;
-}
+template <typename Coeff>
+struct CoeffOps {
+    static Coeff add(const Coeff& left, const Coeff& right) {
+        return left + right;
+    }
 
-Coeff neg_checked(Coeff value) {
-    if (value == std::numeric_limits<Coeff>::min()) overflow();
-    return -value;
-}
+    static Coeff neg(const Coeff& value) {
+        return -value;
+    }
+};
 
+template <>
+struct CoeffOps<FastCoeff> {
+    static FastCoeff add(FastCoeff left, FastCoeff right) {
+        constexpr FastCoeff hi = std::numeric_limits<FastCoeff>::max();
+        constexpr FastCoeff lo = std::numeric_limits<FastCoeff>::min();
+        if ((right > 0 && left > hi - right) || (right < 0 && left < lo - right)) overflow();
+        return left + right;
+    }
+
+    static FastCoeff neg(FastCoeff value) {
+        if (value == std::numeric_limits<FastCoeff>::min()) overflow();
+        return -value;
+    }
+};
+
+template <typename Coeff>
 struct Poly {
     int lo{0};
     std::vector<Coeff> c;
@@ -44,7 +62,11 @@ struct Poly {
     void trim() {
         std::size_t first = 0;
         while (first < c.size() && c[first] == 0) ++first;
-        if (first == c.size()) { c.clear(); lo = 0; return; }
+        if (first == c.size()) {
+            c.clear();
+            lo = 0;
+            return;
+        }
         std::size_t last = c.size();
         while (last > first && c[last - 1] == 0) --last;
         if (first) lo += static_cast<int>(first);
@@ -62,23 +84,23 @@ struct Poly {
             lo = src_lo;
             c.resize(src.c.size());
             for (std::size_t i = 0; i < src.c.size(); ++i)
-                c[i] = sign > 0 ? src.c[i] : neg_checked(src.c[i]);
+                c[i] = sign > 0 ? src.c[i] : CoeffOps<Coeff>::neg(src.c[i]);
             return;
         }
         const int old_hi = lo + static_cast<int>(c.size()) - 1;
         const int new_lo = std::min(lo, src_lo);
         const int new_hi = std::max(old_hi, src_hi);
         if (new_lo != lo || new_hi != old_hi) {
-            std::vector<Coeff> expanded(static_cast<std::size_t>(new_hi - new_lo + 1), 0);
-            std::copy(c.begin(), c.end(), expanded.begin() + (lo - new_lo));
+            std::vector<Coeff> expanded(static_cast<std::size_t>(new_hi - new_lo + 1), Coeff{0});
+            std::copy(c.begin(), c.end(), expanded.begin() + static_cast<std::ptrdiff_t>(lo - new_lo));
             c.swap(expanded);
             lo = new_lo;
         }
         const int offset = src_lo - lo;
         for (std::size_t i = 0; i < src.c.size(); ++i) {
-            const Coeff value = sign > 0 ? src.c[i] : neg_checked(src.c[i]);
+            const Coeff value = sign > 0 ? src.c[i] : CoeffOps<Coeff>::neg(src.c[i]);
             Coeff& target = c[static_cast<std::size_t>(offset) + i];
-            target = add_checked(target, value);
+            target = CoeffOps<Coeff>::add(target, value);
         }
     }
 };
@@ -118,9 +140,15 @@ struct KeyHash {
         return h;
     }
 };
-using Table = std::unordered_map<std::vector<int>, Poly, KeyHash>;
 
-void accumulate(Table& table, const std::vector<int>& key, const Poly& poly, int shift, int sign) {
+template <typename Coeff>
+using Table = std::unordered_map<std::vector<int>, Poly<Coeff>, KeyHash>;
+
+template <typename Coeff>
+using LaurentOut = std::vector<std::pair<int, Coeff>>;
+
+template <typename Coeff>
+void accumulate(Table<Coeff>& table, const std::vector<int>& key, const Poly<Coeff>& poly, int shift, int sign) {
     if (poly.empty()) return;
     auto [it, inserted] = table.try_emplace(key);
     it->second.add_from(poly, shift, sign);
@@ -130,7 +158,8 @@ void accumulate(Table& table, const std::vector<int>& key, const Poly& poly, int
     }
 }
 
-void accumulate_q(Table& table, const std::vector<int>& key, const Poly& poly, int sign) {
+template <typename Coeff>
+void accumulate_q(Table<Coeff>& table, const std::vector<int>& key, const Poly<Coeff>& poly, int sign) {
     auto [it, inserted] = table.try_emplace(key);
     it->second.add_from(poly, -1, sign);
     it->second.add_from(poly, 0, sign);
@@ -142,15 +171,17 @@ void accumulate_q(Table& table, const std::vector<int>& key, const Poly& poly, i
     }
 }
 
-LaurentOut export_poly(Poly poly) {
+template <typename Coeff>
+LaurentOut<Coeff> export_poly(Poly<Coeff> poly) {
     poly.trim();
-    LaurentOut out;
+    LaurentOut<Coeff> out;
     for (std::size_t i = 0; i < poly.c.size(); ++i)
-        if (poly.c[i]) out.emplace_back(poly.lo + static_cast<int>(i), poly.c[i]);
+        if (poly.c[i] != 0) out.emplace_back(poly.lo + static_cast<int>(i), poly.c[i]);
     return out;
 }
 
-LaurentOut compute(
+template <typename Coeff>
+LaurentOut<Coeff> compute_impl(
     const std::vector<int>& factor_types,
     const std::vector<int>& port_factor,
     const std::vector<int>& wire_partner,
@@ -198,8 +229,9 @@ LaurentOut compute(
         wires_at[static_cast<std::size_t>(step)].emplace_back(port, partner);
     }
 
-    Table states;
-    Poly one; one.c.push_back(1);
+    Table<Coeff> states;
+    Poly<Coeff> one;
+    one.c.push_back(Coeff{1});
     states.emplace(std::vector<int>{}, std::move(one));
     std::vector<int> active;
     std::vector<char> processed(static_cast<std::size_t>(factor_count), 0);
@@ -219,7 +251,7 @@ LaurentOut compute(
         if (type == CROSSING && ports.size() != 4)
             throw std::runtime_error("crossing factor must have four ports");
 
-        Table introduced;
+        Table<Coeff> introduced;
         introduced.reserve(states.size() * (type == CROSSING ? 3U : 1U));
         for (const auto& [old_labels, poly] : states) {
             int next_label = 0;
@@ -268,21 +300,20 @@ LaurentOut compute(
             const int left = position.at(left_port), right = position.at(right_port);
             const int kind = wire_type[static_cast<std::size_t>(left_port)];
             if (kind == IDENTITY) {
-                Table updated;
+                Table<Coeff> updated;
                 updated.reserve(states.size());
                 for (const auto& [labels, poly] : states) {
                     std::vector<int> merged = labels;
                     const bool cycle = unite(merged, left, right);
-                    // Identity wires carry no edge sign.  However, if this
-                    // logical vertex identification closes an already-selected
-                    // physical path, the quotient graph gains one cycle, hence
-                    // the required +q=(A^-1+2+A) factor.
+                    // Identity wires carry no edge sign. If this logical
+                    // vertex identification closes an already selected
+                    // physical path, the quotient graph gains one cycle.
                     if (cycle) accumulate_q(updated, merged, poly, 1);
                     else accumulate(updated, merged, poly, 0, 1);
                 }
                 states = std::move(updated);
             } else if (kind == PHYSICAL) {
-                Table updated;
+                Table<Coeff> updated;
                 updated.reserve(states.size() * 2U);
                 for (const auto& [labels, poly] : states) {
                     accumulate(updated, labels, poly, 0, 1); // edge excluded
@@ -305,7 +336,7 @@ LaurentOut compute(
             if (!processed[static_cast<std::size_t>(partner_factor)]) kept_positions.push_back(i);
         }
         if (kept_positions.size() != active.size()) {
-            Table forgotten;
+            Table<Coeff> forgotten;
             forgotten.reserve(states.size());
             for (const auto& [labels, poly] : states) {
                 std::vector<int> kept;
@@ -328,9 +359,54 @@ LaurentOut compute(
     return export_poly(found->second);
 }
 
+py::object coeff_to_py(FastCoeff value) {
+    return py::int_(value);
+}
+
+py::object coeff_to_py(const BigCoeff& value) {
+    return py::module_::import("builtins").attr("int")(value.convert_to<std::string>());
+}
+
+template <typename Coeff>
+py::tuple export_terms_py(const LaurentOut<Coeff>& terms) {
+    py::tuple out(terms.size());
+    for (std::size_t i = 0; i < terms.size(); ++i) {
+        out[i] = py::make_tuple(terms[i].first, coeff_to_py(terms[i].second));
+    }
+    return out;
+}
+
+template <typename Coeff>
+py::tuple compute_py(
+    const std::vector<int>& factor_types,
+    const std::vector<int>& port_factor,
+    const std::vector<int>& wire_partner,
+    const std::vector<int>& wire_type,
+    const std::vector<int>& plus_partner,
+    const std::vector<int>& minus_partner,
+    const std::vector<int>& factor_order
+) {
+    LaurentOut<Coeff> terms;
+    {
+        py::gil_scoped_release release;
+        terms = compute_impl<Coeff>(
+            factor_types,
+            port_factor,
+            wire_partner,
+            wire_type,
+            plus_partner,
+            minus_partner,
+            factor_order
+        );
+    }
+    return export_terms_py(terms);
+}
+
 } // namespace
 
 PYBIND11_MODULE(_yamada_factorized_frontier, module) {
     module.doc() = "Exact dense Yamada connectivity DP with low-arity equality factorization";
-    module.def("compute_factorized_frontier", &compute, py::call_guard<py::gil_scoped_release>());
+    module.def("compute_factorized_frontier_int64", &compute_py<FastCoeff>);
+    module.def("compute_factorized_frontier_bigint", &compute_py<BigCoeff>);
+    module.def("compute_factorized_frontier", &compute_py<FastCoeff>);
 }
