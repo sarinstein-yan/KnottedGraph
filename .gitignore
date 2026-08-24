@@ -82,8 +82,7 @@ target/
 # Jupyter Notebook
 .ipynb_checkpoints
 User_guide/benchmarks/.benchmark_checkpoints/
-# Notebook 03 timing rows are a local resume ledger, not a versioned publication snapshot.
-User_guide/benchmarks/results/03_knottedgraph_vs_topoly_scaling_rows.csv
+# Figure input snapshots under User_guide/benchmarks/results are versioned.
 
 # IPython
 profile_default/
