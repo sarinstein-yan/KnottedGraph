@@ -4,10 +4,12 @@ KnottedGraph can construct complex scalar fields whose zero sets represent knots
 
 The generic route is
 
-\[
+
+$$
 \text{knot / braid}\to f(u,v,\bar v)\to F(x,y,z)
 \to \{|F|\leq\epsilon\}\to\text{spatial graph}\to\text{topological analysis}.
-\]
+$$
+
 
 ## Mathematical basis
 
@@ -49,9 +51,11 @@ A positive integer `i` denotes the Artin generator \(\sigma_i\); `-i` denotes \(
 
 The preferred `4_1` constructor uses Rudolph's explicit semiholomorphic figure-eight polynomial
 
-\[
+
+$$
 f=u^3-3v^2\bar v^2(1+v^2-\bar v^2)u-2(v^2+\bar v^2),
-\]
+$$
+
 
 as quoted in the semiholomorphic-link literature.
 
@@ -59,10 +63,12 @@ as quoted in the semiholomorphic-link literature.
 
 The package uses
 
-\[
+
+$$
 u=\frac{2(x+iy)}{1+r^2},\qquad
 v=\frac{r^2-1+2iz}{1+r^2},\qquad r^2=x^2+y^2+z^2,
-\]
+$$
+
 
 so \(|u|^2+|v|^2=1\). Generic braid-generated fields may apply a fixed unitary rotation of the \(S^3\) coordinates to move the link away from the omitted stereographic projection point. This is an ambient diffeomorphism of \(S^3\), not a change of link type.
 
@@ -72,10 +78,12 @@ A requested sublevel radius is rejected if it contains the projection pole, beca
 
 For a field \(F\), use
 
-\[
+
+$$
 H_\epsilon=\{|F|\leq\epsilon\},\qquad
 \partial H_\epsilon=\{|F|=\epsilon\}.
-\]
+$$
+
 
 For sufficiently small regular \(\epsilon\), this is a tubular neighborhood of the link. On a numerical grid, do not assume that automatically:
 
@@ -138,9 +146,9 @@ Before linear interpolation, the path RMS-normalizes both endpoint fields and al
 
 This gauge fixing **does not make the homotopy canonical**. Intermediate topology is a property of the chosen field representatives and deformation path, not an invariant determined solely by the endpoint knot types.
 
-## Reusable version of the old Bloch phase-space calculation
+## Reusable Bloch phase-space calculation
 
-Generic \(S^3/\mathbb R^3\) fields are deliberately separate from periodic Bloch models. The old `PhaseSpaceFigure.ipynb`-style workflow is exposed through the nodal application layer:
+Generic \(S^3/\mathbb R^3\) fields are deliberately separate from periodic Bloch models. The earlier phase-space workflow is exposed through the nodal application layer:
 
 ```python
 import numpy as np
