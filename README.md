@@ -10,54 +10,128 @@ generic core for pure mathematical and computational workflows, with optional
 application packages built on top.
 
 <p align="center">
-  <img src="assets/paper/architecture.svg" width="780" alt="KnottedGraph architecture">
+  <img src="https://raw.githubusercontent.com/sarinstein-yan/KnottedGraph/Latest_Workplace/assets/paper/architecture.svg" width="780" alt="KnottedGraph architecture">
 </p>
 
-## Install
+> [!IMPORTANT]
+> PyPI currently provides the legacy `knotted_graph` 0.1.2 package. Its
+> nodal-only package layout is not compatible with the 0.2.0 development API
+> documented in this repository. Until 0.2.0 is released, install the current
+> API from the `Latest_Workplace` branch as shown below.
+
+## Installation
+
+KnottedGraph requires Python 3.11 or newer. The recommended development setup
+uses [uv](https://docs.astral.sh/uv/):
 
 ```bash
-pip install knotted_graph
-```
-
-For local development:
-
-```bash
-git clone https://github.com/sarinstein-yan/KnottedGraph.git
+git clone --branch Latest_Workplace --single-branch \
+  https://github.com/sarinstein-yan/KnottedGraph.git
 cd KnottedGraph
-uv sync --all-groups
+uv sync --group dev
 ```
 
-Optional Python extras are split by workflow:
+`uv sync --group dev` installs the base library and its test tools, but no
+optional feature extras. To install every Python extra as well, use:
 
 ```bash
-pip install "knotted_graph[nodal]"
-pip install "knotted_graph[surface]"
-pip install "knotted_graph[viz]"
-pip install "knotted_graph[repulsion]"
-pip install "knotted_graph[notebook]"
-pip install "knotted_graph[all]"
+uv sync --group dev --all-extras
 ```
 
-### Repulsive-layout native dependency
+The extras can also be selected individually:
 
-The `repulsion` extra installs the **Python-side dependencies**. The optional
-Repulsor solver is a separate C++ dependency and is intentionally not vendored
-inside `knotted_graph`.
+| Extra | Adds support for |
+| --- | --- |
+| `nodal` | Non-Hermitian nodal skeleton extraction |
+| `surface` | Surface-mesh workflows backed by PyVista |
+| `viz` | Plotly and publication-image export tools |
+| `repulsion` | Python-side repulsive-layout I/O and visualization |
+| `notebook` | JupyterLab |
+| `all` | All optional Python workflows, plus `igraph` |
+
+For example, install only the surface and notebook workflows with:
+
+```bash
+uv sync --group dev --extra surface --extra notebook
+```
+
+The `repulsion` extra does not install the separate C++ Repulsor solver or its
+native libraries. See the
+[repulsive-layout setup](doc/user_guide/repulsive_layout.md) before using that
+backend. The complete installation matrix and a plain-`pip` source-install
+alternative are in [the installation guide](doc/installation.md).
+If setup or the smoke test fails, start with the
+[troubleshooting guide](doc/troubleshooting.md).
+
+## Quick Start
+
+The shortest deterministic example computes a nonzero Yamada polynomial for
+the crossing-free theta graph. We use `Y` consistently as the polynomial
+variable:
+
+```python
+import sympy as sp
+
+from knotted_graph.core import ThetaGraph
+from knotted_graph.invariants.yamada import compute_graph_yamada_polynomial
+
+Y = sp.Symbol("Y")
+theta = ThetaGraph(3)
+polynomial = sp.expand(compute_graph_yamada_polynomial(theta, Y))
+print(f"Upsilon(Theta_3; Y) = {polynomial}")
+```
+
+Expected output:
+
+```text
+Upsilon(Theta_3; Y) = -Y**2 - Y - 2 - 1/Y - 1/Y**2
+```
+
+This value is nonzero because the three parallel edges contain no bridge. A
+graph with a bridge has zero Yamada polynomial, so a single open edge is not a
+useful installation smoke test.
+
+Run the complete example to evaluate both the abstract graph and a planar 3D
+embedding of the same theta graph:
+
+```bash
+uv run python examples/quickstart.py
+```
+
+The embedded calculation fixes the projection direction for reproducibility,
+uses one worker (`n_jobs=1`), verifies zero projected crossings, and checks that
+its result equals the abstract calculation. See the
+[annotated quick start](doc/quickstart.md) for the full embedded code.
+
+The non-Hermitian nodal-skeleton workflow is an optional application package:
+
+```python
+from knotted_graph.applications.nodal import NodalSkeleton
+from knotted_graph.applications.nodal.models import hopf_link_bloch_vector
+```
+
+Install the `nodal` extra before using these imports.
+
+## Repulsive-layout native dependency
 
 For a reproducible source checkout, use the repository bootstrap:
 
 ```bash
-python scripts/bootstrap_repulsion.py
+uv sync --extra repulsion
+uv run python scripts/bootstrap_repulsion.py --skip-python-install
 export REPULSOR_ROOT="$PWD/external/Repulsor"
 ```
+
+Inside an activated conventional venv that provides pip, the bootstrap can
+instead install the Python extra itself with `python scripts/bootstrap_repulsion.py`.
 
 The bootstrap checks out the exact Repulsor revision pinned for this
 KnottedGraph release and initializes its submodules. The C++ driver is compiled
 lazily on first use.
 
 The reference Linux/WSL build requires a C++20 compiler and the native libraries
-linked by the driver: OpenBLAS, LAPACK/LAPACKE, `fmt`, and AMD/SuiteSparse.
-On Debian/Ubuntu systems these can be installed with packages such as:
+linked by the driver: OpenBLAS, LAPACK/LAPACKE, `fmt`, and AMD/SuiteSparse. On
+Debian/Ubuntu systems these can be installed with packages such as:
 
 ```bash
 sudo apt-get update
@@ -72,63 +146,6 @@ sudo apt-get install -y \
 
 See `doc/user_guide/repulsive_layout.md` and `THIRD_PARTY_NOTICES.md` for the
 full setup and the pinned upstream revision.
-
-## Quick Start
-
-Compute a Yamada polynomial directly from a crossing-free graph:
-
-```python
-import sympy as sp
-
-from knotted_graph.core import ThetaGraph
-from knotted_graph.invariants.yamada import compute_graph_yamada_polynomial
-
-A = sp.Symbol("A")
-theta = ThetaGraph(3)
-compute_graph_yamada_polynomial(theta, A)
-```
-
-For embedded spatial graphs, project the graph to a planar diagram and compute
-from the projection with the fewest crossings:
-
-```python
-import networkx as nx
-import numpy as np
-import sympy as sp
-
-from knotted_graph.projection import compute_yamada_polynomial
-
-graph = nx.MultiGraph()
-graph.add_node("u", pos=np.array([0.0, 0.0, 0.0]))
-graph.add_node("v", pos=np.array([1.0, 0.0, 0.0]))
-graph.add_edge(
-    "u",
-    "v",
-    pts=np.array(
-        [
-            [0.0, 0.0, 0.0],
-            [0.5, 0.25, 0.0],
-            [1.0, 0.0, 0.0],
-        ]
-    ),
-)
-
-A = sp.Symbol("A")
-result = compute_yamada_polynomial(
-    graph,
-    A,
-    return_result=True,
-)
-print(result.polynomial)
-print(result.projection.num_crossings)
-```
-
-The non-Hermitian nodal-skeleton workflow is an application package:
-
-```python
-from knotted_graph.applications.nodal import NodalSkeleton
-from knotted_graph.applications.nodal.models import hopf_link_bloch_vector
-```
 
 ## Documentation
 

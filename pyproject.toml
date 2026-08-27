@@ -110,6 +110,8 @@ kg-repulsive-layout = "knotted_graph.layout.repulsive.cli:main"
 [project.urls]
 Homepage = "https://github.com/sarinstein-yan/KnottedGraph"
 Repository = "https://github.com/sarinstein-yan/KnottedGraph"
+Documentation = "https://sarinstein-yan.github.io/KnottedGraph/"
+Issues = "https://github.com/sarinstein-yan/KnottedGraph/issues"
 PyPI = "https://pypi.org/project/knotted_graph/"
 
 [dependency-groups]

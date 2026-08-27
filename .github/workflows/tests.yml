@@ -60,6 +60,10 @@ jobs:
           tests/core
           tests/contracts
           tests/invariants
+          tests/projection/test_public_api_validation.py
+          tests/inputs/test_optional_dependencies.py
+          tests/inputs/test_coordinate_chain.py
+          tests/inputs/test_biomolecular.py
 
   optional:
     name: Full optional Python stack (Python 3.12)
@@ -140,12 +144,15 @@ jobs:
         run: |
           WHEEL=$(python -c "from pathlib import Path; print(next(Path('dist').glob('*.whl')))")
           "${{ matrix.venv-python }}" -m pip install "$WHEEL"
-      - name: Smoke-test installed wheel and native backends
+          "${{ matrix.venv-python }}" -m pip check
+      - name: Smoke-test installed wheel, quick start, and native backends
         shell: bash
         run: |
+          "${{ matrix.venv-python }}" examples/quickstart.py
           "${{ matrix.venv-python }}" - <<'PY'
           import sympy as sp
           import knotted_graph
+          import knotted_graph.inputs as inputs
           from knotted_graph.core import ThetaGraph
           from knotted_graph.invariants.yamada import compute_graph_yamada_polynomial
           from knotted_graph.invariants.yamada.native import native_available
@@ -160,7 +167,15 @@ jobs:
           assert native_available(), "built wheel does not contain resolved-graph Yamada extension"
           assert native_factorized_available(), "built wheel does not contain factorized diagram Yamada extension"
           assert result != 0
+          try:
+              inputs.from_surface_mesh
+          except ImportError as exc:
+              assert "knotted_graph[surface]" in str(exc)
+          else:
+              raise AssertionError("base wheel unexpectedly imported the surface extra")
           PY
+        env:
+          PYTHONPATH: ""
   lint:
     name: Ruff (new review code)
     runs-on: ubuntu-latest
@@ -183,7 +198,9 @@ jobs:
         run: uv sync --group dev
 
       - name: Run Ruff
-        run: uv run --no-sync ruff check src tests dev/check_repository_consistency.py
+        run: >
+          uv run --no-sync ruff check
+          src tests examples/quickstart.py dev/check_repository_consistency.py
 
       - name: Run incremental Pyright checks
         run: uv run --no-sync pyright
