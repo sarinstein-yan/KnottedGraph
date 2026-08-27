@@ -83,6 +83,39 @@ class CoordinateChainInputTests(unittest.TestCase):
             self.assertEqual(result.source_format, "xyz")
             self.assertEqual(result.coords.shape, (3, 3))
 
+    def test_coordinate_chain_xyz_allows_empty_comment_line(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "chain.xyz"
+            path.write_text("3\n\nC 0 0 0\nC 1 0 0\nC 1 1 0\n")
+
+            result = from_coordinate_chain(path)
+
+            np.testing.assert_allclose(
+                result.coords,
+                [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0]],
+            )
+
+    def test_coordinate_chain_xyz_reports_physical_line_number(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "bad.xyz"
+            path.write_text("3\n\nC 0 0 0\nC bad 0 0\nC 1 1 0\n")
+
+            with self.assertRaisesRegex(ValueError, "line 4: invalid XYZ coordinate value"):
+                from_coordinate_chain(path)
+
+    def test_coordinate_chain_text_accepts_only_xyz_header(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            valid_path = Path(tmp) / "valid.txt"
+            valid_path.write_text("X Y Z\n0 0 0\n1 0 0\n")
+            invalid_path = Path(tmp) / "invalid.txt"
+            invalid_path.write_text("sample coordinates follow\n0 0 0\n1 0 0\n")
+
+            result = from_coordinate_chain(valid_path)
+
+            np.testing.assert_allclose(result.coords, [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]])
+            with self.assertRaisesRegex(ValueError, "line 1: invalid coordinate value"):
+                from_coordinate_chain(invalid_path)
+
     def test_coordinate_chain_rejects_wrong_shape(self):
         with self.assertRaisesRegex(ValueError, "shape"):
             from_coordinate_chain(np.array([0, 1, 2]))

@@ -7,6 +7,7 @@ from knotted_graph.core.embedding import (
     contract_short_edges,
     ensure_embedding,
     is_embedding,
+    simplify_edges,
     validate_embedding,
 )
 
@@ -94,3 +95,87 @@ def test_contract_short_edges_relinks_incident_edge_endpoints():
     edge = next(iter(contracted.edges(data=True)))
     np.testing.assert_allclose(edge[2]["pts"][0], [0.05, 0.0, 0.0])
     np.testing.assert_allclose(edge[2]["pts"][-1], [1.0, 0.0, 0.0])
+
+
+def test_simplify_edges_preserves_acyclic_path_geometry_and_metadata():
+    graph = nx.MultiGraph(project="path-demo")
+    graph.add_node("a", pos=[0.0, 0.0, 0.0], role="start")
+    graph.add_node("b", pos=[1.0, 0.5, 0.0], role="bend")
+    graph.add_node("c", pos=[2.0, 0.0, 0.0], role="end")
+    graph.add_edge(
+        "a",
+        "b",
+        key="first",
+        pts=[[0.0, 0.0, 0.0], [0.4, 0.3, 0.0], [1.0, 0.5, 0.0]],
+        segment_id="left",
+    )
+    graph.add_edge(
+        "b",
+        "c",
+        key="second",
+        pts=[[1.0, 0.5, 0.0], [1.6, 0.3, 0.0], [2.0, 0.0, 0.0]],
+        segment_id="right",
+    )
+
+    simplified = simplify_edges(graph)
+
+    assert simplified.graph["project"] == "path-demo"
+    assert simplified.number_of_nodes() == 3
+    assert simplified.number_of_edges() == 2
+    assert {data["role"] for _, data in simplified.nodes(data=True)} == {"start", "bend", "end"}
+    assert {data["segment_id"] for *_, data in simplified.edges(data=True)} == {"left", "right"}
+    assert sorted(len(data["pts"]) for *_, data in simplified.edges(data=True)) == [3, 3]
+    assert validate_embedding(simplified) == []
+
+
+def test_simplify_edges_preserves_branched_tree_edges_and_metadata():
+    graph = nx.MultiGraph(system="tree-demo")
+    positions = {
+        "center": [0.0, 0.0, 0.0],
+        "north": [0.0, 1.0, 0.0],
+        "east": [1.0, 0.0, 0.0],
+        "west": [-1.0, 0.0, 0.0],
+    }
+    for node, pos in positions.items():
+        graph.add_node(node, pos=pos, source_id=node)
+    for branch_id, leaf in enumerate(("north", "east", "west"), start=1):
+        graph.add_edge("center", leaf, branch_id=branch_id)
+
+    simplified = simplify_edges(graph)
+
+    assert simplified.graph["system"] == "tree-demo"
+    assert simplified.number_of_nodes() == 4
+    assert simplified.number_of_edges() == 3
+    assert {data["source_id"] for _, data in simplified.nodes(data=True)} == set(positions)
+    assert {data["branch_id"] for *_, data in simplified.edges(data=True)} == {1, 2, 3}
+    assert all(np.asarray(data["pts"]).shape == (2, 3) for *_, data in simplified.edges(data=True))
+    assert validate_embedding(simplified) == []
+
+
+def test_simplify_edges_preserves_acyclic_component_beside_cycle():
+    graph = nx.MultiGraph(project="mixed-components")
+    positions = {
+        "c0": [0.0, 0.0, 0.0],
+        "c1": [1.0, 0.0, 0.0],
+        "c2": [0.5, 1.0, 0.0],
+        "p0": [3.0, 0.0, 0.0],
+        "p1": [4.0, 0.0, 0.0],
+    }
+    for node, pos in positions.items():
+        graph.add_node(node, pos=pos, source_id=node)
+    for u, v in (("c0", "c1"), ("c1", "c2"), ("c2", "c0")):
+        graph.add_edge(u, v, component="cycle")
+    graph.add_edge("p0", "p1", key="path", component="path", sample="keep-me")
+
+    simplified = simplify_edges(graph)
+
+    assert simplified.graph["project"] == "mixed-components"
+    assert nx.number_connected_components(simplified) == 2
+    assert simplified.number_of_edges() == 2
+    path_edges = [
+        data for *_, data in simplified.edges(data=True) if data.get("component") == "path"
+    ]
+    assert len(path_edges) == 1
+    assert path_edges[0]["sample"] == "keep-me"
+    np.testing.assert_allclose(path_edges[0]["pts"], [[3.0, 0.0, 0.0], [4.0, 0.0, 0.0]])
+    assert validate_embedding(simplified) == []

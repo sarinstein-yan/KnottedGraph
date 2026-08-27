@@ -27,6 +27,26 @@ __all__ = [
 ]
 
 
+def _as_undirected_multigraph(
+    graph: nx.Graph,
+    *,
+    parameter_name: str = "G",
+) -> nx.MultiGraph:
+    """Copy an undirected NetworkX graph into the evaluator's graph type."""
+
+    graph_types = (nx.Graph, nx.MultiGraph, nx.DiGraph, nx.MultiDiGraph)
+    if not isinstance(graph, graph_types):
+        raise TypeError(
+            f"{parameter_name} must be an undirected networkx.Graph or "
+            "networkx.MultiGraph."
+        )
+    if graph.is_directed():
+        raise TypeError(
+            f"{parameter_name} must be undirected; directed graphs are not supported."
+        )
+    return nx.MultiGraph(graph)
+
+
 def normalize_multigraph(G: nx.MultiGraph) -> nx.MultiGraph:
     """Relabel nodes deterministically to a canonical 0..n-1 multigraph."""
 
@@ -299,8 +319,9 @@ class YamadaRecursiveEvaluator:
             self.memo[key] = value
         return value
 
-    def compute(self, G: nx.MultiGraph) -> sp.Expr:
-        return sp.simplify(self._rec(G))
+    def compute(self, G: nx.Graph) -> sp.Expr:
+        graph = _as_undirected_multigraph(G)
+        return sp.simplify(self._rec(graph))
 
     def _rec(self, H: nx.MultiGraph) -> sp.Expr:
         H = normalize_multigraph(H)
@@ -399,8 +420,9 @@ class NegamiRecursiveEvaluator:
             self.memo[key] = value
         return value
 
-    def compute(self, G: nx.MultiGraph) -> sp.Expr:
-        return sp.expand(sp.simplify(self._rec(G)))
+    def compute(self, G: nx.Graph) -> sp.Expr:
+        graph = _as_undirected_multigraph(G)
+        return sp.expand(sp.simplify(self._rec(graph)))
 
     def _rec(self, H: nx.MultiGraph) -> sp.Expr:
         H = normalize_multigraph(H)
@@ -451,10 +473,14 @@ class NegamiRecursiveEvaluator:
 
 
 def compute_yamada_polynomial_recursive(
-    G: nx.MultiGraph,
+    G: nx.Graph,
     variable: sp.Symbol,
 ) -> sp.Expr:
     """Compute the crossing-free Yamada polynomial by optimized recursion.
+
+    ``G`` may be an undirected ``networkx.Graph`` or ``MultiGraph``. It is
+    copied into a ``MultiGraph`` before evaluation; directed graphs are not
+    supported.
 
     The evaluator uses the standard Yamada graph identities before falling back
     to deletion-contraction:
@@ -473,11 +499,16 @@ def compute_yamada_polynomial_recursive(
 
 
 def compute_negami_recursive(
-    G: nx.MultiGraph,
+    G: nx.Graph,
     x: sp.Symbol,
     y: sp.Symbol,
 ) -> sp.Expr:
-    """Compute Yamada's auxiliary Negami polynomial recursively."""
+    """Compute Yamada's auxiliary Negami polynomial recursively.
+
+    ``G`` may be an undirected ``networkx.Graph`` or ``MultiGraph``. It is
+    copied into a ``MultiGraph`` before evaluation; directed graphs are not
+    supported.
+    """
 
     return NegamiRecursiveEvaluator(x, y).compute(G)
 

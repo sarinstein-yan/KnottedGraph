@@ -1,6 +1,7 @@
 import itertools
 import math
 from dataclasses import dataclass
+from numbers import Integral
 from typing import Any
 
 import networkx as nx
@@ -12,6 +13,7 @@ from knotted_graph.projection.geom import Arc, Crossing, Vertex
 from .recursive import (
     NegamiRecursiveEvaluator,
     YamadaRecursiveEvaluator,
+    _as_undirected_multigraph,
 )
 
 
@@ -25,20 +27,34 @@ __all__ = [
 Port = tuple[int, str]
 
 
-def compute_negami(G: nx.MultiGraph, x: sp.Symbol, y: sp.Symbol) -> sp.Expr:
+def _validate_n_jobs(n_jobs: int) -> int:
+    """Validate a Joblib worker count without changing its meaning."""
+
+    if isinstance(n_jobs, bool) or not isinstance(n_jobs, Integral):
+        raise TypeError("n_jobs must be a nonzero integer; use 1 for the safe default.")
+    if n_jobs == 0:
+        raise ValueError("n_jobs must not be zero; use 1 or an explicit negative value.")
+    return int(n_jobs)
+
+
+def compute_negami(G: nx.Graph, x: sp.Symbol, y: sp.Symbol) -> sp.Expr:
     """Compute the bivariate Negami polynomial by its defining edge-subset sum.
 
     This explicit implementation is intentionally retained as an independent
     reference implementation.  The public ``method="negami"`` Yamada backend
     uses the equivalent recursive Negami evaluator for speed.
+
+    ``G`` may be an undirected ``networkx.Graph`` or ``MultiGraph``. It is
+    copied into a ``MultiGraph`` so that the caller's graph is not mutated.
     """
 
-    edges = list(G.edges(keys=True))
+    graph = _as_undirected_multigraph(G)
+    edges = list(graph.edges(keys=True))
     h_poly = sp.Integer(0)
 
     for r in range(len(edges) + 1):
         for F in itertools.combinations(edges, r):
-            H = G.copy()
+            H = graph.copy()
             for (u, v, key) in F:
                 H.remove_edge(u, v, key=key)
 
@@ -53,11 +69,11 @@ def compute_negami(G: nx.MultiGraph, x: sp.Symbol, y: sp.Symbol) -> sp.Expr:
 
 
 def compute_yamada_from_states(
-    state_graphs: list[nx.MultiGraph],
+    state_graphs: list[nx.Graph],
     exponents: list[int],
     A: sp.Symbol,
     normalize: bool = True,
-    n_jobs: int = -1,
+    n_jobs: int = 1,
     method: str = "negami",
 ) -> sp.Expr:
     """Compute the Yamada polynomial from resolved diagram states.
@@ -65,7 +81,7 @@ def compute_yamada_from_states(
     Parameters
     ----------
     state_graphs
-        Resolved state graphs.
+        Resolved undirected NetworkX ``Graph`` or ``MultiGraph`` objects.
     exponents
         State exponents corresponding to ``p(s) - m(s)``.
     A
@@ -73,7 +89,8 @@ def compute_yamada_from_states(
     normalize
         If true, shift the lowest exponent to zero.
     n_jobs
-        Number of thread-parallel jobs used for state-graph evaluation.
+        Number of thread-parallel jobs used for state-graph evaluation. The
+        safe default is ``1``; pass ``-1`` to opt in to all available CPUs.
     method
         Backend for crossing-free state graphs:
 
@@ -95,6 +112,7 @@ def compute_yamada_from_states(
         raise ValueError("state_graphs and exponents must have the same length.")
     if method not in {"negami", "recursive"}:
         raise ValueError("method must be either 'negami' or 'recursive'.")
+    n_jobs = _validate_n_jobs(n_jobs)
 
     if method == "negami":
         x, y = sp.symbols("x y")
@@ -378,12 +396,17 @@ class Yamada:
         self,
         variable: sp.Symbol,
         normalize: bool = True,
-        n_jobs: int = -1,
+        n_jobs: int = 1,
         method: str = "negami",
     ) -> sp.Expr:
-        """Compute the Yamada polynomial without materializing all state graphs."""
+        """Compute the Yamada polynomial without materializing all state graphs.
+
+        ``n_jobs`` defaults to ``1``. Pass ``-1`` to opt in to all available
+        CPUs for state evaluation.
+        """
         if method not in {"negami", "recursive"}:
             raise ValueError("method must be either 'negami' or 'recursive'.")
+        n_jobs = _validate_n_jobs(n_jobs)
 
         if method == "negami":
             x, y = sp.symbols("x y")

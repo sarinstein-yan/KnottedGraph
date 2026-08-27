@@ -221,19 +221,18 @@ def _load_table_coords(
     comment_prefix: str = "#",
 ) -> np.ndarray:
     coords = []
-    skipped_header = False
     for line_number, raw_line in enumerate(path.read_text().splitlines(), start=1):
         line = raw_line.strip()
         if not line or line.startswith(comment_prefix):
             continue
-        tokens = [token for token in line.split(delimiter) if token]
+        tokens = [token.strip() for token in line.split(delimiter) if token.strip()]
         if len(tokens) < 3:
             raise ValueError(f"line {line_number}: expected at least 3 columns")
         try:
             coords.append([float(value) for value in tokens[:3]])
         except ValueError as exc:
-            if not coords and not skipped_header:
-                skipped_header = True
+            is_xyz_header = [token.casefold() for token in tokens[:3]] == ["x", "y", "z"]
+            if not coords and is_xyz_header:
                 continue
             raise ValueError(f"line {line_number}: invalid coordinate value") from exc
     return validate_coords(coords)
@@ -259,26 +258,36 @@ def _parse_xyz_coord_tokens(tokens: list[str], line_number: int) -> tuple[float,
 
 
 def _load_xyz_coords(path: Path) -> np.ndarray:
-    raw_lines = [line.strip() for line in path.read_text().splitlines() if line.strip()]
-    if not raw_lines:
+    physical_lines = path.read_text().splitlines()
+    if not physical_lines or not any(line.strip() for line in physical_lines):
         raise ValueError(f"XYZ file is empty: {path}")
 
-    data_lines = raw_lines
+    numbered_data_lines = [
+        (line_number, line.strip())
+        for line_number, line in enumerate(physical_lines, start=1)
+        if line.strip()
+    ]
     try:
-        atom_count = int(raw_lines[0])
+        atom_count = int(physical_lines[0].strip())
     except ValueError:
         atom_count = None
     if atom_count is not None:
-        data_lines = raw_lines[2:]
-        if len(data_lines) != atom_count:
+        if len(physical_lines) < 2:
+            raise ValueError("XYZ atom-count line must be followed by a comment line.")
+        numbered_data_lines = [
+            (line_number, line.strip())
+            for line_number, line in enumerate(physical_lines[2:], start=3)
+            if line.strip()
+        ]
+        if len(numbered_data_lines) != atom_count:
             raise ValueError(
-                f"XYZ atom count says {atom_count}, but found {len(data_lines)} rows."
+                f"XYZ atom count says {atom_count}, but found {len(numbered_data_lines)} rows."
             )
 
     return validate_coords(
         [
             _parse_xyz_coord_tokens(line.split(), line_number)
-            for line_number, line in enumerate(data_lines, start=1)
+            for line_number, line in numbered_data_lines
         ]
     )
 
