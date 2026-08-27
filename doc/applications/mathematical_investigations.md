@@ -3,8 +3,8 @@
 <div class="kg-hero">
   <p class="kg-lead">The mathematics applications notebook gathers graph-family calculations, planarity checks, intrinsic-linkedness examples, and Yamada-polynomial comparisons. The two figures below point to the planarity and rich-topology themes developed there.</p>
   <div class="kg-link-row">
-    <a href="../../User_guide/applications/02_mathematics_applications.ipynb">Open 02_mathematics_applications.ipynb</a>
-    <a href="../../User_guide/applications/structured_graph_yamada_dataset.csv">Open structured graph dataset</a>
+    <a href="https://github.com/sarinstein-yan/KnottedGraph/blob/Latest_Workplace/User_guide/applications/02_mathematics_applications.ipynb">Open 02_mathematics_applications.ipynb</a>
+    <a href="../data/structured_graph_yamada_dataset.csv">Open structured graph dataset</a>
   </div>
 </div>
 

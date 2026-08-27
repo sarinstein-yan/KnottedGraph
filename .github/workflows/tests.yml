@@ -45,6 +45,10 @@ jobs:
           tests/core
           tests/contracts
           tests/invariants
+          tests/projection/test_public_api_validation.py
+          tests/inputs/test_optional_dependencies.py
+          tests/inputs/test_coordinate_chain.py
+          tests/inputs/test_biomolecular.py
 
   optional:
     name: Full optional Python stack (Python 3.12)
@@ -93,17 +97,21 @@ jobs:
         run: wheel-test/bin/pip install dist/*.whl
       - name: Smoke-test installed wheel
         run: |
+          wheel-test/bin/pip check
+          wheel-test/bin/python examples/quickstart.py
           wheel-test/bin/python - <<'PY'
-          import sympy as sp
           import knotted_graph
-          from knotted_graph.core import ThetaGraph
-          from knotted_graph.invariants.yamada import compute_yamada_polynomial_recursive
-          A = sp.Symbol("A")
-          result = compute_yamada_polynomial_recursive(ThetaGraph(3), A)
           print("version:", knotted_graph.__version__)
-          print("Theta_3:", result)
-          assert result != 0
+          import knotted_graph.inputs as inputs
+          try:
+              inputs.from_surface_mesh
+          except ImportError as exc:
+              assert "knotted_graph[surface]" in str(exc)
+          else:
+              raise AssertionError("base wheel unexpectedly imported the surface extra")
           PY
+        env:
+          PYTHONPATH: ""
 
   lint:
     name: Ruff (new review code)
@@ -127,4 +135,4 @@ jobs:
         run: uv sync --group dev
 
       - name: Run Ruff
-        run: uv run --no-sync ruff check src tests
+        run: uv run --no-sync ruff check src tests examples/quickstart.py

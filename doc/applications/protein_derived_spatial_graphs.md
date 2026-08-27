@@ -3,7 +3,7 @@
 <div class="kg-hero">
   <p class="kg-lead">The protein applications notebook is the place for protein-coordinate input, graph construction, possible repulsive relaxation, projection, and invariant output. This page points to that notebook and uses the repulsive-curves figure as the geometric workflow reference.</p>
   <div class="kg-link-row">
-    <a href="../../User_guide/applications/03_protein_applications.ipynb">Open 03_protein_applications.ipynb</a>
+    <a href="https://github.com/sarinstein-yan/KnottedGraph/blob/Latest_Workplace/User_guide/applications/03_protein_applications.ipynb">Open 03_protein_applications.ipynb</a>
   </div>
 </div>
 
