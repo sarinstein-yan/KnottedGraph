@@ -1,10 +1,11 @@
 # Mathematical Investigations
 
 <div class="kg-hero">
-  <p class="kg-lead">The mathematics applications notebook gathers graph-family calculations, planarity checks, intrinsic-linkedness examples, and Yamada-polynomial comparisons. The two figures below point to the planarity and rich-topology themes developed there.</p>
+  <p class="kg-lead">The mathematics applications notebook gathers graph-family calculations, planarity checks, intrinsic-linkedness examples, and Yamada-polynomial comparisons. Users starting from an embedded graph stored in paired node and edge CSV tables can normalize it first with the public spatial-graph adapter.</p>
   <div class="kg-link-row">
-    <a href="../../User_guide/applications/02_mathematics_applications.ipynb">Open 02_mathematics_applications.ipynb</a>
-    <a href="../../User_guide/applications/structured_graph_yamada_dataset.csv">Open structured graph dataset</a>
+    <a href="https://github.com/sarinstein-yan/KnottedGraph/blob/Latest_Workplace/User_guide/applications/02_mathematics_applications.ipynb">Open 02_mathematics_applications.ipynb</a>
+    <a href="../user_guide/input_adapters.html">Load An Embedded Graph</a>
+    <a href="../data/structured_graph_yamada_dataset.csv">Open structured graph dataset</a>
   </div>
 </div>
 

@@ -1,9 +1,10 @@
 # Protein Derived Spatial Graphs
 
 <div class="kg-hero">
-  <p class="kg-lead">The protein applications notebook is the place for protein-coordinate input, graph construction, possible repulsive relaxation, projection, and invariant output. This page points to that notebook and uses the repulsive-curves figure as the geometric workflow reference.</p>
+  <p class="kg-lead">PDB and mmCIF backbone traces can enter through the public input adapters. Protein-specific construction beyond the selected backbone, possible repulsive relaxation, and biological interpretation remain application-level steps. The links below keep those two responsibilities separate.</p>
   <div class="kg-link-row">
-    <a href="../../User_guide/applications/03_protein_applications.ipynb">Open 03_protein_applications.ipynb</a>
+    <a href="../user_guide/input_adapters.html">Load PDB Or mmCIF Backbones</a>
+    <a href="https://github.com/sarinstein-yan/KnottedGraph/blob/Latest_Workplace/User_guide/applications/03_protein_applications.ipynb">Open 03_protein_applications.ipynb</a>
   </div>
 </div>
 

@@ -134,6 +134,12 @@ The public documentation is available at
 notes, generic quick starts, application tutorials, API references, and
 developer architecture notes.
 
+If your workflow starts from an external coordinate, PDB/mmCIF, polymer,
+spatial-graph CSV, or surface-mesh file, begin with the
+[Input Adapters notebook](User_guide/04_input_adapters.ipynb). It shows the
+supported public readers, the common embedded-graph contract, and the checks to
+perform before projection or application-specific processing.
+
 Build it locally with:
 
 ```bash

@@ -6,6 +6,7 @@ This branch contains the current working version of the KnottedGraph library, th
 
 - Main notebook entry point: `User_guide/00_user_guide.ipynb`
 - Core workflows: `User_guide/01_getting_started.ipynb`, `User_guide/02_core_workflows.ipynb`, `User_guide/03_advanced_and_reproduction.ipynb`
+- External scientific inputs: `User_guide/04_input_adapters.ipynb` and `doc/user_guide/input_adapters.md`
 - Applications:
   - `User_guide/applications/01_physics_applications.ipynb`
   - `User_guide/applications/02_mathematics_applications.ipynb`
