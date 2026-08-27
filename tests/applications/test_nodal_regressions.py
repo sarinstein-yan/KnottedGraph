@@ -1,3 +1,4 @@
+import inspect
 from types import SimpleNamespace
 
 import networkx as nx
@@ -8,6 +9,11 @@ import sympy as sp
 
 import knotted_graph.applications.nodal.skeleton as skeleton_module
 from knotted_graph.applications.nodal import NodalSkeleton
+
+
+def test_nodal_yamada_uses_safe_single_worker_default():
+    parameter = inspect.signature(NodalSkeleton.yamada_polynomial).parameters["n_jobs"]
+    assert parameter.default == 1
 
 
 def _bare_nodal_skeleton() -> NodalSkeleton:

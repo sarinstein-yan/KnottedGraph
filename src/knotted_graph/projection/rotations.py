@@ -20,6 +20,38 @@ __all__ = [
 ]
 
 
+def _validate_rotation_order(order: str) -> str:
+    """Return a validated Euler-axis order used by projection helpers."""
+
+    if not isinstance(order, str):
+        raise TypeError(
+            "rotation_order must be a string such as 'ZYX' (extrinsic) "
+            "or 'xyz' (intrinsic)."
+        )
+    if len(order) != 3 or any(axis.lower() not in "xyz" for axis in order):
+        raise ValueError(
+            "rotation_order must be a three-character Euler-axis sequence "
+            "containing only x, y, and z, for example 'ZYX' or 'xyz'."
+        )
+    if not (order.isupper() or order.islower()):
+        raise ValueError(
+            "rotation_order must use one case consistently: uppercase for "
+            "extrinsic rotations (for example 'ZYX') or lowercase for "
+            "intrinsic rotations (for example 'xyz')."
+        )
+    return order
+
+
+def _validate_positive_integer(value: int, *, name: str) -> int:
+    """Return *value* as an ``int`` after strict positive-integer validation."""
+
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
+        raise TypeError(f"{name} must be a positive integer, not {type(value).__name__}.")
+    if value <= 0:
+        raise ValueError(f"{name} must be a positive integer.")
+    return int(value)
+
+
 def get_rotation_matrix(
     angles: Sequence[float],
     order: str = "xyz",
@@ -58,9 +90,7 @@ def get_rotation_matrix(
     >>> phi, theta, psi = 45, 60, 10
     >>> R_euler = get_rotation_matrix((phi, theta, psi), order="zxz")
     """
-    if len(order) != 3 or any(ax.lower() not in "xyz" for ax in order):
-        raise ValueError("order must be a 3‑letter string with characters "\
-                         "x, y, z (case‑sensitive).")
+    order = _validate_rotation_order(order)
 
     # Convert to radians if necessary
     a, b, c = angles if use_radians else np.radians(angles)
@@ -124,8 +154,8 @@ def generate_isotopy_angles(
         Each row is *(α, β, γ)* in the requested `order`.
         γ (roll) is always 0 because in‑plane rotation is isotopic.
     """
-    if N <= 0:
-        raise ValueError("N must be a positive integer.")
+    N = _validate_positive_integer(N, name="N")
+    order = _validate_rotation_order(order)
 
     GOLDEN_ANGLE = np.pi * (3 - np.sqrt(5))      # ~2.399963..., offsets points nicely
     # --- 1. Fibonacci spiral sampling on the upper hemisphere -----------------
@@ -328,5 +358,4 @@ def multigraph_key(G):
     
     key = _key(G)
     return hashlib.sha256(repr(key).encode()).hexdigest()
-
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 import networkx as nx
 import numpy as np
@@ -14,10 +14,15 @@ from shapely.ops import substring
 from shapely.strtree import STRtree
 
 from knotted_graph.core.embedding import ensure_embedding
-from knotted_graph.invariants.yamada.polynomial import Yamada
+from knotted_graph.invariants.yamada.polynomial import Yamada, _validate_n_jobs
 
 from .geom import Arc, Crossing, Vertex
-from .rotations import generate_isotopy_angles, get_rotation_matrix
+from .rotations import (
+    _validate_positive_integer,
+    _validate_rotation_order,
+    generate_isotopy_angles,
+    get_rotation_matrix,
+)
 
 
 __all__ = [
@@ -93,11 +98,13 @@ class PDCode:
 
     def compute(
         self,
-        rotation_angles: Optional[tuple[float, float, float]] = None,
+        rotation_angles: Optional[Sequence[float]] = None,
         rotation_order: str = "ZYX",
     ) -> str:
         """Compute a PD representation after an optional rigid rotation."""
-        args = (tuple(rotation_angles or (0.0, 0.0, 0.0)), rotation_order)
+        rotation_order = _validate_rotation_order(rotation_order)
+        normalized_angles = _normalize_rotation_angles(rotation_angles)
+        args = (normalized_angles or (0.0, 0.0, 0.0), rotation_order)
 
         self.vertices = {}
         self.crossings = {}
@@ -113,8 +120,8 @@ class PDCode:
             [LineString(edge_data["pts"]) for edge_data in self.skeleton_graph.edges.values()]
         )
 
-        if rotation_angles is not None:
-            matrix = get_rotation_matrix(rotation_angles, rotation_order)
+        if normalized_angles is not None:
+            matrix = get_rotation_matrix(normalized_angles, rotation_order)
             rotation = matrix.ravel().tolist() + [0, 0, 0]
             node_points = affine_transform(node_points, rotation)
             edge_lines = affine_transform(edge_lines, rotation)
@@ -553,9 +560,24 @@ class PDCode:
         self,
         variable: sp.Symbol,
         normalize: bool = True,
-        n_jobs: int = -1,
+        n_jobs: int = 1,
         method: str = "negami",
     ) -> sp.Expr:
+        """Compute the Yamada polynomial for the current diagram.
+
+        Parameters
+        ----------
+        variable
+            SymPy symbol used as the polynomial variable.
+        normalize
+            If ``True``, shift the lowest exponent to zero.
+        n_jobs
+            Number of parallel state-evaluation jobs. The safe default is ``1``;
+            pass ``-1`` to opt in to all available CPUs.
+        method
+            Crossing-free evaluation backend, either ``"negami"`` or
+            ``"recursive"``.
+        """
         if not self._cache:
             raise ValueError("PD code must be computed before Yamada polynomial.")
         computer = Yamada(
@@ -578,9 +600,16 @@ project_crossings_on_edge = PDCode._project_crossings_on_edge
 
 def compute_pd_code(
     skeleton_graph: nx.MultiGraph,
-    rotation_angles: Optional[list[float]] = None,
+    rotation_angles: Optional[Sequence[float]] = None,
     rotation_order: str = "ZYX",
 ) -> str:
+    """Return a PD-code string for one explicit spatial-graph projection.
+
+    ``rotation_angles`` contains three Euler angles in degrees. If it is
+    omitted, the input coordinates are projected without rotation. Use
+    :func:`select_projection` when you want KnottedGraph to search several
+    views rather than committing to this one.
+    """
     generator = PDCode(skeleton_graph)
     return generator.compute(
         rotation_angles=rotation_angles,
@@ -589,7 +618,7 @@ def compute_pd_code(
 
 
 def _normalize_rotation_angles(
-    rotation_angles: Optional[list[float] | tuple[float, float, float]],
+    rotation_angles: Optional[Sequence[float]],
 ) -> tuple[float, float, float] | None:
     if rotation_angles is None:
         return None
@@ -624,9 +653,16 @@ def sample_projections(
     num_rotation_samples: int = 10,
     rotation_order: str = "ZYX",
 ) -> list[ProjectionResult]:
-    """Sample generic projections and return valid results in sample order."""
-    if num_rotation_samples <= 0:
-        raise ValueError("num_rotation_samples must be a positive integer.")
+    """Return valid deterministic projection samples in generation order.
+
+    Degenerate views are skipped with one summary ``RuntimeWarning``. The
+    function raises ``RuntimeError`` only when every sampled view fails.
+    """
+    num_rotation_samples = _validate_positive_integer(
+        num_rotation_samples,
+        name="num_rotation_samples",
+    )
+    rotation_order = _validate_rotation_order(rotation_order)
     skeleton_graph = ensure_embedding(skeleton_graph, copy=True, normalize=True)
 
     errors: list[str] = []
@@ -645,17 +681,31 @@ def sample_projections(
     if not projections:
         details = "; ".join(errors) if errors else "no samples were generated"
         raise RuntimeError(f"All projection samples failed: {details}")
+    if errors:
+        warnings.warn(
+            f"{len(errors)} of {num_rotation_samples} projection samples failed; "
+            f"continuing with {len(projections)} valid sample(s). "
+            f"First failure: {errors[0]}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
     return projections
 
 
 def select_projection(
     skeleton_graph: nx.MultiGraph,
     *,
-    rotation_angles: Optional[list[float] | tuple[float, float, float]] = None,
+    rotation_angles: Optional[Sequence[float]] = None,
     rotation_order: str = "ZYX",
     num_rotation_samples: int = 10,
 ) -> ProjectionResult:
-    """Select an explicit projection or the valid sample with fewest crossings."""
+    """Select one reproducible projection for an embedded spatial graph.
+
+    Explicit ``rotation_angles`` bypass view sampling. Otherwise, the valid
+    sampled projection with the fewest crossings is returned; generation order
+    breaks ties deterministically.
+    """
+    rotation_order = _validate_rotation_order(rotation_order)
     skeleton_graph = ensure_embedding(skeleton_graph, copy=True, normalize=True)
     exact_angles = _normalize_rotation_angles(rotation_angles)
     if exact_angles is not None:
@@ -664,6 +714,10 @@ def select_projection(
     # Keep the public sampling contract intact.  ``sample_projections`` performs
     # its own normalization for direct callers, while each per-angle PDCode now
     # trusts the already-normalized graph and avoids another O(total points) copy.
+    num_rotation_samples = _validate_positive_integer(
+        num_rotation_samples,
+        name="num_rotation_samples",
+    )
     projections = sample_projections(
         skeleton_graph,
         num_rotation_samples=num_rotation_samples,
@@ -678,16 +732,92 @@ def select_projection(
 def compute_yamada_polynomial(
     skeleton_graph: nx.MultiGraph,
     variable: sp.Symbol,
-    rotation_angles: Optional[list[float]] = None,
+    rotation_angles: Optional[Sequence[float]] = None,
     rotation_order: str = "ZYX",
     num_rotation_samples: int = 10,
-    crossing_warning_threshold: int = 10,
+    crossing_warning_threshold: int | None = 10,
     normalize: bool = True,
-    n_jobs: int = -1,
+    n_jobs: int = 1,
     method: str = "negami",
     return_result: bool = False,
 ) -> sp.Expr | YamadaComputationResult:
-    """Compute the Yamada polynomial from the simplest valid projection."""
+    """Compute a spatial graph's Yamada polynomial from a planar projection.
+
+    When ``rotation_angles`` is omitted, the function samples deterministic
+    viewing directions and evaluates the valid projection with the fewest
+    crossings. Supplying angles bypasses sampling and uses that projection
+    directly.
+
+    Parameters
+    ----------
+    skeleton_graph
+        Undirected embedded ``networkx.MultiGraph``. Every node must have a
+        three-dimensional ``pos`` coordinate and every edge may provide a
+        polyline through its ``pts`` attribute.
+    variable
+        SymPy symbol used as the polynomial variable.
+    rotation_angles
+        Three Euler angles in degrees. If ``None``, sample
+        ``num_rotation_samples`` viewing directions.
+    rotation_order
+        Three-character Euler-axis sequence. Use uppercase for extrinsic
+        rotations (for example ``"ZYX"``) or lowercase for intrinsic rotations
+        (for example ``"xyz"``).
+    num_rotation_samples
+        Positive integer number of candidate projections considered when
+        ``rotation_angles`` is ``None``.
+    crossing_warning_threshold
+        Warn when the selected diagram has at least this many crossings.
+        Set to ``None`` to disable the warning.
+    normalize
+        If ``True``, shift the lowest polynomial exponent to zero.
+    n_jobs
+        Number of parallel state-evaluation jobs. The safe default is ``1``;
+        pass ``-1`` to opt in to all available CPUs.
+    method
+        Crossing-free evaluation backend, either ``"negami"`` or
+        ``"recursive"``.
+    return_result
+        If ``True``, return the polynomial together with the selected
+        projection metadata.
+
+    Returns
+    -------
+    sympy.Expr or YamadaComputationResult
+        The polynomial alone, or a result containing both the polynomial and
+        selected :class:`ProjectionResult`.
+
+    Raises
+    ------
+    TypeError
+        If a sample count or rotation order has the wrong type.
+    ValueError
+        If the embedded graph or projection parameters are invalid.
+    RuntimeError
+        If every sampled projection fails.
+
+    Warns
+    -----
+    RuntimeWarning
+        If only some projection samples fail, or if the selected crossing count
+        reaches ``crossing_warning_threshold``.
+
+    Notes
+    -----
+    State enumeration can grow exponentially with the number of crossings.
+    Choose a small-crossing projection before opting in to parallel execution.
+    """
+    if method not in {"negami", "recursive"}:
+        raise ValueError("method must be either 'negami' or 'recursive'.")
+    n_jobs = _validate_n_jobs(n_jobs)
+    if crossing_warning_threshold is not None:
+        if isinstance(crossing_warning_threshold, bool) or not isinstance(
+            crossing_warning_threshold,
+            (int, np.integer),
+        ):
+            raise TypeError("crossing_warning_threshold must be a nonnegative integer or None.")
+        if crossing_warning_threshold < 0:
+            raise ValueError("crossing_warning_threshold must be nonnegative or None.")
     projection = select_projection(
         skeleton_graph,
         rotation_angles=rotation_angles,

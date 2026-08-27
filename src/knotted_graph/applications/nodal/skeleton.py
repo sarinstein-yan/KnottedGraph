@@ -1291,7 +1291,7 @@ class NodalSkeleton:
         self,
         variable: sp.Symbol,
         normalize: bool = True,
-        n_jobs: int = -1,
+        n_jobs: int = 1,
         *,
         rotation_angles: tuple[float] | None = None,
         rotation_order: str = 'ZYX',
@@ -1309,7 +1309,8 @@ class NodalSkeleton:
         normalize : bool, optional
             Whether to normalize the polynomial. Defaults to True.
         n_jobs : int, optional
-            The number of jobs to run in parallel. Defaults to -1.
+            Number of state-evaluation jobs. The safe default is 1; pass -1
+            only to opt in to all available CPUs.
         rotation_angles : tuple[float], optional
             If supplied, compute this exact projection. Otherwise, sample
             ``num_rotation_samples`` rotations and use the projection with the

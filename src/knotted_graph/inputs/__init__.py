@@ -66,7 +66,17 @@ def __getattr__(name: str):
     if name not in _SURFACE_MESH_EXPORTS:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-    module = import_module("knotted_graph.inputs.surface_mesh")
+    try:
+        module = import_module("knotted_graph.inputs.surface_mesh")
+    except ModuleNotFoundError as exc:
+        if exc.name != "pyvista":
+            raise
+        raise ImportError(
+            "Surface-mesh inputs require the optional PyVista dependency. "
+            "In a source checkout run `uv sync --extra surface` or "
+            "`python -m pip install -e \".[surface]\"`. After the 0.2 wheel "
+            "is released, `pip install \"knotted_graph[surface]\"` is also valid."
+        ) from exc
     value = getattr(module, name)
     globals()[name] = value
     return value

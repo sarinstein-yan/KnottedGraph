@@ -123,6 +123,44 @@ class BiomolecularInputTests(unittest.TestCase):
             self.assertEqual(result.coords.shape, (3, 3))
             self.assertEqual(result.issues, [])
 
+    def test_mmcif_backbone_requires_chain_when_ambiguous(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "multi.cif"
+            path.write_text(
+                "\n".join(
+                    [
+                        "data_TEST",
+                        "loop_",
+                        "_atom_site.group_PDB",
+                        "_atom_site.auth_atom_id",
+                        "_atom_site.label_atom_id",
+                        "_atom_site.auth_asym_id",
+                        "_atom_site.label_asym_id",
+                        "_atom_site.pdbx_PDB_model_num",
+                        "_atom_site.label_alt_id",
+                        "_atom_site.Cartn_x",
+                        "_atom_site.Cartn_y",
+                        "_atom_site.Cartn_z",
+                        "_atom_site.auth_comp_id",
+                        "_atom_site.label_comp_id",
+                        "_atom_site.auth_seq_id",
+                        "_atom_site.label_seq_id",
+                        "ATOM P P A A 1 . 0.0 0.0 0.0 A A 1 1",
+                        "ATOM P P A A 1 . 1.0 0.0 0.0 C C 2 2",
+                        "ATOM P P B B 1 . 0.0 1.0 0.0 A A 1 1",
+                        "ATOM P P B B 1 . 1.0 1.0 0.0 C C 2 2",
+                        "#",
+                    ]
+                )
+                + "\n"
+            )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                r"Multiple chains are present.*Available chains: A:2, B:2",
+            ):
+                from_mmcif_backbone(path, pdb_id="CIF1", atom_name="P")
+
 
 if __name__ == "__main__":
     unittest.main()

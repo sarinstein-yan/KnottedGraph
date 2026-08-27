@@ -11,6 +11,7 @@ from __future__ import annotations
 import itertools
 import math
 from dataclasses import dataclass
+from numbers import Integral
 from typing import Any, Iterable, Sequence
 
 import sympy as sp
@@ -36,6 +37,16 @@ __all__ = ["compute_yamada_from_states", "Yamada"]
 Port = tuple[int, str]
 
 
+def _validate_n_jobs(n_jobs: int) -> int:
+    """Validate a Joblib worker count without changing its meaning."""
+
+    if isinstance(n_jobs, bool) or not isinstance(n_jobs, Integral):
+        raise TypeError("n_jobs must be a nonzero integer; use 1 for the safe default.")
+    if n_jobs == 0:
+        raise ValueError("n_jobs must not be zero; use 1 or an explicit negative value.")
+    return int(n_jobs)
+
+
 def _make_fast_evaluator(method: str):
     if method == "negami":
         return FastNegamiSpecializedEvaluator()
@@ -46,7 +57,6 @@ def _make_fast_evaluator(method: str):
 
 def _evaluate_fast_state(evaluator, graph, exponent: int):
     return exponent, evaluator.compute_laurent(graph)
-
 
 def _sum_laurent_states_raw(evaluated_states: Iterable[tuple[int, tuple]]) -> tuple:
     total = ()
@@ -71,7 +81,7 @@ def compute_yamada_from_states(
     exponents: Sequence[int],
     variable: sp.Symbol,
     normalize: bool = True,
-    n_jobs: int = -1,
+    n_jobs: int = 1,
     method: str = "negami",
 ) -> sp.Expr:
     """Compute Yamada from already-resolved exact compact/graph states.
@@ -79,9 +89,33 @@ def compute_yamada_from_states(
     This compatibility entry point accepts externally resolved states.  It uses
     the current compact exact state evaluator because the diagram-level
     factorized contraction requires unresolved crossing incidence information.
+
+    Parameters
+    ----------
+    state_graphs
+        Resolved undirected NetworkX ``Graph`` or ``MultiGraph`` objects.
+    exponents
+        State exponents corresponding to ``p(s) - m(s)``.
+    variable
+        Polynomial variable.
+    normalize
+        If true, shift the lowest exponent to zero.
+    n_jobs
+        Number of thread-parallel jobs used for state-graph evaluation. The
+        safe default is ``1``; pass ``-1`` to opt in to all available CPUs.
+    method
+        Backend for crossing-free state graphs:
+
+        Exact crossing-free backend, either ``"negami"`` or ``"recursive"``.
+
+    Returns
+    -------
+    sympy.Expr
+        The Yamada polynomial.
     """
     if len(state_graphs) != len(exponents):
         raise ValueError("state_graphs and exponents must have the same length.")
+    n_jobs = _validate_n_jobs(n_jobs)
     evaluator = _make_fast_evaluator(method)
 
     if hasattr(evaluator, "compute_many_laurent"):
@@ -288,7 +322,7 @@ class Yamada:
         self,
         variable: sp.Symbol,
         normalize: bool = True,
-        n_jobs: int = -1,
+        n_jobs: int = 1,
         method: str = "negami",
     ) -> sp.Expr:
         """Compute Yamada with the universal exact factorized-connectivity DP.
@@ -296,7 +330,10 @@ class Yamada:
         ``method`` and ``n_jobs`` are retained for backwards API compatibility;
         diagram-level production evaluation now has one exact algorithm.
         ``method`` is still validated so invalid historical values fail clearly.
+        ``n_jobs`` defaults to ``1``; pass ``-1`` to opt in to all available
+        CPUs if a compatible fallback backend uses parallel state evaluation.
         """
+        _validate_n_jobs(n_jobs)
         _make_fast_evaluator(method)  # preserve public argument validation
         del n_jobs
         total = ONE

@@ -14,11 +14,20 @@ from .polynomial import (
 
 
 def compute_graph_yamada_polynomial(
-    graph: nx.MultiGraph,
+    graph: nx.Graph,
     variable: sp.Symbol,
 ) -> sp.Expr:
-    """Compute the crossing-free Yamada polynomial with the fastest exact backend."""
-    return CompactYamadaEvaluator().compute(graph, variable)
+    """Compute the crossing-free Yamada polynomial for an undirected graph.
+
+    Simple undirected graphs are copied into a ``MultiGraph`` so callers do not
+    need to convert them manually. Directed and non-NetworkX inputs are rejected
+    rather than having their direction silently discarded.
+    """
+    if not isinstance(graph, nx.Graph):
+        raise TypeError("graph must be a networkx.Graph or networkx.MultiGraph")
+    if graph.is_directed():
+        raise TypeError("graph must be undirected")
+    return CompactYamadaEvaluator().compute(nx.MultiGraph(graph), variable)
 
 
 __all__ = [

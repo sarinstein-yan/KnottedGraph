@@ -5,7 +5,7 @@ from importlib import import_module
 from .geom import Arc, Crossing, Vertex
 from .rotations import cut_line_string, generate_isotopy_angles, get_rotation_matrix
 
-_PD_CODE_EXPORTS = {
+_PD_CODE_EXPORTS = (
     "PDCode",
     "ProjectionResult",
     "YamadaComputationResult",
@@ -16,7 +16,7 @@ _PD_CODE_EXPORTS = {
     "project_crossings_on_edge",
     "sample_projections",
     "select_projection",
-}
+)
 
 _LAZY_EXPORTS = {
     **{name: "knotted_graph.projection.pd_code" for name in _PD_CODE_EXPORTS},

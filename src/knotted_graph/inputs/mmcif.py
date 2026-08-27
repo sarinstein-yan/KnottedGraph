@@ -220,8 +220,10 @@ def select_chain_id(chain_id: str | None, chain_counts: Counter) -> str:
         return next(iter(chain_counts))
     if not chain_counts:
         raise ValueError("No matching atoms were found in the mmCIF _atom_site loop.")
-    selected, _ = chain_counts.most_common(1)[0]
-    return selected
+    raise ValueError(
+        "Multiple chains are present; pass chain_id explicitly. "
+        f"Available chains: {format_chain_counts(chain_counts)}"
+    )
 
 
 def parse_mmcif_backbone(
@@ -307,7 +309,19 @@ def from_mmcif_backbone(
     closure: str | None = None,
     metadata: dict | None = None,
 ) -> MMCIFBackboneInputResult:
-    """Load an atom trace from an RCSB mmCIF file."""
+    """Load an ordered atom trace from an RCSB-style mmCIF file.
+
+    ``source`` may be a local ``.cif``/``.mmcif`` path or a four-character
+    RCSB identifier. The parser reads the first ``_atom_site`` loop and expects
+    each complete atom-site row on one physical line. When more than one chain
+    contains the requested atom, pass ``chain_id`` explicitly; the loader never
+    chooses a biological chain silently.
+
+    The returned ``coords`` retain source order. Its ``graph`` follows the
+    package's embedded ``MultiGraph(pos/pts)`` contract. Recoverable malformed
+    atom rows are recorded in ``result.issues`` when enough valid atoms remain;
+    fatal schema, selection, and insufficient-coordinate failures raise.
+    """
     if model_id < 1:
         raise ValueError("model_id must be a positive integer.")
     atom_name = atom_name.strip()
