@@ -170,3 +170,6 @@ dev/*
 assets/*.pdf
 # assets/*.html
 .vscode/
+# Local regenerated handlebody ground-truth artifacts can exceed GitHub's file size limit.
+User_guide/benchmarks/results/handlebody_ground_truth/certified_thick_handlebody_embeddings.json.gz
+User_guide/benchmarks/results/handlebody_ground_truth/certified_thick_handlebody_embeddings_manifest.csv

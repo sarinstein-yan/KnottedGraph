@@ -5,6 +5,7 @@ import skimage.morphology as morph
 
 from knotted_graph.applications.material_surface import MaterialFermiSurface
 from knotted_graph.applications.materials import MaterialFermiSurface as LazyMaterialFermiSurface
+from knotted_graph.applications.materials import H_Ti3Al_sympy, H_YH3_sympy
 
 
 def test_material_public_import_resolves_optimized_class():
@@ -34,3 +35,21 @@ def test_material_cropped_skeleton_preserves_global_voxel_coordinates():
     cropped = MaterialFermiSurface._skeleton_image.func(stub)
 
     assert np.array_equal(np.argwhere(cropped), np.argwhere(full))
+
+
+def test_builtin_square_root_materials_pass_hermitian_check():
+    import sympy as sp
+
+    k_symbols = sp.symbols("kx ky kz", real=True)
+    for hamiltonian in (
+        H_Ti3Al_sympy(k_symbols=k_symbols),
+        H_YH3_sympy(k_symbols=k_symbols),
+    ):
+        surface = MaterialFermiSurface(
+            hamiltonian,
+            k_symbols=k_symbols,
+            dimension=5,
+            band_pair=(0, 1),
+            gap_tol=0.1,
+        )
+        assert surface.is_Hermitian is True
