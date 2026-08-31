@@ -152,7 +152,10 @@ full setup and the pinned upstream revision.
 The public documentation is available at
 <https://sarinstein-yan.github.io/KnottedGraph/>. It contains installation
 notes, generic quick starts, application tutorials, API references, and
-developer architecture notes.
+developer architecture notes. The
+[feature-status and workflow matrix](doc/feature_status.md) maps starting data
+and goals to the currently documented entry points, extras, return objects, and
+runtime boundaries.
 
 Build it locally with:
 
@@ -160,6 +163,7 @@ Build it locally with:
 uv run --group docs python -m sphinx -b html -W --keep-going doc doc/_build/html
 ```
 
-The root README intentionally stays generic. Physics-specific figures and the
-legacy nodal-skeleton walkthrough live under `doc/applications/` and
-`doc/assets/nodal/`.
+The root README intentionally stays generic. Physics-specific guidance lives
+under `doc/applications/`; the full executable walkthrough is
+[`User_guide/applications/01_physics_applications.ipynb`](User_guide/applications/01_physics_applications.ipynb),
+and publication figures live under `assets/paper/`.

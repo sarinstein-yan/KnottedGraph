@@ -88,6 +88,11 @@ their required numerical dependencies.
 | `notebook` | Interactive notebooks | Adds JupyterLab |
 | `all` | Every optional Python workflow | Also adds `igraph`; native system dependencies remain separate |
 
+If you know your starting data or intended result but not the relevant extra,
+use the canonical {doc}`feature_status` matrix. It links each currently
+documented route to its public call, return object, next step, and scaling
+boundary.
+
 The `dev` and `docs` names are dependency groups, not extras:
 
 ```bash

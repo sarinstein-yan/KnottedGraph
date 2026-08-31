@@ -5,6 +5,7 @@
   <div class="kg-link-row">
     <a href="installation.html">Install</a>
     <a href="quickstart.html">Quick Start</a>
+    <a href="feature_status.html">Choose A Workflow</a>
     <a href="user_guide/index.html">User Guide</a>
     <a href="troubleshooting.html">Troubleshooting</a>
   </div>
@@ -20,6 +21,7 @@
 
 installation
 quickstart
+feature_status
 user_guide/index
 troubleshooting
 api/index

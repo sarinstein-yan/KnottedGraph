@@ -120,5 +120,6 @@ uv run python examples/quickstart.py
 ```
 
 After this succeeds, choose the next workflow from the
-{doc}`user_guide/workflow_overview`. If it fails, continue with the
+{doc}`feature_status` matrix or the {doc}`user_guide/workflow_overview`. If it
+fails, continue with the
 {doc}`troubleshooting` guide.
