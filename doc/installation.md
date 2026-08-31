@@ -81,12 +81,18 @@ their required numerical dependencies.
 
 | Install target | Additional capability | Important boundary |
 | --- | --- | --- |
+| `knot-fields` | Analytic knot-field level sets, tubular diagnostics, and spatial-graph extraction | Field construction is available in the base install; sampled level-set extraction adds scikit-image |
 | `nodal` | Non-Hermitian nodal skeleton extraction | Adds `poly2graph`, scikit-image, PyVista, minorminer, and tabulate |
 | `surface` | Surface-mesh workflows | Adds PyVista |
 | `viz` | Interactive plots and publication-image export | Adds Plotly, Kaleido, PDF/image conversion packages |
 | `repulsion` | Python-side repulsive-layout I/O and visualization | Does not provide the native C++ solver |
 | `notebook` | Interactive notebooks | Adds JupyterLab |
 | `all` | Every optional Python workflow | Also adds `igraph`; native system dependencies remain separate |
+
+If you know your starting data or intended result but not the relevant extra,
+use the canonical {doc}`feature_status` matrix. It links each currently
+documented route to its public call, return object, next step, and scaling
+boundary.
 
 The `dev` and `docs` names are dependency groups, not extras:
 

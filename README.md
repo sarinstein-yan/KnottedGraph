@@ -42,6 +42,7 @@ The extras can also be selected individually:
 
 | Extra | Adds support for |
 | --- | --- |
+| `knot-fields` | Analytic knot-field level sets and spatial-graph extraction |
 | `nodal` | Non-Hermitian nodal skeleton extraction |
 | `surface` | Surface-mesh workflows backed by PyVista |
 | `viz` | Plotly and publication-image export tools |
@@ -152,7 +153,10 @@ full setup and the pinned upstream revision.
 The public documentation is available at
 <https://sarinstein-yan.github.io/KnottedGraph/>. It contains installation
 notes, generic quick starts, application tutorials, API references, and
-developer architecture notes.
+developer architecture notes. The
+[feature-status and workflow matrix](doc/feature_status.md) maps starting data
+and goals to the currently documented entry points, extras, return objects, and
+runtime boundaries.
 
 Build it locally with:
 
@@ -160,6 +164,7 @@ Build it locally with:
 uv run --group docs python -m sphinx -b html -W --keep-going doc doc/_build/html
 ```
 
-The root README intentionally stays generic. Physics-specific runnable examples
-live in `User_guide/applications/01_physics_applications.ipynb`; website figures
-used by the current Sphinx pages live under `doc/assets/site_figures/`.
+The root README intentionally stays generic. Physics-specific guidance lives
+under `doc/applications/`; the full executable walkthrough is
+[`User_guide/applications/01_physics_applications.ipynb`](User_guide/applications/01_physics_applications.ipynb),
+and publication figures live under `assets/paper/`.

@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -12,7 +13,9 @@ sys.path.insert(0, str(ROOT / "src"))
 project = "KnottedGraph"
 author = "Xianquan (Sarinstein) Yan, Hakan Akgün"
 copyright = "2026, KnottedGraph contributors"
-release = "0.2.0"
+release = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))[
+    "project"
+]["version"]
 
 extensions = [
     "myst_nb",
@@ -65,11 +68,14 @@ autodoc_mock_imports = [
     "tabulate",
 ]
 
-intersphinx_mapping = {
-    "python": ("https://docs.python.org/3", None),
-    "networkx": ("https://networkx.org/documentation/stable/", None),
-    "numpy": ("https://numpy.org/doc/stable/", None),
-    "sympy": ("https://docs.sympy.org/latest/", None),
-}
+if os.environ.get("KNOTTED_GRAPH_DOCS_OFFLINE") == "1":
+    intersphinx_mapping = {}
+else:
+    intersphinx_mapping = {
+        "python": ("https://docs.python.org/3", None),
+        "networkx": ("https://networkx.org/documentation/stable/", None),
+        "numpy": ("https://numpy.org/doc/stable/", None),
+        "sympy": ("https://docs.sympy.org/latest/", None),
+    }
 
 os.environ.setdefault("PYVISTA_OFF_SCREEN", "true")

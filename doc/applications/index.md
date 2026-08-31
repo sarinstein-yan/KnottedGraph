@@ -7,6 +7,8 @@
     <a href="https://github.com/sarinstein-yan/KnottedGraph/blob/Latest_Workplace/User_guide/applications/03_protein_applications.ipynb">Protein Applications Notebook</a>
     <a href="https://github.com/sarinstein-yan/KnottedGraph/blob/Latest_Workplace/User_guide/applications/02_mathematics_applications.ipynb">Mathematics Applications Notebook</a>
     <a href="https://github.com/sarinstein-yan/KnottedGraph/blob/Latest_Workplace/User_guide/applications/04_analytic_knot_fields.ipynb">Analytic Knot Fields Notebook</a>
+    <a href="https://github.com/sarinstein-yan/KnottedGraph/blob/Latest_Workplace/User_guide/applications/05_yamada_formula_discovery.ipynb">Yamada Formula Discovery Notebook</a>
+    <a href="https://github.com/sarinstein-yan/KnottedGraph/blob/Latest_Workplace/User_guide/applications/06_hamiltonian_yamada_phase_maps.ipynb">Hamiltonian Yamada Phase Maps Notebook</a>
   </div>
 </div>
 
