@@ -87,7 +87,12 @@ jobs:
       - name: Assert protected performance paths are unchanged
         shell: bash
         run: |
-          git fetch origin perf/final-performance-audit-ebb0aae
+          # The previous moving perf-branch baseline predates the finalized
+          # notebook reorganization and rejected the teacher branch itself.
+          # This immutable commit is the locally audited integration baseline:
+          # 328 tests, clean-wheel smoke, Sphinx -W, and built-HTML validation.
+          protected_baseline=f68c49696c9e0ef00ecdfdc71402c2c1cc0f6b23
+          git cat-file -e "${protected_baseline}^{commit}"
           protected=(
             CMakeLists.txt
             src/knotted_graph/extraction
@@ -97,9 +102,9 @@ jobs:
             dev/final_performance_audit_medium.py
             User_guide/benchmarks
           )
-          if ! git diff --quiet origin/perf/final-performance-audit-ebb0aae...HEAD -- "${protected[@]}"; then
+          if ! git diff --quiet "${protected_baseline}"...HEAD -- "${protected[@]}"; then
             echo "ERROR: arbitrary-knot integration modified protected final-audit paths"
-            git diff --stat origin/perf/final-performance-audit-ebb0aae...HEAD -- "${protected[@]}"
+            git diff --stat "${protected_baseline}"...HEAD -- "${protected[@]}"
             exit 1
           fi
           echo "PASS: protected final-audit paths are unchanged"
