@@ -160,10 +160,14 @@ cython_debug/
 # Project-local generated/development material
 *dev.ipynb
 dev/
+# Optional native dependencies and analysis outputs stay local.
+external/
+results/
 # Keep the reproducibility corpus path trackable even though other dev-only material
 # remains ignored. Existing tracked files under dev/ are unaffected by this rule.
 !dev/
 dev/*
+!dev/audit_protein_topology_science.py
 !dev/benchmark_data/
 !dev/benchmark_data/.gitkeep
 !dev/benchmark_data/topoly_random_cubic_v1.jsonl

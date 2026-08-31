@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import platform
 import shlex
 import subprocess
 from dataclasses import dataclass
@@ -9,7 +10,9 @@ from pathlib import Path
 
 DEFAULT_REPULSOR_ROOT = Path.cwd() / "external" / "Repulsor"
 DEFAULT_DRIVER_SOURCE = Path(__file__).resolve().with_name("repulsor_curve_driver.cpp")
-DEFAULT_DRIVER_BINARY = Path.cwd() / "build" / "repulsor_driver" / "repulsor_curve_driver"
+DEFAULT_DRIVER_BINARY = (
+    Path.cwd() / "build" / "repulsor_driver" / "repulsor_curve_driver"
+)
 
 
 @dataclass
@@ -71,17 +74,28 @@ def solver_path(path: Path, use_wsl: bool) -> str:
     return wsl_path(path) if use_wsl else str(path.resolve())
 
 
-def run_command(command: list[str], verbose: bool = True) -> subprocess.CompletedProcess[str]:
+def run_command(
+    command: list[str], verbose: bool = True
+) -> subprocess.CompletedProcess[str]:
     if verbose:
         print("+", " ".join(shlex.quote(str(part)) for part in command), flush=True)
-    return subprocess.run(
-        command,
-        check=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        capture_output=True,
-    )
+    try:
+        return subprocess.run(
+            command,
+            check=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            capture_output=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        diagnostics = (
+            exc.stderr or exc.stdout or "no compiler/solver diagnostics"
+        ).strip()
+        tail = "\n".join(diagnostics.splitlines()[-40:])
+        raise RuntimeError(
+            f"External command failed with exit code {exc.returncode}:\n{tail}"
+        ) from exc
 
 
 def build_driver(config: DriverConfig, force: bool = False) -> Path:
@@ -108,23 +122,39 @@ def build_driver(config: DriverConfig, force: bool = False) -> Path:
             print("Using existing Repulsor driver:", driver_binary)
         return driver_binary
 
-    compile_command = [
-        "g++",
-        "-std=c++20",
-        "-O2",
-        "-I",
-        solver_path(repulsor_root, use_wsl),
-        solver_path(driver_source, use_wsl),
-        "-o",
-        solver_path(driver_binary, use_wsl),
-        "-lopenblas",
-        "-llapack",
-        "-llapacke",
-        "-lfmt",
-        "-pthread",
-        "-lamd",
-        "-fpermissive",
-    ]
+    if platform.system() == "Darwin" and not use_wsl:
+        compile_command = [
+            "c++",
+            "-std=c++20",
+            "-O2",
+            "-fenable-matrix",
+            "-I",
+            solver_path(repulsor_root, use_wsl),
+            solver_path(driver_source, use_wsl),
+            "-o",
+            solver_path(driver_binary, use_wsl),
+            "-framework",
+            "Accelerate",
+            "-pthread",
+        ]
+    else:
+        compile_command = [
+            "g++",
+            "-std=c++20",
+            "-O2",
+            "-I",
+            solver_path(repulsor_root, use_wsl),
+            solver_path(driver_source, use_wsl),
+            "-o",
+            solver_path(driver_binary, use_wsl),
+            "-lopenblas",
+            "-llapack",
+            "-llapacke",
+            "-lfmt",
+            "-pthread",
+            "-lamd",
+            "-fpermissive",
+        ]
     if use_wsl:
         compile_command = ["wsl", *compile_command]
     run_command(compile_command, verbose=config.verbose)
@@ -194,7 +224,9 @@ def run_driver(
     if pinned_vertices is not None:
         command.extend(["--pinned-vertices", solver_path(pinned_vertices, use_wsl)])
     if curve_length_floors is not None:
-        command.extend(["--curve-length-floors", solver_path(curve_length_floors, use_wsl)])
+        command.extend(
+            ["--curve-length-floors", solver_path(curve_length_floors, use_wsl)]
+        )
     if options.free_special_vertices:
         command.append("--free-special-vertices")
     if use_wsl:

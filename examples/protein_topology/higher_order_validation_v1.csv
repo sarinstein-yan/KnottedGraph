@@ -1,0 +1,2 @@
+sample_id,source,source_format,pdb_id,chain_ids,allowed_crosslink_types,metadata_json
+5OSQ_A,5OSQ,pdb,5OSQ,A,disulfide|metal_coordination,"{""analysis_role"":""mixed_crosslink_higher_order_validation"",""selection_reason"":""predeclared framework stress case with 2 disulfides and 11 metal-coordination crosslinks""}"

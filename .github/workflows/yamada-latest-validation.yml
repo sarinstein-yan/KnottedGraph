@@ -13,10 +13,10 @@ on:
       - "tests/invariants/yamada/**"
       - "dev/run_yamada_sanity_checks.py"
       - "dev/application_yamada_regression.py"
-      - "User_guide/benchmarks/01_sanity_checks.ipynb"
-      - "User_guide/benchmarks/02_application_output_regression.ipynb"
-      - "User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling_final_push.ipynb"
-      - "User_guide/benchmarks/04_synthetic_ground_truth_validation.ipynb"
+      - "User_guide/benchmarks/01_yamada_sanity_checks.ipynb"
+      - "User_guide/benchmarks/02_application_regression_checks.ipynb"
+      - "User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb"
+      - "User_guide/benchmarks/04_thick_handlebody_validation.ipynb"
       - ".github/workflows/yamada-latest-validation.yml"
 
 permissions:
@@ -75,6 +75,6 @@ jobs:
           PYVISTA_OFF_SCREEN: "true"
           PLOTLY_RENDERER: json
         run: |
-          uv run --no-sync python dev/execute_notebook.py User_guide/benchmarks/01_sanity_checks.ipynb --timeout 7200
-          uv run --no-sync python dev/execute_notebook.py User_guide/benchmarks/02_application_output_regression.ipynb --timeout 7200
-          uv run --no-sync python dev/execute_notebook.py User_guide/benchmarks/04_synthetic_ground_truth_validation.ipynb --timeout 7200
+          uv run --no-sync python dev/execute_notebook.py User_guide/benchmarks/01_yamada_sanity_checks.ipynb --timeout 7200
+          uv run --no-sync python dev/execute_notebook.py User_guide/benchmarks/02_application_regression_checks.ipynb --timeout 7200
+          uv run --no-sync python dev/execute_notebook.py User_guide/benchmarks/04_thick_handlebody_validation.ipynb --timeout 7200

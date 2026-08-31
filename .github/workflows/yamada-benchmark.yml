@@ -18,11 +18,11 @@ on:
       - "dev/generate_topoly_random_cubic_corpus.py"
       - "dev/benchmark_data/topoly_random_cubic_v1.jsonl"
       - "tests/benchmarks/test_topoly_paper_setup.py"
-      - "User_guide/benchmarks/01_sanity_checks.ipynb"
-      - "User_guide/benchmarks/02_application_output_regression.ipynb"
-      - "User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling_final_push.ipynb"
-      - "User_guide/benchmarks/04_synthetic_ground_truth_validation.ipynb"
-      - "User_guide/benchmarks/06_paper_scaling_publication_figure_final_push.ipynb"
+      - "User_guide/benchmarks/01_yamada_sanity_checks.ipynb"
+      - "User_guide/benchmarks/02_application_regression_checks.ipynb"
+      - "User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb"
+      - "User_guide/benchmarks/04_thick_handlebody_validation.ipynb"
+      - "User_guide/benchmarks/06_subcubic_theta_formula_discovery.ipynb"
       - ".github/workflows/yamada-benchmark.yml"
 
 permissions:
@@ -98,9 +98,9 @@ jobs:
       fail-fast: false
       matrix:
         notebook:
-          - User_guide/benchmarks/01_sanity_checks.ipynb
-          - User_guide/benchmarks/02_application_output_regression.ipynb
-          - User_guide/benchmarks/04_synthetic_ground_truth_validation.ipynb
+          - User_guide/benchmarks/01_yamada_sanity_checks.ipynb
+          - User_guide/benchmarks/02_application_regression_checks.ipynb
+          - User_guide/benchmarks/04_thick_handlebody_validation.ipynb
     steps:
       - uses: actions/checkout@v4
         with:
@@ -146,7 +146,7 @@ jobs:
         env:
           MPLBACKEND: Agg
           PYVISTA_OFF_SCREEN: "true"
-        run: uv run --no-sync python dev/execute_notebook.py User_guide/benchmarks/02_application_output_regression.ipynb --timeout 7200
+        run: uv run --no-sync python dev/execute_notebook.py User_guide/benchmarks/02_application_regression_checks.ipynb --timeout 7200
 
   topoly-comparison:
     runs-on: ubuntu-latest

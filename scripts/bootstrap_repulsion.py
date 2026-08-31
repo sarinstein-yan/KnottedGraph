@@ -16,6 +16,22 @@ DEFAULT_REPULSOR_URL = "https://github.com/HenrikSchumacher/Repulsor.git"
 DEFAULT_REPULSOR_REF = "adc56b61f65f5958b59cbd7e1539f44ed0c5e993"
 
 
+def git_command(*args: str) -> list[str]:
+    """Use HTTPS for Repulsor's public GitHub submodules.
+
+    Upstream pins its nested submodules with SSH URLs.  The local override keeps
+    bootstrap non-interactive on machines without a configured GitHub SSH key
+    without modifying the upstream checkout.
+    """
+
+    return [
+        "git",
+        "-c",
+        "url.https://github.com/.insteadOf=git@github.com:",
+        *args,
+    ]
+
+
 def run(
     cmd: list[str],
     cwd: Path,
@@ -47,20 +63,15 @@ def require_tool(
 ) -> None:
     if shutil.which(name) is None:
         raise SystemExit(
-            f"Missing required tool: {name}. "
-            "Install it first, then rerun this script."
+            f"Missing required tool: {name}. Install it first, then rerun this script."
         )
 
 
 def in_virtualenv() -> bool:
-    return (
-        hasattr(sys, "real_prefix")
-        or sys.prefix
-        != getattr(
-            sys,
-            "base_prefix",
-            sys.prefix,
-        )
+    return hasattr(sys, "real_prefix") or sys.prefix != getattr(
+        sys,
+        "base_prefix",
+        sys.prefix,
     )
 
 
@@ -76,10 +87,7 @@ def parse_args() -> argparse.Namespace:
         "--repulsor-root",
         type=Path,
         default=DEFAULT_REPULSOR_ROOT,
-        help=(
-            "External Repulsor checkout path. "
-            "Default: external/Repulsor."
-        ),
+        help=("External Repulsor checkout path. Default: external/Repulsor."),
     )
     parser.add_argument(
         "--repulsor-url",
@@ -101,10 +109,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--skip-python-install",
         action="store_true",
-        help=(
-            "Skip installation of Python extras used by "
-            "repulsive-layout examples."
-        ),
+        help=("Skip installation of Python extras used by repulsive-layout examples."),
     )
     parser.add_argument(
         "--skip-clone",
@@ -123,11 +128,7 @@ def _resolve_ref(
 ) -> str:
     try:
         return output(
-            [
-                "git",
-                "rev-parse",
-                f"{ref}^{{commit}}",
-            ],
+            git_command("rev-parse", f"{ref}^{{commit}}"),
             cwd=root,
         )
     except subprocess.CalledProcessError as exc:
@@ -162,11 +163,7 @@ def _validate_existing_checkout(
         ref,
     )
     current = output(
-        [
-            "git",
-            "rev-parse",
-            "HEAD",
-        ],
+        git_command("rev-parse", "HEAD"),
         cwd=root,
     )
 
@@ -182,13 +179,7 @@ def _validate_existing_checkout(
         )
 
     run(
-        [
-            "git",
-            "submodule",
-            "update",
-            "--init",
-            "--recursive",
-        ],
+        git_command("submodule", "update", "--init", "--recursive"),
         cwd=root,
     )
     return root
@@ -223,43 +214,23 @@ def ensure_repulsor_checkout(
     )
 
     run(
-        [
-            "git",
-            "clone",
-            "--recursive",
-            url,
-            str(root),
-        ],
+        git_command("clone", "--recursive", url, str(root)),
         cwd=REPO_ROOT,
     )
 
     run(
-        [
-            "git",
-            "checkout",
-            "--detach",
-            ref,
-        ],
+        git_command("checkout", "--detach", ref),
         cwd=root,
     )
 
     run(
-        [
-            "git",
-            "submodule",
-            "update",
-            "--init",
-            "--recursive",
-        ],
+        git_command("submodule", "update", "--init", "--recursive"),
         cwd=root,
     )
 
-    if not root.joinpath(
-        "Repulsor.hpp"
-    ).exists():
+    if not root.joinpath("Repulsor.hpp").exists():
         raise SystemExit(
-            "Repulsor clone completed, but Repulsor.hpp "
-            f"was not found at {root}."
+            f"Repulsor clone completed, but Repulsor.hpp was not found at {root}."
         )
 
     return _validate_existing_checkout(
@@ -271,9 +242,7 @@ def ensure_repulsor_checkout(
 def main() -> None:
     args = parse_args()
 
-    if not REPO_ROOT.joinpath(
-        "pyproject.toml"
-    ).exists():
+    if not REPO_ROOT.joinpath("pyproject.toml").exists():
         raise SystemExit(
             f"Expected repository root at {REPO_ROOT}, "
             "but pyproject.toml was not found."
@@ -305,11 +274,7 @@ def main() -> None:
     )
 
     revision = output(
-        [
-            "git",
-            "rev-parse",
-            "HEAD",
-        ],
+        git_command("rev-parse", "HEAD"),
         cwd=repulsor_root,
     )
 
@@ -317,9 +282,7 @@ def main() -> None:
     print(f"  path:     {repulsor_root}")
     print(f"  revision: {revision}")
     print("Use it with:")
-    print(
-        f"  export REPULSOR_ROOT={repulsor_root}"
-    )
+    print(f"  export REPULSOR_ROOT={repulsor_root}")
     print(
         "The C++ driver is compiled lazily by "
         "knotted_graph.layout.repulsive.driver.build_driver()."

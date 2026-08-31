@@ -34,3 +34,21 @@ this repository.
 The reference KnottedGraph driver additionally links against OpenBLAS, LAPACK,
 LAPACKE, `fmt`, AMD/SuiteSparse, and pthreads. These are native system
 dependencies and are not installed by the Python `repulsion` extra.
+
+## Topoly
+
+The optional protein local-lasso adapter imports Topoly 1.1.0 when the
+`benchmark` extra is installed. Topoly is not copied into this repository.
+
+- Project: https://topoly.cent.uw.edu.pl/
+- Python package: `topoly==1.1.0`
+- License: BSD 3-Clause
+- Copyright: Copyright (c) 2019 Interdisciplinary Laboratory of Biological
+  Systems Modelling, University of Warsaw
+- Contributors listed upstream: Joanna Sulkowska, Wanda Niemyska, Paweł
+  Dąbrowski-Tumański, Paweł Pasznik, and Paweł Rubach
+
+The complete license text is distributed with the installed Topoly package in
+its `topoly-1.1.0.dist-info/licenses/LICENSE` file. KnottedGraph reports a
+missing or failed Topoly backend explicitly and does not interpret it as an
+absence of lasso motifs.

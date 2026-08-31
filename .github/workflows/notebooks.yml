@@ -59,7 +59,7 @@ jobs:
       fail-fast: false
       matrix:
         # Only bounded, self-contained notebooks belong in the automatic PR
-        # matrix. The full publication scaling experiment (03 -> 06) and the
+        # matrix. The resource-heavy scaling (03), formula-discovery (06), and
         # 200/300^3 physics gallery are intentionally handled separately below.
         notebook:
           - User_guide/00_user_guide.ipynb
@@ -69,10 +69,11 @@ jobs:
           - User_guide/applications/02_mathematics_applications.ipynb
           - User_guide/applications/03_protein_applications.ipynb
           - User_guide/applications/04_analytic_knot_fields.ipynb
-          - User_guide/benchmarks/01_sanity_checks.ipynb
-          - User_guide/benchmarks/02_application_output_regression.ipynb
-          - User_guide/benchmarks/04_synthetic_ground_truth_validation.ipynb
-          - User_guide/benchmarks/05_same_abstract_graph_distinct_embeddings.ipynb
+          - User_guide/benchmarks/01_yamada_sanity_checks.ipynb
+          - User_guide/benchmarks/02_application_regression_checks.ipynb
+          - User_guide/benchmarks/04_thick_handlebody_validation.ipynb
+          - User_guide/benchmarks/05_arbitrary_knot_fields.ipynb
+          - User_guide/benchmarks/07_protein_crosslink_topology.ipynb
 
     steps:
       - name: Check out optimization branch
@@ -123,7 +124,7 @@ jobs:
         run: uv run --no-sync python dev/execute_notebook.py "${{ matrix.notebook }}" --timeout 7200
 
   audit-publication-benchmark-contract:
-    name: Audit publication benchmark 03 -> 06 contract
+    name: Audit resource-heavy benchmark contracts
     needs: normalize-notebooks
     runs-on: ubuntu-24.04
     steps:
@@ -144,25 +145,32 @@ jobs:
           import json
           from pathlib import Path
 
-          producer_path = Path('User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling_final_push.ipynb')
-          consumer_path = Path('User_guide/benchmarks/06_paper_scaling_publication_figure_final_push.ipynb')
-          csv_name = '03_knottedgraph_vs_topoly_scaling_rows.csv'
+          scaling_path = Path('User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb')
+          discovery_path = Path('User_guide/benchmarks/06_subcubic_theta_formula_discovery.ipynb')
 
           def sources(path):
               data = json.loads(path.read_text(encoding='utf-8'))
               return '\n'.join(''.join(cell.get('source', [])) if isinstance(cell.get('source', []), list) else str(cell.get('source', '')) for cell in data.get('cells', []))
 
-          producer = sources(producer_path)
-          consumer = sources(consumer_path)
-          assert csv_name in producer, 'Notebook 03 no longer writes the publication scaling CSV.'
-          assert csv_name in consumer, 'Notebook 06 no longer reads notebook 03 publication scaling CSV.'
-          assert 'run notebook 03 first' in consumer.lower(), 'Notebook 06 must document its notebook-03 prerequisite.'
-          assert '[50, 100, 200, 300, 400, 500]' in producer, 'Notebook 03 full publication-size sweep was unexpectedly reduced.'
-          print('PASS: notebook 03 remains the producer and notebook 06 the consumer of the same publication CSV; full publication sweep is preserved.')
+          scaling = sources(scaling_path)
+          discovery = sources(discovery_path)
+          assert '03_knottedgraph_vs_topoly_scaling_rows.csv' in scaling, (
+              'Notebook 03 no longer writes its publication scaling CSV.'
+          )
+          assert '[50, 100, 200, 300, 400, 500]' in scaling, (
+              'Notebook 03 full publication-size sweep was unexpectedly reduced.'
+          )
+          assert 'MAX_DISCOVERY_M = 100' in discovery, (
+              'Notebook 06 full theta-family discovery range was unexpectedly reduced.'
+          )
+          assert '06_subcubic_theta_formula_discovery_full.csv' in discovery, (
+              'Notebook 06 no longer writes its full formula-discovery dataset.'
+          )
+          print('PASS: notebooks 03 and 06 preserve their independent resource-heavy benchmark contracts.')
           PY
 
   benchmark-pipeline:
-    name: Full publication benchmark notebooks 03 -> 06
+    name: Full resource-heavy benchmark notebooks 03 and 06
     if: github.event_name == 'workflow_dispatch'
     needs: normalize-notebooks
     runs-on: ubuntu-24.04
@@ -205,15 +213,15 @@ jobs:
           MPLBACKEND: Agg
           PYVISTA_OFF_SCREEN: 'true'
           PLOTLY_RENDERER: json
-        run: uv run --no-sync python dev/execute_notebook.py "User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling_final_push.ipynb" --timeout 7200
+        run: uv run --no-sync python dev/execute_notebook.py "User_guide/benchmarks/03_knottedgraph_vs_topoly_scaling.ipynb" --timeout 7200
 
-      - name: Consume scaling results with notebook 06
+      - name: Generate theta-family discovery results with notebook 06
         env:
           PYTHONNOUSERSITE: '1'
           MPLBACKEND: Agg
           PYVISTA_OFF_SCREEN: 'true'
           PLOTLY_RENDERER: json
-        run: uv run --no-sync python dev/execute_notebook.py "User_guide/benchmarks/06_paper_scaling_publication_figure_final_push.ipynb" --timeout 7200
+        run: uv run --no-sync python dev/execute_notebook.py "User_guide/benchmarks/06_subcubic_theta_formula_discovery.ipynb" --timeout 7200
 
   audit-resource-heavy-notebooks:
     name: Audit resource-heavy physics notebook

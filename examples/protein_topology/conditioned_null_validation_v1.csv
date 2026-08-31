@@ -1,0 +1,3 @@
+sample_id,source,source_format,pdb_id,chain_ids,allowed_crosslink_types,metadata_json
+4JP6_A,4JP6,pdb,4JP6,A,disulfide,"{""cohort_stratum"":""conditioned_null_validation_v1"",""selection_reason"":""stable same-motif/different-fingerprint conditioned-positive candidate""}"
+7WVR_A,7WVR,pdb,7WVR,A,disulfide,"{""cohort_stratum"":""conditioned_null_validation_v1"",""selection_reason"":""stable same-motif/different-fingerprint conditioned-positive candidate""}"

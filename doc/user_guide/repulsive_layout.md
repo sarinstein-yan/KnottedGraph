@@ -49,6 +49,10 @@ Record that override in any reproducibility report.
 
 ## Native build requirements
 
+On Apple Silicon/macOS, the driver uses the system Accelerate framework and
+standard C++20 `std::format`; no Homebrew numerical libraries are required.
+The compiler must support C++20 and the Clang matrix extension.
+
 The reference Linux/WSL driver build uses C++20 and links against:
 
 - OpenBLAS;
@@ -73,6 +77,43 @@ sudo apt-get install -y \
 
 The C++ driver is compiled lazily by
 `knotted_graph.layout.repulsive.driver.build_driver()`.
+
+## Protein topology gate
+
+Protein scans use Repulsor through
+`knotted_graph.applications.protein.relax_and_analyze_crosslinks`. The
+crosslink-supported bridgeless cyclic core is relaxed once. Graph junctions are
+pinned by default and move only with the explicit free-special-vertices option.
+Safe pre/post-decimation keeps at least three points per edge and accepts a
+shortcut only when its swept triangle stays clear of every non-adjacent
+segment. Edge-deletion scans proceed only after a matching before/after
+fingerprint or an explicitly accepted safe-step certificate.
+
+For an initial diagram that exceeds the exact crossing cap, strict fingerprint
+comparison is unavailable. An explicit
+`--allow-repulsor-certificate-only` opt-in permits the solver's valid swept
+safe-step certificate to gate the relaxed analysis instead. This mode is labeled
+`certificate_only`; it must not be reported as a before/after fingerprint match.
+
+Native build failures, exact-fingerprint failures, and fingerprint mismatches are
+returned as structured statuses and are retained by the batch output. A mismatch
+must not be silently treated as an acceptable geometry cleanup.
+
+```bash
+uv run kg-protein-topology proteins.csv results/protein_topology/relaxed \
+  --repulsion-steps 100 --repulsion-fallback-only \
+  --repulsion-free-special-vertices \
+  --repulsion-max-points-per-edge 32 \
+  --repulsion-decimation-passes 16 \
+  --repulsor-root external/Repulsor \
+  --allow-repulsor-certificate-only \
+  --rotation-samples 32 --max-crossings 40
+```
+
+The analogous `--null-repulsion-fallback-*` options affect only
+coordinate-preserving null graphs whose original exact baseline exceeds the
+crossing cap. `run_config.json` records every fallback, vertex-motion,
+pre-decimation, and post-decimation setting.
 
 ## Reproducibility check
 

@@ -14,10 +14,13 @@
 #include <sstream>
 #include <vector>
 
+#ifdef __APPLE__
+#include "submodules/Tensors/Accelerate.hpp"
+#else
 #define TOOLS_NO_STDFORMAT
 #include <fmt/format.h>
-
 #include "submodules/Tensors/OpenBLAS.hpp"
+#endif
 #include "Repulsor.hpp"
 
 using Int = std::int32_t;

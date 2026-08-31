@@ -1,0 +1,90 @@
+{
+  "query": {
+    "logical_operator": "and",
+    "nodes": [
+      {
+        "type": "terminal",
+        "service": "text",
+        "parameters": {
+          "attribute": "rcsb_entry_info.disulfide_bond_count",
+          "operator": "greater_or_equal",
+          "value": 2
+        }
+      },
+      {
+        "type": "terminal",
+        "service": "text",
+        "parameters": {
+          "attribute": "rcsb_entry_info.disulfide_bond_count",
+          "operator": "less_or_equal",
+          "value": 8
+        }
+      },
+      {
+        "type": "terminal",
+        "service": "text",
+        "parameters": {
+          "attribute": "rcsb_entry_info.deposited_polymer_monomer_count",
+          "operator": "greater_or_equal",
+          "value": 40
+        }
+      },
+      {
+        "type": "terminal",
+        "service": "text",
+        "parameters": {
+          "attribute": "rcsb_entry_info.deposited_polymer_monomer_count",
+          "operator": "less_or_equal",
+          "value": 300
+        }
+      },
+      {
+        "type": "terminal",
+        "service": "text",
+        "parameters": {
+          "attribute": "rcsb_entry_info.polymer_entity_count_protein",
+          "operator": "equals",
+          "value": 1
+        }
+      },
+      {
+        "type": "terminal",
+        "service": "text",
+        "parameters": {
+          "attribute": "rcsb_entry_info.resolution_combined",
+          "operator": "less_or_equal",
+          "value": 2.5
+        }
+      },
+      {
+        "type": "terminal",
+        "service": "text",
+        "parameters": {
+          "attribute": "rcsb_entry_info.structure_determination_methodology",
+          "operator": "exact_match",
+          "value": "experimental"
+        }
+      }
+    ],
+    "type": "group"
+  },
+  "request_options": {
+    "group_by": {
+      "aggregation_method": "sequence_identity",
+      "similarity_cutoff": 30
+    },
+    "group_by_return_type": "representatives",
+    "paginate": {
+      "rows": 200,
+      "start": 0
+    },
+    "results_verbosity": "compact",
+    "sort": [
+      {
+        "direction": "asc",
+        "sort_by": "rcsb_entry_info.resolution_combined"
+      }
+    ]
+  },
+  "return_type": "polymer_entity"
+}

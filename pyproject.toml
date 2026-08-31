@@ -105,6 +105,7 @@ all = [
 ]
 
 [project.scripts]
+kg-protein-topology = "knotted_graph.applications.protein.batch:main"
 kg-repulsive-layout = "knotted_graph.layout.repulsive.cli:main"
 
 [project.urls]

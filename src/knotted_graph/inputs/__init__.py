@@ -23,6 +23,16 @@ from .coordinate_chain import (
     from_coordinate_chain,
     validate_coords,
 )
+from .crosslinks import (
+    CrosslinkEndpoint,
+    CrosslinkRecord,
+    CrosslinkedProteinInputResult,
+    ResidueKey,
+    build_crosslinked_protein_graph,
+    load_crosslinked_protein,
+    parse_mmcif_crosslinks,
+    parse_pdb_crosslinks,
+)
 from .knot_catalogue import KnotCatalogueEntry, available_knot_names, get_knot_entry
 from .knot_field import DEFAULT_SPAN, KnotFunction, inverse_stereographic_s3, sample_s3
 from .knot_levelset import (
@@ -75,6 +85,9 @@ def __getattr__(name: str):
 __all__ = [
     "BraidValidationReport",
     "CoordinateInputResult",
+    "CrosslinkEndpoint",
+    "CrosslinkRecord",
+    "CrosslinkedProteinInputResult",
     "DEFAULT_SPAN",
     "FieldSample",
     "KnotCatalogueEntry",
@@ -90,14 +103,17 @@ __all__ = [
     "SpatialGraphInputResult",
     "SurfaceInputResult",
     "TubularConvergenceReport",
+    "ResidueKey",
     "available_knot_names",
     "braid_component_count",
     "braid_permutation",
     "braid_to_semiholomorphic",
+    "build_crosslinked_protein_graph",
     "coordinates_to_multigraph",
     "from_coordinate_chain",
     "from_gromacs_gro",
     "from_lammps_dump",
+    "load_crosslinked_protein",
     "from_mmcif_backbone",
     "from_nucleic_acid_backbone",
     "from_pdb_backbone",
@@ -108,6 +124,8 @@ __all__ = [
     "get_knot_entry",
     "infer_braid_strands",
     "inverse_stereographic_s3",
+    "parse_mmcif_crosslinks",
+    "parse_pdb_crosslinks",
     "sample_s3",
     "validate_coords",
     "validate_spatial_graph",

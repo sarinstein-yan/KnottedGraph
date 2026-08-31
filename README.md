@@ -35,6 +35,7 @@ pip install "knotted_graph[surface]"
 pip install "knotted_graph[viz]"
 pip install "knotted_graph[repulsion]"
 pip install "knotted_graph[notebook]"
+pip install "knotted_graph[benchmark]"  # includes optional Topoly lasso backend
 pip install "knotted_graph[all]"
 ```
 
@@ -55,9 +56,10 @@ The bootstrap checks out the exact Repulsor revision pinned for this
 KnottedGraph release and initializes its submodules. The C++ driver is compiled
 lazily on first use.
 
-The reference Linux/WSL build requires a C++20 compiler and the native libraries
-linked by the driver: OpenBLAS, LAPACK/LAPACKE, `fmt`, and AMD/SuiteSparse.
-On Debian/Ubuntu systems these can be installed with packages such as:
+On Apple Silicon/macOS the driver uses the system Accelerate framework and
+standard C++20 library, so no Homebrew numerical libraries are required. The
+reference Linux/WSL build requires OpenBLAS, LAPACK/LAPACKE, `fmt`, and
+AMD/SuiteSparse. On Debian/Ubuntu systems these can be installed with:
 
 ```bash
 sudo apt-get update
@@ -87,6 +89,43 @@ A = sp.Symbol("A")
 theta = ThetaGraph(3)
 compute_graph_yamada_polynomial(theta, A)
 ```
+
+Protein crosslink scans accept local PDB/mmCIF files or RCSB IDs. The workflow
+classifies physical crosslinks, extracts the embedded cyclic core, compares
+canonical Yamada fingerprints after single/pair/subset perturbations, and can
+condition embedding topology on an exact reference with identical abstract
+connectivity:
+
+```bash
+uv run kg-protein-topology \
+  examples/protein_topology/population_conditioned_recovered_v1.csv \
+  results/protein_topology/population_conditioned_recovered_v1 \
+  --rotation-samples 32 --max-crossings 40 --no-pairs \
+  --exact-subsets none --conditioned-robustness \
+  --null-replicates 20 --null-seed 2026 \
+  --null-embedding-mode coordinate_preserving \
+  --null-sampling-mode unique_disulfide_matchings \
+  --repulsion-steps 100 --repulsion-max-time 10 \
+  --repulsion-free-special-vertices \
+  --repulsion-decimation-passes 16 \
+  --repulsion-max-points-per-edge 32 --repulsion-fallback-only \
+  --null-repulsion-fallback-steps 100 \
+  --null-repulsion-fallback-max-time 10 \
+  --null-repulsion-fallback-free-special-vertices \
+  --null-repulsion-fallback-decimation-passes 16 \
+  --null-repulsion-fallback-max-points-per-edge 32 \
+  --repulsor-root external/Repulsor \
+  --allow-repulsor-certificate-only
+```
+
+See `User_guide/applications/03_protein_applications.ipynb` for a runnable cached
+example and `User_guide/benchmarks/07_protein_crosslink_topology.ipynb` for the
+dataset protocol. The batch writes full state tables, proven or bounded minimum
+retained fingerprint-generating sets, arbitrary-order conditioned cooperative
+subsets, stable local-lasso groups, exact abstract-isomorphism groups, unique
+null provenance, and guarded population statistics. The tracked manifests and
+their selection caveats are in `examples/protein_topology/README.md`.
+Fingerprint equality is not a proof of isotopy.
 
 For embedded spatial graphs, project the graph to a planar diagram and compute
 from the projection with the fewest crossings:

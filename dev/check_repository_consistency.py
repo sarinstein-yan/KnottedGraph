@@ -55,7 +55,7 @@ NOTEBOOK_CI_PATH_RE = re.compile(r"User_guide/[A-Za-z0-9_./-]+\.ipynb")
 
 def tracked_files() -> list[Path]:
     out = subprocess.run(
-        ["git", "ls-files"],
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
         cwd=ROOT,
         check=True,
         text=True,
@@ -93,7 +93,9 @@ def notebook_sources(path: Path) -> tuple[list[str], list[str]]:
 
 def resolve_repo_link(source: Path, target: str) -> Path | None:
     target = target.strip().split("#", 1)[0].split("?", 1)[0]
-    if not target or target.startswith(("http://", "https://", "mailto:", "data:", "#")):
+    if not target or target.startswith(
+        ("http://", "https://", "mailto:", "data:", "#")
+    ):
         return None
 
     candidate = (source.parent / target).resolve()
@@ -166,7 +168,9 @@ def check_inline_paths(source: Path, text: str, failures: list[str]) -> None:
 def check_source_hygiene(source: Path, text: str, failures: list[str]) -> None:
     for stale in sorted(STALE_TEXT):
         if stale in text:
-            failures.append(f"superseded path/name in {source.relative_to(ROOT)}: {stale}")
+            failures.append(
+                f"superseded path/name in {source.relative_to(ROOT)}: {stale}"
+            )
     local_match = ABSOLUTE_LOCAL_RE.search(text)
     if local_match:
         failures.append(
@@ -196,7 +200,9 @@ def check_knotted_graph_imports(
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    if alias.name == "knotted_graph" or alias.name.startswith("knotted_graph."):
+                    if alias.name == "knotted_graph" or alias.name.startswith(
+                        "knotted_graph."
+                    ):
                         try:
                             importlib.import_module(alias.name)
                         except Exception as exc:
@@ -206,7 +212,9 @@ def check_knotted_graph_imports(
                             )
             elif isinstance(node, ast.ImportFrom):
                 module = node.module or ""
-                if not (module == "knotted_graph" or module.startswith("knotted_graph.")):
+                if not (
+                    module == "knotted_graph" or module.startswith("knotted_graph.")
+                ):
                     continue
                 try:
                     imported_module = importlib.import_module(module)
@@ -273,7 +281,9 @@ def main() -> None:
         if path.is_relative_to(ROOT / "User_guide")
     }
     for missing in sorted(actual - ci_covered):
-        failures.append(f"User-guide notebook missing from notebook CI coverage: {missing}")
+        failures.append(
+            f"User-guide notebook missing from notebook CI coverage: {missing}"
+        )
     for stale in sorted(ci_covered - actual):
         failures.append(f"notebook CI references missing notebook: {stale}")
 
@@ -291,11 +301,15 @@ def main() -> None:
 
     version = pyproject["project"]["version"]
     package_init = texts[ROOT / "src" / "knotted_graph" / "__init__.py"]
-    package_match = re.search(r'^__version__\s*=\s*[\"\']([^\"\']+)', package_init, re.M)
+    package_match = re.search(
+        r"^__version__\s*=\s*[\"\']([^\"\']+)", package_init, re.M
+    )
     conf = texts[ROOT / "doc" / "conf.py"]
-    docs_match = re.search(r'^release\s*=\s*[\"\']([^\"\']+)', conf, re.M)
+    docs_match = re.search(r"^release\s*=\s*[\"\']([^\"\']+)", conf, re.M)
     if not package_match or package_match.group(1) != version:
-        failures.append(f"package __version__ does not match pyproject version {version}")
+        failures.append(
+            f"package __version__ does not match pyproject version {version}"
+        )
     if not docs_match or docs_match.group(1) != version:
         failures.append(f"doc release does not match pyproject version {version}")
 
