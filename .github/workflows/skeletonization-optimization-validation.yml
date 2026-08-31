@@ -92,7 +92,7 @@ jobs:
             uv run --no-sync python dev/normalize_notebook_environments.py --check
           } 2>&1 | tee /tmp/portability.log
 
-      - name: Run 04 synthetic ground-truth validation
+      - name: Run 04 thick-handlebody validation
         id: ground_truth
         if: steps.portability.outcome == 'success'
         continue-on-error: true
@@ -104,7 +104,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          uv run --no-sync python dev/execute_notebook.py User_guide/benchmarks/04_synthetic_ground_truth_validation.ipynb --timeout 7200 2>&1 | tee /tmp/ground_truth.log
+          uv run --no-sync python dev/execute_notebook.py User_guide/benchmarks/04_thick_handlebody_validation.ipynb --timeout 7200 2>&1 | tee /tmp/ground_truth.log
 
       - name: Run 01 Yamada sanity checks
         id: sanity
@@ -118,7 +118,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          uv run --no-sync python dev/execute_notebook.py User_guide/benchmarks/01_sanity_checks.ipynb --timeout 7200 2>&1 | tee /tmp/sanity.log
+          uv run --no-sync python dev/execute_notebook.py User_guide/benchmarks/01_yamada_sanity_checks.ipynb --timeout 7200 2>&1 | tee /tmp/sanity.log
 
       - name: Run 02 application output regression
         id: regression
@@ -132,7 +132,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          uv run --no-sync python dev/execute_notebook.py User_guide/benchmarks/02_application_output_regression.ipynb --timeout 7200 2>&1 | tee /tmp/regression.log
+          uv run --no-sync python dev/execute_notebook.py User_guide/benchmarks/02_application_regression_checks.ipynb --timeout 7200 2>&1 | tee /tmp/regression.log
 
       - name: Persist validation report
         if: always()

@@ -4,6 +4,7 @@ import ast
 import importlib
 import json
 import re
+import runpy
 import subprocess
 import tomllib
 from pathlib import Path
@@ -103,6 +104,13 @@ def resolve_repo_link(source: Path, target: str) -> Path | None:
         return None
     if candidate.exists():
         return candidate
+
+    # Raw HTML buttons in Sphinx source point at built pages. During a source
+    # audit, resolve them to the corresponding Markdown document.
+    if source.is_relative_to(ROOT / "doc") and candidate.suffix == ".html":
+        markdown_candidate = candidate.with_suffix(".md")
+        if markdown_candidate.exists():
+            return markdown_candidate
 
     if source.is_relative_to(ROOT / "doc"):
         stripped = target
@@ -292,11 +300,10 @@ def main() -> None:
     version = pyproject["project"]["version"]
     package_init = texts[ROOT / "src" / "knotted_graph" / "__init__.py"]
     package_match = re.search(r'^__version__\s*=\s*[\"\']([^\"\']+)', package_init, re.M)
-    conf = texts[ROOT / "doc" / "conf.py"]
-    docs_match = re.search(r'^release\s*=\s*[\"\']([^\"\']+)', conf, re.M)
+    docs_release = runpy.run_path(str(ROOT / "doc" / "conf.py")).get("release")
     if not package_match or package_match.group(1) != version:
         failures.append(f"package __version__ does not match pyproject version {version}")
-    if not docs_match or docs_match.group(1) != version:
+    if docs_release != version:
         failures.append(f"doc release does not match pyproject version {version}")
 
     if failures:
