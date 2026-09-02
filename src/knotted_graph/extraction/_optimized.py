@@ -5,8 +5,7 @@ from __future__ import annotations
 import networkx as nx
 import numpy as np
 
-from ._sparse_trace import trace_zero_radius
-from ._topology_optimized import constrained_persistent_extract
+from ._topology_optimized import persistent_extract
 
 _NEIGHBOR_OFFSETS = tuple(
     (dx, dy, dz)
@@ -20,14 +19,7 @@ _NEIGHBOR_OFFSETS = tuple(
 def _shorter_intermediate_offsets(
     delta: tuple[int, int, int],
 ) -> tuple[tuple[int, int, int], ...]:
-    """Return local intermediates that make a lattice edge redundant.
-
-    For a 26-neighbour displacement ``delta``, an occupied point at ``step``
-    suppresses the direct edge exactly when both ``step`` and ``delta-step``
-    are valid 26-neighbour moves with strictly smaller squared length.  This is
-    the same criterion used by the historical set-intersection cleanup, but it
-    can be tested while neighbour candidates are still dense NumPy arrays.
-    """
+    """Return local intermediates that make a lattice edge redundant."""
     edge_sq = sum(value * value for value in delta)
     if edge_sq <= 1:
         return ()
@@ -94,13 +86,7 @@ def _suppress_redundant_diagonal_shortcuts(
     coords: np.ndarray,
     adjacency: list[list[int]],
 ) -> list[list[int]]:
-    """Reference diagonal-shortcut reducer retained for tests/diagnostics.
-
-    Production adjacency construction now applies the identical local criterion
-    before Python adjacency lists are materialized.  Keeping this implementation
-    makes equivalence tests straightforward and preserves a readable statement
-    of the topology rule.
-    """
+    """Reference diagonal-shortcut reducer retained for tests/diagnostics."""
     if not adjacency:
         return adjacency
 
@@ -141,12 +127,7 @@ def _suppress_redundant_diagonal_shortcuts(
 def sparse_adjacency_exact_cropped(
     image: np.ndarray,
 ) -> tuple[np.ndarray, list[list[int]]]:
-    """Return deterministic, shortcut-reduced 26-neighbour lists.
-
-    Candidate neighbours are generated in vectorized batches.  Redundant
-    diagonal lattice edges are rejected in the same batch, avoiding the former
-    Python ``set`` conversion/intersection pass over the completed graph.
-    """
+    """Return deterministic, shortcut-reduced 26-neighbour lists."""
     occupied = [
         np.flatnonzero(image.any(axis=(1, 2))),
         np.flatnonzero(image.any(axis=(0, 2))),
@@ -220,7 +201,7 @@ def extract(
     adaptive_max_hops: int = 4,
     anomaly_ratio: float = 0.15,
 ) -> nx.MultiGraph:
-    """Extract a 3-D embedded graph using the canonical sparse optimizer."""
+    """Extract a 3-D embedded graph with multi-scale topology selection."""
     image = np.asarray(image, dtype=bool)
     if image.ndim != 3:
         raise ValueError("skeleton_image must be a three-dimensional array")
@@ -230,9 +211,7 @@ def extract(
         raise ValueError("max_junction_degree must be positive")
 
     coords, adjacency = sparse_adjacency_exact_cropped(image)
-    if max_junction_degree is None:
-        return trace_zero_radius(coords, adjacency)
-    return constrained_persistent_extract(
+    return persistent_extract(
         coords,
         adjacency,
         max_degree=max_junction_degree,
