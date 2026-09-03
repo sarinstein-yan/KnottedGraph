@@ -20,9 +20,12 @@ YAMADA_MARKERS = (
     "Yamada(",
 )
 
-PLOTTING_ONLY = {
-    Path("User_guide/benchmarks/06_paper_scaling_publication_figure.ipynb"),
-}
+PLOTTING_ONLY: set[Path] = set()
+
+BACKEND_PROVENANCE_PAIRS = (
+    ("native_available", "native_import_error"),
+    ("native_factorized_available", "factorized_import_error"),
+)
 
 # Notebook code must import the installed package. Prepending the raw source tree
 # bypasses editable-install import hooks and can hide the compiled _yamada_native
@@ -78,12 +81,22 @@ def validate_notebook(path: Path) -> list[str]:
     errors: list[str] = []
     code_texts: list[str] = []
 
+    cell_ids = [cell.get("id") for cell in notebook.get("cells", [])]
+    if any(not cell_id for cell_id in cell_ids):
+        errors.append("one or more cells have no nbformat cell id")
+    if len(cell_ids) != len(set(cell_ids)):
+        errors.append("notebook contains duplicate nbformat cell ids")
+
     for index, cell in enumerate(notebook.get("cells", [])):
         source = _cell_source(cell)
 
         if cell.get("cell_type") == "markdown":
             for error in _markdown_math_errors(source):
                 errors.append(f"cell {index}: {error}")
+            if r"\$$" in source:
+                errors.append(
+                    f"cell {index}: malformed escaped display-math delimiter"
+                )
             continue
 
         if cell.get("cell_type") != "code":
@@ -98,7 +111,7 @@ def validate_notebook(path: Path) -> list[str]:
         # Historical application regression intentionally injects each detached
         # worktree's source path in a subprocess so two revisions can be compared.
         # It is correctness-only, never a performance benchmark.
-        historical_regression = path.name == "02_application_output_regression.ipynb"
+        historical_regression = path.name == "02_application_regression_checks.ipynb"
         if not historical_regression:
             for pattern in SOURCE_OVERRIDE_PATTERNS:
                 if pattern.search(source):
@@ -118,10 +131,23 @@ def validate_notebook(path: Path) -> list[str]:
     relative = path.relative_to(ROOT)
     evaluates_yamada = any(marker in joined for marker in YAMADA_MARKERS)
     if evaluates_yamada and relative not in PLOTTING_ONLY:
-        if "native_available" not in joined or "native_import_error" not in joined:
+        has_provenance = any(
+            all(name in joined for name in pair)
+            for pair in BACKEND_PROVENANCE_PAIRS
+        )
+        if not has_provenance:
             errors.append(
-                "Yamada is evaluated without printing native_available/native_import_error; "
+                "Yamada is evaluated without native backend availability/error provenance; "
                 "backend provenance is required"
+            )
+
+    for index, cell in enumerate(notebook.get("cells", [])):
+        if cell.get("cell_type") != "code":
+            continue
+        if cell.get("execution_count") is not None or cell.get("outputs"):
+            errors.append(
+                f"cell {index}: notebooks must not commit transient execution state; "
+                "retain accepted results in tracked result artifacts"
             )
 
     return errors

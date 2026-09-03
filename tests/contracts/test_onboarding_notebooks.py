@@ -63,7 +63,8 @@ def _setup_source(path: Path) -> str:
         "".join(cell["source"])
         for cell in notebook["cells"]
         if cell["cell_type"] == "code"
-        and "installation_mode" in "".join(cell["source"])
+        and "KnottedGraph version:" in "".join(cell["source"])
+        and "missing_api" in "".join(cell["source"])
     ]
     assert len(matches) == 1, f"expected one setup cell in {path}"
     return matches[0]
@@ -91,11 +92,12 @@ def test_beginner_notebook_setup_supports_source_checkout(path):
         text=True,
     )
 
-    assert "source checkout:" in completed.stdout
+    assert f"KnottedGraph version: {PROJECT_VERSION}" in completed.stdout
+    assert str(ROOT / "src" / "knotted_graph" / "__init__.py") in completed.stdout
 
 
 @pytest.mark.parametrize("path", NOTEBOOKS, ids=lambda path: path.stem)
-def test_beginner_notebook_setup_supports_installed_package(path, tmp_path):
+def test_beginner_notebook_setup_is_independent_of_the_working_directory(path, tmp_path):
     env = os.environ.copy()
     env.pop("PYTHONPATH", None)
     completed = subprocess.run(
@@ -107,8 +109,8 @@ def test_beginner_notebook_setup_supports_installed_package(path, tmp_path):
         text=True,
     )
 
-    assert "installed package" in completed.stdout
-    assert f"version {PROJECT_VERSION}" in completed.stdout
+    assert f"KnottedGraph version: {PROJECT_VERSION}" in completed.stdout
+    assert "KnottedGraph:" in completed.stdout
 
 
 @pytest.mark.parametrize("path", NOTEBOOKS, ids=lambda path: path.stem)
@@ -117,7 +119,10 @@ def test_beginner_notebook_setup_checks_current_public_api(path):
 
     assert '"knotted_graph.core"' in source
     assert '"knotted_graph.projection"' in source
-    assert "missing the current" in source
+    assert "does not provide the current API" in source
+    assert "PYTHONPATH" not in source
+    assert "sys.path.insert" not in source
+    assert "SRC_ROOT" not in source
 
 
 def test_public_beginner_notebooks_have_no_internal_ownership_placeholders():

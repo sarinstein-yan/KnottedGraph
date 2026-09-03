@@ -21,11 +21,11 @@ def main() -> None:
     if not notebook.exists():
         raise FileNotFoundError(notebook)
 
-    # Force every subprocess/import launched by a notebook to see this checkout
-    # before site-packages. Individual notebooks retain their own local-source
-    # bootstrap as a second independent guard.
-    src = root / "src"
-    os.environ["PYTHONPATH"] = str(src) + os.pathsep + os.environ.get("PYTHONPATH", "")
+    # Execute with the active environment exactly as a user would.  The CI and
+    # PBS gates install this checkout before calling the helper; injecting the
+    # raw ``src`` directory here would bypass editable-install hooks and could
+    # hide packaging or native-extension failures.
+    os.environ.pop("PYTHONPATH", None)
     os.environ["PYTHONNOUSERSITE"] = "1"
     os.environ.setdefault("MPLBACKEND", "Agg")
     os.environ.setdefault("PYVISTA_OFF_SCREEN", "true")

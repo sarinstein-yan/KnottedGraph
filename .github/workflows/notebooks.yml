@@ -2,22 +2,21 @@ name: User-guide notebooks
 
 on:
   pull_request:
-    branches: [YAMADA_Optimization_LATEST]
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  normalize-notebooks:
-    name: Normalize notebook environments
+  validate-notebooks:
+    name: Validate notebook sources
     runs-on: ubuntu-24.04
     steps:
-      - name: Check out optimization branch
+      - name: Check out review branch
         uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref || github.ref_name }}
@@ -28,31 +27,14 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Normalize notebooks
-        run: python dev/normalize_notebook_environments.py
-
-      - name: Validate normalized notebooks
-        run: python dev/normalize_notebook_environments.py --check
-
-      - name: Commit normalized notebooks when needed
-        shell: bash
+      - name: Require normalized, portable notebooks
         run: |
-          if git diff --quiet -- User_guide; then
-            echo "Notebook environments already normalized."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add User_guide
-          git commit -m "Normalize notebook package environments"
-          BRANCH="${{ github.head_ref || github.ref_name }}"
-          git fetch origin "$BRANCH"
-          git rebase "origin/$BRANCH"
-          git push origin HEAD:"$BRANCH"
+          python dev/normalize_notebook_environments.py --check
+          python dev/validate_notebook_portability.py
 
   execute-notebook:
     name: ${{ matrix.notebook }}
-    needs: normalize-notebooks
+    needs: validate-notebooks
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     strategy:
@@ -73,7 +55,7 @@ jobs:
           - User_guide/benchmarks/02_application_regression_checks.ipynb
 
     steps:
-      - name: Check out optimization branch
+      - name: Check out review branch
         uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref || github.ref_name }}
@@ -122,10 +104,10 @@ jobs:
 
   audit-publication-benchmark-contract:
     name: Audit publication benchmark 03 contract
-    needs: normalize-notebooks
+    needs: validate-notebooks
     runs-on: ubuntu-24.04
     steps:
-      - name: Check out optimization branch
+      - name: Check out review branch
         uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref || github.ref_name }}
@@ -158,11 +140,11 @@ jobs:
   benchmark-pipeline:
     name: Full publication benchmark notebook 03
     if: github.event_name == 'workflow_dispatch'
-    needs: normalize-notebooks
+    needs: validate-notebooks
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     steps:
-      - name: Check out optimization branch
+      - name: Check out review branch
         uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref || github.ref_name }}
@@ -203,10 +185,10 @@ jobs:
 
   audit-resource-heavy-notebooks:
     name: Audit resource-heavy notebooks
-    needs: normalize-notebooks
+    needs: validate-notebooks
     runs-on: ubuntu-24.04
     steps:
-      - name: Check out optimization branch
+      - name: Check out review branch
         uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref || github.ref_name }}
