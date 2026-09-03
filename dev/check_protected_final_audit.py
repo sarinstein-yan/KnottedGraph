@@ -25,7 +25,7 @@ EXPECTED_GIT_OBJECTS = {
     "CMakeLists.txt": "42ed69ac293bba15f4209231b5ee309cd149dc74",
     "dev/final_performance_audit.py": "d1d6d2568aa77c0b16ad9afc4872efe2daec6ada",
     "dev/final_performance_audit_medium.py": "227e88fbe16c05b7e7c09d1e09cb6fe9323c36c6",
-    "src/knotted_graph/extraction": "0562d244c1635fe249160edd819e8c1bc061ea26",
+    "src/knotted_graph/extraction": "47c30ced3fd6499bcf02b32c49936c9ea128d2f5",
     "src/knotted_graph/invariants/yamada": "de87e490047cc4b9150218acfd5a89823d6d093e",
     "src/knotted_graph/projection": "e0354b5f80dda3ecd008da3eab46d3c578bd5804",
 }
