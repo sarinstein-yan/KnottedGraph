@@ -22,7 +22,7 @@ mix the system interpreter with uv's managed environment.
 The current 0.2 development API is newer than the legacy 0.1 release on PyPI.
 If the version command prints `0.1.x`, or imports such as
 `knotted_graph.core` and `knotted_graph.inputs` are missing, install the
-`Latest_Workplace` source branch as described in the [installation guide](installation.md).
+current review source branch as described in the [installation guide](installation.md).
 Do not combine files from the legacy wheel with a source checkout in the same
 environment.
 

@@ -37,6 +37,10 @@ html_static_path = ["_static"]
 html_extra_path = ["assets"]
 html_css_files = ["custom.css"]
 html_theme_options = {
+    "announcement": (
+        "Pre-alpha 0.2 development documentation. The indexed PyPI 0.1.2 "
+        "package uses the legacy API; follow the version-aware Installation page."
+    ),
     "github_url": "https://github.com/sarinstein-yan/KnottedGraph",
     "navigation_depth": 3,
     "show_nav_level": 2,

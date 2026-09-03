@@ -118,3 +118,18 @@ html[data-theme="dark"] .bd-article img {
   white-space: nowrap;
   font-weight: 600;
 }
+
+.kg-interactive-demo {
+  display: block;
+  width: 100%;
+  min-height: 760px;
+  border: 1px solid var(--pst-color-border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+@media (max-width: 900px) {
+  .kg-interactive-demo {
+    min-height: 1080px;
+  }
+}

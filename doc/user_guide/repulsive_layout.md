@@ -3,8 +3,8 @@
 <div class="kg-hero">
   <p class="kg-lead">The repulsive-layout workflow relaxes an embedded graph geometrically while preserving the intended graph topology. The Python package provides the workflow and topology checks; the optional Repulsor solver is an external C++ dependency.</p>
   <div class="kg-link-row">
-    <a href="https://github.com/sarinstein-yan/KnottedGraph/blob/Latest_Workplace/User_guide/01_getting_started.ipynb">Open Getting Started</a>
-    <a href="https://github.com/sarinstein-yan/KnottedGraph/blob/Latest_Workplace/User_guide/applications/03_protein_applications.ipynb">Open Protein Applications</a>
+    <a href="https://github.com/sarinstein-yan/KnottedGraph/blob/codex/arbitrary-knot-user-integration/User_guide/01_getting_started.ipynb">Open Getting Started</a>
+    <a href="https://github.com/sarinstein-yan/KnottedGraph/blob/codex/arbitrary-knot-user-integration/User_guide/applications/03_protein_applications.ipynb">Open Protein Applications</a>
   </div>
 </div>
 

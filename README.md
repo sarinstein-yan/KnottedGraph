@@ -1,74 +1,118 @@
-# `knotted_graph`
+# KnottedGraph
 
 ![pre-alpha](https://img.shields.io/badge/status-pre--alpha-red?style=flat-square)
 [![PyPI](https://img.shields.io/pypi/v/knotted_graph)](https://pypi.org/project/knotted_graph/)
-[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://sarinstein-yan.github.io/KnottedGraph/)
+[![Docs](https://img.shields.io/badge/docs-published%20snapshot-blue)](https://sarinstein-yan.github.io/KnottedGraph/)
 
-`knotted_graph` is a computational package for embedded spatial graphs,
-planar-diagram construction, and graph polynomial invariants. It provides a
-generic core for pure mathematical and computational workflows, with optional
-application packages built on top.
+**KnottedGraph turns geometric, graph, knot-field, and Hamiltonian-derived
+objects into inspectable spatial graphs, planar diagrams, and Yamada
+polynomials.** It separates the reusable graph/projection/invariant core from
+optional scientific applications such as nodal skeletons, analytic knot
+fields, material surfaces, and repulsive layouts.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/sarinstein-yan/KnottedGraph/Latest_Workplace/assets/paper/architecture.svg" width="780" alt="KnottedGraph architecture">
+  <img src="assets/paper/architecture.svg" width="780" alt="KnottedGraph architecture from geometric input to graph, projection, and invariant">
 </p>
 
-> [!IMPORTANT]
-> PyPI currently provides the legacy `knotted_graph` 0.1.2 package. Its
-> nodal-only package layout is not compatible with the 0.2.0 development API
-> documented in this repository. Until 0.2.0 is released, install the current
-> API from the `Latest_Workplace` branch as shown below.
+## Read this version note first
 
-## Installation
+KnottedGraph is pre-alpha and the public distribution channels are not yet
+synchronized:
 
-KnottedGraph requires Python 3.11 or newer. The recommended development setup
-uses [uv](https://docs.astral.sh/uv/):
+| Channel | Current state |
+| --- | --- |
+| This review branch | 0.2.0 development API on `codex/arbitrary-knot-user-integration` |
+| PyPI | legacy 0.1.2 nodal-only layout; incompatible with the examples below |
+| Published website | an earlier documentation snapshot; some pages from this branch are not deployed yet |
+
+Until 0.2 is released and the documentation branch is merged, reviewers and
+contributors should use the source checkout below. Do not use an unpinned
+`pip install knotted_graph` for these examples.
+
+## Start here
+
+Choose the row that matches the object you already have:
+
+| I have / I want | First entry point | Continue to |
+| --- | --- | --- |
+| No existing data; I want a five-minute test | [`examples/quickstart.py`](examples/quickstart.py) | [Quick Start](doc/quickstart.md) |
+| Ordered coordinates or CSV/DAT/JSON/NPY/TSV/TXT/XYZ | `knotted_graph.inputs.from_coordinate_chain` | [Input handling](doc/user_guide/input_adapters.md) |
+| A PDB/mmCIF backbone | `from_pdb_backbone` / `from_mmcif_backbone` | [Input handling](doc/user_guide/input_adapters.md) |
+| A GRO snapshot or first LAMMPS frame | `from_gromacs_gro` / `from_lammps_dump` | [Input handling](doc/user_guide/input_adapters.md) |
+| Node and edge CSV files for a spatial graph | `from_spatial_graph_csv` | [Input handling](doc/user_guide/input_adapters.md) |
+| A named knot/link, torus type, or braid word | `knotted_graph.inputs.KnotFunction` | [Analytic knot fields](doc/applications/analytic_knot_fields.md) |
+| An embedded `networkx.MultiGraph` | `knotted_graph.core.ensure_embedding` | [Workflow overview](doc/user_guide/workflow_overview.md) |
+| A nodal/material Hamiltonian in memory | application APIs under `knotted_graph.applications` | [Application routes](doc/applications/index.md) |
+| A native Repulsor layout workflow | `knotted_graph.layout.repulsive` | [Repulsive layout](doc/user_guide/repulsive_layout.md) |
+
+The complete availability, extra, return-type, and scaling matrix is in
+[`doc/feature_status.md`](doc/feature_status.md).
+
+## The core mental model
+
+Most graph-returning routes meet at one data contract:
+
+```text
+source data
+    -> input adapter / application extractor
+    -> networkx.MultiGraph(node pos, edge pts)
+    -> embedding validation and cleanup
+    -> regular planar projection
+    -> PD-code data
+    -> Yamada polynomial + projection provenance
+```
+
+- Every graph node has a finite three-vector `pos`.
+- Every graph edge has sampled 3-D geometry in `pts`; its first and last
+  points agree with the endpoint node positions.
+- A crossing visible in a 2-D projection is not automatically a graph vertex.
+- High-level input loaders return a result object with `.graph` (or `.mesh` for
+  surface input), `.issues`, identifiers, and source metadata.
+- Closure, chain/model selection, coordinate units, and projection choice are
+  scientific decisions and should be recorded explicitly.
+
+## Install the current review build
+
+KnottedGraph requires Python 3.11 or newer. The recommended environment uses
+[uv](https://docs.astral.sh/uv/):
 
 ```bash
-git clone --branch Latest_Workplace --single-branch \
+git clone --branch codex/arbitrary-knot-user-integration --single-branch \
   https://github.com/sarinstein-yan/KnottedGraph.git
 cd KnottedGraph
 uv sync --group dev
+uv run python examples/quickstart.py
 ```
 
-`uv sync --group dev` installs the base library and its test tools, but no
-optional feature extras. To install every Python extra as well, use:
+The base installation covers spatial-graph data structures, embedding tools,
+projection/PD-code construction, and Yamada evaluation. Install optional
+features only when needed:
 
 ```bash
+uv sync --group dev --extra knot-fields --extra notebook
+# or, for the full development/test environment:
 uv sync --group dev --all-extras
 ```
 
-The extras can also be selected individually:
-
-| Extra | Adds support for |
+| Extra | Adds |
 | --- | --- |
-| `knot-fields` | Analytic knot-field level sets and spatial-graph extraction |
-| `nodal` | Non-Hermitian nodal skeleton extraction |
-| `surface` | Surface-mesh workflows backed by PyVista |
+| `knot-fields` | Sampled analytic knot-field level sets and graph extraction |
+| `nodal` | Nodal skeleton and Hamiltonian workflows |
+| `surface` | PyVista surface-mesh loading |
 | `viz` | Plotly and publication-image export tools |
-| `repulsion` | Python-side repulsive-layout I/O and visualization |
+| `repulsion` | Python helpers for the separately installed Repulsor backend |
 | `notebook` | JupyterLab |
-| `all` | All optional Python workflows, plus `igraph` |
+| `benchmark` | Topoly comparison dependency |
+| `all` | All optional Python workflows |
 
-For example, install only the surface and notebook workflows with:
+See the [installation guide](doc/installation.md) for pip-based source
+installation, native dependencies, and environment verification. See
+[troubleshooting](doc/troubleshooting.md) if an import, optional extra, native
+backend, projection, or headless-rendering step fails.
 
-```bash
-uv sync --group dev --extra surface --extra notebook
-```
+## Five-minute Quick Start
 
-The `repulsion` extra does not install the separate C++ Repulsor solver or its
-native libraries. See the
-[repulsive-layout setup](doc/user_guide/repulsive_layout.md) before using that
-backend. The complete installation matrix and a plain-`pip` source-install
-alternative are in [the installation guide](doc/installation.md).
-If setup or the smoke test fails, start with the
-[troubleshooting guide](doc/troubleshooting.md).
-
-## Quick Start
-
-The shortest deterministic example computes a nonzero Yamada polynomial for
-the crossing-free theta graph. We use `Y` consistently as the polynomial
-variable:
+The smallest deterministic nonzero example is the crossing-free theta graph:
 
 ```python
 import sympy as sp
@@ -88,83 +132,54 @@ Expected output:
 Upsilon(Theta_3; Y) = -Y**2 - Y - 2 - 1/Y - 1/Y**2
 ```
 
-This value is nonzero because the three parallel edges contain no bridge. A
-graph with a bridge has zero Yamada polynomial, so a single open edge is not a
-useful installation smoke test.
-
-Run the complete example to evaluate both the abstract graph and a planar 3D
-embedding of the same theta graph:
+Run the maintained example to compare this result with an embedded graph and a
+fixed regular projection:
 
 ```bash
 uv run python examples/quickstart.py
 ```
 
-The embedded calculation fixes the projection direction for reproducibility,
-uses one worker (`n_jobs=1`), verifies zero projected crossings, and checks that
-its result equals the abstract calculation. See the
-[annotated quick start](doc/quickstart.md) for the full embedded code.
+The example deliberately uses `n_jobs=1`, reports the selected crossing count,
+and verifies that the abstract and embedded calculations agree.
 
-The non-Hermitian nodal-skeleton workflow is an optional application package:
+## What the package currently does not claim
 
-```python
-from knotted_graph.applications.nodal import NodalSkeleton
-from knotted_graph.applications.nodal.models import hopf_link_bloch_vector
-```
+The presence of a format in a research figure does not imply a public parser.
+There is currently no generic public adapter for GraphML, SWC, arbitrary graph
+JSON, NPZ scalar/vector volumes, Hamiltonian files, or general edge lists.
+Hamiltonian and field workflows presently start from in-memory objects or
+application-specific conversion code. Surface loading returns a
+`PyVista.PolyData`; it does not automatically choose a scientifically valid
+skeletonization route.
 
-Install the `nodal` extra before using these imports.
+Yamada state evaluation can grow exponentially with projected crossing count.
+Inspect the selected projection and use explicit worker/resource settings before
+running large calculations.
 
-## Repulsive-layout native dependency
+## Documentation map
 
-For a reproducible source checkout, use the repository bootstrap:
+- [Installation](doc/installation.md): versions, environments, extras, native boundaries.
+- [Quick Start](doc/quickstart.md): copyable graph-to-invariant example with expected output.
+- [Input handling](doc/user_guide/input_adapters.md): supported formats, result objects, closure, units, and errors.
+- [Workflow overview](doc/user_guide/workflow_overview.md): how the stages fit together.
+- [Projection and Yamada](doc/user_guide/projection_yamada.md): projections, PD codes, provenance, and scaling.
+- [Feature-status matrix](doc/feature_status.md): public/application/external routes and return types.
+- [Application tutorials](doc/applications/index.md): mathematical, physical, knot-field, and reproduction workflows.
+- [API reference](doc/api/index.md): public calls grouped by subsystem.
+- [Troubleshooting](doc/troubleshooting.md): symptom-based recovery.
 
-```bash
-uv sync --extra repulsion
-uv run python scripts/bootstrap_repulsion.py --skip-python-install
-export REPULSOR_ROOT="$PWD/external/Repulsor"
-```
+The maintained notebooks live under [`User_guide/`](User_guide/). Introductory
+notebooks are distinct from publication-reproduction and benchmark notebooks;
+the latter may require native backends, cached data, and substantially more
+time or memory.
 
-Inside an activated conventional venv that provides pip, the bootstrap can
-instead install the Python extra itself with `python scripts/bootstrap_repulsion.py`.
-
-The bootstrap checks out the exact Repulsor revision pinned for this
-KnottedGraph release and initializes its submodules. The C++ driver is compiled
-lazily on first use.
-
-The reference Linux/WSL build requires a C++20 compiler and the native libraries
-linked by the driver: OpenBLAS, LAPACK/LAPACKE, `fmt`, and AMD/SuiteSparse. On
-Debian/Ubuntu systems these can be installed with packages such as:
-
-```bash
-sudo apt-get update
-sudo apt-get install -y \
-  g++ \
-  libopenblas-dev \
-  liblapack-dev \
-  liblapacke-dev \
-  libfmt-dev \
-  libsuitesparse-dev
-```
-
-See `doc/user_guide/repulsive_layout.md` and `THIRD_PARTY_NOTICES.md` for the
-full setup and the pinned upstream revision.
-
-## Documentation
-
-The public documentation is available at
-<https://sarinstein-yan.github.io/KnottedGraph/>. It contains installation
-notes, generic quick starts, application tutorials, API references, and
-developer architecture notes. The
-[feature-status and workflow matrix](doc/feature_status.md) maps starting data
-and goals to the currently documented entry points, extras, return objects, and
-runtime boundaries.
-
-Build it locally with:
+Build the website locally with warnings treated as errors:
 
 ```bash
 uv run --group docs python -m sphinx -b html -W --keep-going doc doc/_build/html
 ```
 
-The root README intentionally stays generic. Physics-specific guidance lives
-under `doc/applications/`; the full executable walkthrough is
-[`User_guide/applications/01_physics_applications.ipynb`](User_guide/applications/01_physics_applications.ipynb),
-and publication figures live under `assets/paper/`.
+For questions or reproducible bug reports, use the
+[GitHub issue tracker](https://github.com/sarinstein-yan/KnottedGraph/issues)
+and include the package version, commit, Python version, optional extras, and
+native-backend status.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 from html.parser import HTMLParser
 from pathlib import Path
 import re
@@ -20,7 +21,7 @@ GITHUB_FILE_URL = re.compile(
     r"https://(?:"
     r"github\.com/sarinstein-yan/KnottedGraph/(?:blob|raw)/"
     r"|raw\.githubusercontent\.com/sarinstein-yan/KnottedGraph/"
-    r")([^/\s)\"'>]+)/([^\s)\"'>]+)"
+    r")([^\s)\"'>]+)"
 )
 
 
@@ -48,10 +49,19 @@ def test_readme_local_links_resolve_inside_the_repository():
 def test_fixed_github_file_links_share_one_ref_and_resolve_locally():
     matches: list[tuple[str, str]] = []
     for path in _public_markdown_files():
-        matches.extend(GITHUB_FILE_URL.findall(path.read_text(encoding="utf-8")))
+        for target in GITHUB_FILE_URL.findall(path.read_text(encoding="utf-8")):
+            decoded = unquote(target.split("#", 1)[0])
+            parts = decoded.split("/")
+            for split_at in range(1, len(parts)):
+                relative_path = "/".join(parts[split_at:])
+                if (ROOT / relative_path).exists():
+                    matches.append(("/".join(parts[:split_at]), relative_path))
+                    break
+            else:
+                raise AssertionError(f"GitHub file URL has no local target: {target}")
 
     assert matches
-    assert {ref for ref, _ in matches} == {"Latest_Workplace"}
+    assert {ref for ref, _ in matches} == {"codex/arbitrary-knot-user-integration"}
     for _, relative_path in matches:
         local_path = ROOT / unquote(relative_path.split("#", 1)[0])
         assert local_path.exists(), local_path
@@ -80,18 +90,31 @@ def test_current_version_is_reflected_in_onboarding_prose():
             f"**{major_minor} development API**"
         ),
         ROOT / "User_guide" / "02_core_workflows.ipynb": (
-            f"{major_minor} is released"
+            f"**{major_minor} development API**"
         ),
         ROOT / "User_guide" / "03_advanced_and_reproduction.ipynb": (
-            f"installed {major_minor} package"
+            f"**{major_minor} development API**"
         ),
     }
 
     for path, expected in expected_references.items():
         assert expected in path.read_text(encoding="utf-8")
-    assert "legacy `knotted_graph` 0.1.2" in (ROOT / "README.md").read_text(
-        encoding="utf-8"
-    )
+    assert "legacy 0.1.2" in (ROOT / "README.md").read_text(encoding="utf-8")
+
+
+def test_interactive_phase_map_asset_is_pinned_and_linked() -> None:
+    asset = ROOT / "doc" / "assets" / "demos" / "hamiltonian_yamada_phase_map.html"
+    page = (
+        ROOT / "doc" / "applications" / "hamiltonian_yamada_phase_maps.md"
+    ).read_text(encoding="utf-8")
+    provenance = (asset.parent / "README.md").read_text(encoding="utf-8")
+
+    digest = hashlib.sha256(asset.read_bytes()).hexdigest()
+    assert digest == "a7a82b9ba83b3b21c41d11bda5653168547e81442eac6a02d77d2395fc5bc618"
+    assert digest in provenance
+    assert "hamiltonian_yamada_plotly_region_geometry_v14_nodal_only" in provenance
+    assert "../demos/hamiltonian_yamada_phase_map.html" in page
+    assert "<iframe" in page
 
 
 class _PageParser(HTMLParser):

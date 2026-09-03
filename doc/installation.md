@@ -2,8 +2,10 @@
 
 ## Choose the API version first
 
-KnottedGraph requires Python 3.11 or newer. This documentation describes the
-0.2.0 development API on the repository's `Latest_Workplace` branch.
+KnottedGraph requires Python 3.11 or newer. This review documentation describes
+the 0.2.0 development API on `codex/arbitrary-knot-user-integration`. The
+published website is still an earlier snapshot and is not the source of truth
+for this review.
 
 PyPI currently provides version 0.1.2. That release contains the legacy,
 nodal-only package layout and is not compatible with the imports or examples in
@@ -15,7 +17,7 @@ API from GitHub rather than running an unpinned `pip install knotted_graph`.
 Install [uv](https://docs.astral.sh/uv/), then clone the documented branch:
 
 ```bash
-git clone --branch Latest_Workplace --single-branch \
+git clone --branch codex/arbitrary-knot-user-integration --single-branch \
   https://github.com/sarinstein-yan/KnottedGraph.git
 cd KnottedGraph
 ```
@@ -57,7 +59,7 @@ uv run pytest
 ## Source setup with pip
 
 If uv is unavailable, create and activate a Python 3.11-or-newer virtual
-environment, clone `Latest_Workplace` as above, and install the checkout:
+environment, clone the review branch as above, and install the checkout:
 
 ```bash
 python -m pip install --upgrade pip
