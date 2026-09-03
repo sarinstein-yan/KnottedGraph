@@ -54,6 +54,11 @@ jobs:
           assert native_factorized_available(), "CI compiler is available but factorized diagram extension was not built"
           PY
 
+      - name: Audit repository consistency in the base environment
+        env:
+          PYTHONNOUSERSITE: '1'
+        run: uv run --no-sync python dev/check_repository_consistency.py
+
       - name: Run base-dependency tests
         run: >
           uv run --no-sync pytest -q
@@ -97,7 +102,6 @@ jobs:
 
       - name: Audit repository consistency
         env:
-          PYTHONPATH: ${{ github.workspace }}/src
           PYTHONNOUSERSITE: '1'
         run: uv run --no-sync python dev/check_repository_consistency.py
 

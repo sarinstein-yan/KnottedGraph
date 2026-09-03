@@ -16,7 +16,15 @@ on:
       - "tests/applications/test_knot_field_deformations.py"
       - "User_guide/applications/04_analytic_knot_fields.ipynb"
       - "User_guide/00_user_guide.ipynb"
+      - "User_guide/benchmarks/**"
       - "doc/applications/analytic_knot_fields.md"
+      - "CMakeLists.txt"
+      - "dev/final_performance_audit.py"
+      - "dev/final_performance_audit_medium.py"
+      - "src/knotted_graph/extraction/**"
+      - "src/knotted_graph/invariants/yamada/**"
+      - "src/knotted_graph/projection/**"
+      - "dev/check_protected_final_audit.py"
       - "pyproject.toml"
       - ".github/workflows/arbitrary-knot-fields-final-audit.yml"
   push:
@@ -86,25 +94,4 @@ jobs:
           fetch-depth: 0
       - name: Assert protected performance paths are unchanged
         shell: bash
-        run: |
-          # The previous moving perf-branch baseline predates the finalized
-          # notebook reorganization and rejected the teacher branch itself.
-          # This immutable commit is the locally audited integration baseline:
-          # 328 tests, clean-wheel smoke, Sphinx -W, and built-HTML validation.
-          protected_baseline=f68c49696c9e0ef00ecdfdc71402c2c1cc0f6b23
-          git cat-file -e "${protected_baseline}^{commit}"
-          protected=(
-            CMakeLists.txt
-            src/knotted_graph/extraction
-            src/knotted_graph/invariants/yamada
-            src/knotted_graph/projection
-            dev/final_performance_audit.py
-            dev/final_performance_audit_medium.py
-            User_guide/benchmarks
-          )
-          if ! git diff --quiet "${protected_baseline}"...HEAD -- "${protected[@]}"; then
-            echo "ERROR: arbitrary-knot integration modified protected final-audit paths"
-            git diff --stat "${protected_baseline}"...HEAD -- "${protected[@]}"
-            exit 1
-          fi
-          echo "PASS: protected final-audit paths are unchanged"
+        run: python3 dev/check_protected_final_audit.py

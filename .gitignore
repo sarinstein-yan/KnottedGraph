@@ -167,6 +167,7 @@ dev/*
 !dev/benchmark_data/
 !dev/benchmark_data/.gitkeep
 !dev/benchmark_data/topoly_random_cubic_v1.jsonl
+!dev/check_protected_final_audit.py
 assets/*.pdf
 # assets/*.html
 .vscode/
