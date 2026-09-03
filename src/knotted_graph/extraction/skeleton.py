@@ -74,7 +74,12 @@ def skeleton_image_to_graph(
     adaptive_max_hops: int = 4,
     anomaly_ratio: float = 0.15,
 ) -> nx.MultiGraph:
-    """Convert a 3-D skeleton image with the canonical sparse extractor."""
+    """Convert a 3-D skeleton image with multi-scale topology selection.
+
+    Nearby junction-zone scales are compared by default even when no valence is
+    known. ``max_junction_degree`` supplies an optional physical prior; ``None``
+    leaves valence unconstrained rather than disabling persistence.
+    """
     return _optimized_extract(
         np.asarray(skeleton_image),
         max_junction_degree=max_junction_degree,
