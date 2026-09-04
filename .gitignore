@@ -173,3 +173,14 @@ assets/*.pdf
 # Local regenerated handlebody ground-truth artifacts can exceed GitHub's file size limit.
 User_guide/benchmarks/results/handlebody_ground_truth/certified_thick_handlebody_embeddings.json.gz
 User_guide/benchmarks/results/handlebody_ground_truth/certified_thick_handlebody_embeddings_manifest.csv
+
+# Local raw handlebody timing intermediates. The compact plotting source above
+# is versioned instead:
+# User_guide/benchmarks/results/04_thick_handlebody_timing_distributions_source.csv
+User_guide/benchmarks/results/04_thick_handlebody_pipeline_timings.csv
+User_guide/benchmarks/results/04_thick_handlebody_pipeline_timing_summary.csv
+User_guide/benchmarks/results/04_thick_handlebody_recovered_yamada_split_timings.csv
+User_guide/benchmarks/results/04_thick_handlebody_pd_topoly_comparison.csv
+User_guide/benchmarks/results/04_thick_handlebody_library_timing_distributions.*
+assets/paper/handlebody-timing-distributions.png
+assets/paper/handlebody-timing-distributions.svg
