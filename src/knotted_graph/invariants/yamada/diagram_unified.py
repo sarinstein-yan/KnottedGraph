@@ -87,4 +87,4 @@ def compute_unified_laurent(prepared, *, memo=None, stats=None):
         stats["max_crossings_seen"] = max(
             int(stats.get("max_crossings_seen", 0)), len(prepared.crossing_ids)
         )
-    return compute_factorized_frontier_laurent(prepared)
+    return compute_factorized_frontier_laurent(prepared, stats=stats)

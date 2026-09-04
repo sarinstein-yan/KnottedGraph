@@ -36,6 +36,64 @@ from knotted_graph.core import (
 from knotted_graph.extraction import skeleton_image_to_graph, skeletonize_volume
 
 
+def _is_hermitian_symbolic_or_numeric(
+    matrix: sp.Matrix,
+    k_symbols,
+    span,
+    *,
+    atol: float = 1e-8,
+) -> bool:
+    """Return whether ``matrix`` is Hermitian on the sampled real k-domain.
+
+    The material examples include floating-point square-root/trigonometric
+    expressions.  For those, ``simplify(H-H.H)`` can leave harmless conjugates
+    unresolved or take a very long path through trigonometric simplification.
+    The symbolic check is kept as the first gate, and a deterministic numerical
+    check over the real k-domain handles the remaining Hermitian cases.
+    """
+
+    diff = matrix - matrix.H
+    zero = sp.zeros(matrix.rows, matrix.cols)
+    try:
+        if diff.applyfunc(lambda value: sp.simplify(value)) == zero:
+            return True
+    except Exception:
+        pass
+
+    try:
+        funcs = [
+            [
+                sp.lambdify(k_symbols, diff[i, j], "numpy")
+                for j in range(matrix.cols)
+            ]
+            for i in range(matrix.rows)
+        ]
+        spans = np.asarray(span, dtype=float)
+        lo = spans[:, 0]
+        hi = spans[:, 1]
+        samples = np.vstack(
+            [
+                (lo + hi) / 2.0,
+                lo + 0.2113248654051871 * (hi - lo),
+                lo + 0.7886751345948129 * (hi - lo),
+                np.array([lo[0] + 0.37 * (hi[0] - lo[0]), lo[1] + 0.59 * (hi[1] - lo[1]), lo[2] + 0.73 * (hi[2] - lo[2])]),
+                np.array([lo[0] + 0.83 * (hi[0] - lo[0]), lo[1] + 0.31 * (hi[1] - lo[1]), lo[2] + 0.47 * (hi[2] - lo[2])]),
+            ]
+        )
+        max_error = 0.0
+        for point in samples:
+            evaluated = np.empty((matrix.rows, matrix.cols), dtype=np.complex128)
+            for i in range(matrix.rows):
+                for j in range(matrix.cols):
+                    evaluated[i, j] = funcs[i][j](*point)
+            if not np.isfinite(evaluated).all():
+                return False
+            max_error = max(max_error, float(np.max(np.abs(evaluated))))
+        return max_error <= atol
+    except Exception:
+        return False
+
+
 class MaterialFermiSurface(NodalSkeleton):
     """Analyze a Hermitian multiband material Hamiltonian.
 
@@ -70,6 +128,14 @@ class MaterialFermiSurface(NodalSkeleton):
     compute_berry
         Preserved only as an explicit guard.  Berry curvature is not computed by
         this Hermitian multiband class.
+    check_hermitian
+        Whether to validate ``H(k)=H(k)†`` before sampling.  Keep this enabled
+        for unknown Hamiltonians; disable it only for trusted Hermitian models
+        in large scans where symbolic simplification would dominate runtime.
+    check_pt_symmetry
+        Whether to run the symbolic PT-symmetry diagnostic.  The result is
+        metadata only, so large parameter scans can disable it without changing
+        the sampled surface, skeleton, or graph.
     chunk_size
         Number of momentum points evaluated per eigenvalue batch.
     force_small_edge_contraction
@@ -94,6 +160,8 @@ class MaterialFermiSurface(NodalSkeleton):
         sort_by: str = "real_imag",
         gap_mode: str = "abs",
         compute_berry: bool = False,
+        check_hermitian: bool = True,
+        check_pt_symmetry: bool = True,
         chunk_size: int = 50_000,
         force_small_edge_contraction: bool = False,
         small_edge_limit: float = 0.0,
@@ -149,19 +217,25 @@ class MaterialFermiSurface(NodalSkeleton):
         if self.previous_n_edgepoint < 0:
             raise ValueError("previous_n_edgepoint must be >= 0.")
 
-        hermitian = (
-            sp.simplify(material_hamiltonian - material_hamiltonian.H)
-            == sp.zeros(self.n_bands, self.n_bands)
-        )
+        hermitian = True
+        if check_hermitian:
+            hermitian = _is_hermitian_symbolic_or_numeric(
+                material_hamiltonian,
+                resolved_k_symbols,
+                span,
+            )
         if not hermitian:
             raise ValueError(
                 "MaterialFermiSurface requires a Hermitian H(k)=H(k)†. "
                 "Use the non-Hermitian NodalSkeleton workflow for exceptional-surface physics."
             )
 
-        try:
-            pt_symmetric = is_PT_symmetric(material_hamiltonian)
-        except Exception:
+        if check_pt_symmetry:
+            try:
+                pt_symmetric = is_PT_symmetric(material_hamiltonian)
+            except Exception:
+                pt_symmetric = False
+        else:
             pt_symmetric = False
 
         if compute_berry:

@@ -32,7 +32,7 @@ Empty image margins are cropped before foreground indexing, 26-neighbour
 adjacency is generated deterministically, and returned coordinates remain in
 the original global voxel frame. The obsolete selectable skeleton backend has
 been removed; historical behavior is preserved only by Git history and by the
-isolated `02_application_output_regression.ipynb` worktree comparison.
+isolated `02_application_regression_checks.ipynb` worktree comparison.
 
 By default, optimized extraction preserves the zero-radius historical topology.
 A caller that knows a genuine valence bound may pass `max_junction_degree` to

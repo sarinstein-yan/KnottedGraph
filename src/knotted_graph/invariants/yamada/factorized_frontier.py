@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from .diagram_frontier import _greedy_factor_order, compute_diagram_frontier_laurent
+from .diagram_frontier import _greedy_factor_order
 
 _FACTORIZED_IMPORT_ERROR: Exception | None = None
 try:
@@ -173,22 +173,49 @@ def build_factorized_frontier(prepared):
     }
 
 
-def compute_factorized_frontier_laurent(prepared):
+def _frontier_args(data):
+    return (
+        list(data["factor_types"]),
+        list(data["port_factor"]),
+        list(data["wire_partner"]),
+        list(data["wire_type"]),
+        list(data["plus_partner"]),
+        list(data["minus_partner"]),
+        list(data["factor_order"]),
+    )
+
+
+def compute_factorized_frontier_laurent(prepared, *, stats=None):
     """Evaluate one prepared Yamada diagram with the sole production DP."""
     require_native_factorized()
     data = build_factorized_frontier(prepared)
+    args = _frontier_args(data)
     try:
-        value = _yamada_factorized_frontier.compute_factorized_frontier(
-            list(data["factor_types"]),
-            list(data["port_factor"]),
-            list(data["wire_partner"]),
-            list(data["wire_type"]),
-            list(data["plus_partner"]),
-            list(data["minus_partner"]),
-            list(data["factor_order"]),
+        compute_int64 = getattr(
+            _yamada_factorized_frontier,
+            "compute_factorized_frontier_int64",
+            None,
         )
+        if compute_int64 is None:
+            compute_int64 = _yamada_factorized_frontier.compute_factorized_frontier
+        value = compute_int64(*args)
+        backend = "native-int64"
+        overflowed = False
     except OverflowError:
-        # This is an exact arbitrary-precision arithmetic safety net, not solver
-        # dispatch: it is reached only if the optimized int64 kernel overflows.
-        return compute_diagram_frontier_laurent(prepared)
+        compute_bigint = getattr(
+            _yamada_factorized_frontier,
+            "compute_factorized_frontier_bigint",
+            None,
+        )
+        if compute_bigint is None:
+            raise RuntimeError(
+                "The optimized factorized Yamada extension overflowed but does "
+                "not expose the native bigint fallback. Rebuild this checkout."
+            ) from None
+        value = compute_bigint(*args)
+        backend = "native-bigint"
+        overflowed = True
+    if stats is not None:
+        stats["coefficient_backend"] = backend
+        stats["int64_overflow"] = overflowed
     return tuple((int(power), int(coefficient)) for power, coefficient in value)

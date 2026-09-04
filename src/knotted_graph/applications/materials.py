@@ -11,6 +11,7 @@ __all__ = [
     "TI3AL_PARAMETERS",
     "YH3_PARAMETERS",
     "H_D6_sympy",
+    "H_TiB2_sympy",
     "H_Ti3Al_sympy",
     "H_YH3_sympy",
     "MaterialFermiSurface",
@@ -120,6 +121,16 @@ def H_D6_sympy(
             [sp.conjugate(h13), sp.conjugate(h23), q2],
         ]
     )
+
+
+def H_TiB2_sympy(
+    params: Mapping[str, float] | None = None,
+    *,
+    k_symbols: Sequence[sp.Symbol] | None = None,
+) -> sp.Matrix:
+    """Return the TiB2 three-band D6-symmetric material Hamiltonian."""
+
+    return H_D6_sympy(params, k_symbols=k_symbols)
 
 
 def H_YH3_sympy(

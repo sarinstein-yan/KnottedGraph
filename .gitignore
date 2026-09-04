@@ -82,8 +82,9 @@ target/
 # Jupyter Notebook
 .ipynb_checkpoints
 User_guide/benchmarks/.benchmark_checkpoints/
-# Notebook 03 timing rows are a local resume ledger, not a versioned publication snapshot.
-User_guide/benchmarks/results/03_knottedgraph_vs_topoly_scaling_rows.csv
+# Figure input snapshots under User_guide/benchmarks/results are versioned.
+# Local-only publication figure workspace lives next to this repo.
+/FigureGeneration/
 
 # IPython
 profile_default/
@@ -169,3 +170,17 @@ dev/*
 assets/*.pdf
 # assets/*.html
 .vscode/
+# Local regenerated handlebody ground-truth artifacts can exceed GitHub's file size limit.
+User_guide/benchmarks/results/handlebody_ground_truth/certified_thick_handlebody_embeddings.json.gz
+User_guide/benchmarks/results/handlebody_ground_truth/certified_thick_handlebody_embeddings_manifest.csv
+
+# Local raw handlebody timing intermediates. The compact plotting source above
+# is versioned instead:
+# User_guide/benchmarks/results/04_thick_handlebody_timing_distributions_source.csv
+User_guide/benchmarks/results/04_thick_handlebody_pipeline_timings.csv
+User_guide/benchmarks/results/04_thick_handlebody_pipeline_timing_summary.csv
+User_guide/benchmarks/results/04_thick_handlebody_recovered_yamada_split_timings.csv
+User_guide/benchmarks/results/04_thick_handlebody_pd_topoly_comparison.csv
+User_guide/benchmarks/results/04_thick_handlebody_library_timing_distributions.*
+assets/paper/handlebody-timing-distributions.png
+assets/paper/handlebody-timing-distributions.svg
